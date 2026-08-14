@@ -65,11 +65,19 @@ function Shell() {
   return (
     <>
       {/* Expanded-workbench navigation card; renders nothing while compact.
-          Sub-views under Settings (about/uninstall/config) highlight the
-          Settings section. Jumping home reuses the same cross-fade as the
+          About and uninstall remain under Settings; Codex config has its own
+          section. Jumping home reuses the same cross-fade as the
           NavBar back path so the two routes feel identical. */}
       <Rail
-        section={view === "home" ? "home" : view === "themes" ? "themes" : "settings"}
+        section={
+          view === "home"
+            ? "home"
+            : view === "themes"
+              ? "themes"
+              : view === "config"
+                ? "config"
+                : "settings"
+        }
         onNavigate={(section) => {
           const target: View = section;
           if (target === view) return;

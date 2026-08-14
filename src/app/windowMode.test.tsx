@@ -79,6 +79,11 @@ describe("window modes", () => {
     fireEvent.click(settings);
     expect(screen.getByTestId("active-section")).toHaveTextContent("settings");
     expect(settings).toHaveAttribute("aria-current", "page");
+
+    const config = screen.getByRole("button", { name: /codex (configuration|配置管理)/i });
+    fireEvent.click(config);
+    expect(screen.getByTestId("active-section")).toHaveTextContent("config");
+    expect(config).toHaveAttribute("aria-current", "page");
   });
 
   it("rail collapse returns to compact and removes the rail", async () => {
@@ -109,6 +114,9 @@ describe("window modes", () => {
         expect(screen.getByRole("button", { name: /^home$/i })).toBeDisabled(),
       );
       expect(screen.getByRole("button", { name: /^settings$/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /codex (configuration|配置管理)/i }),
+      ).toBeDisabled();
       expect(screen.getByRole("button", { name: /collapse workspace/i })).toBeEnabled();
     } finally {
       release();

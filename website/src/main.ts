@@ -145,15 +145,15 @@ menu?.querySelectorAll("a").forEach((a) =>
   const cta = document.getElementById("hero-dl") as HTMLAnchorElement | null;
   const targets: Record<string, { href: string; key: string }> = {
     "mac-arm": {
-      href: "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_aarch64.dmg",
+      href: "/manager/latest/CodexAppManager_aarch64.dmg",
       key: "hero.dl.macArm",
     },
     "mac-intel": {
-      href: "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x86_64.dmg",
+      href: "/manager/latest/CodexAppManager_x86_64.dmg",
       key: "hero.dl.macIntel",
     },
     windows: {
-      href: "https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe",
+      href: "/manager/latest/CodexAppManager_x64-setup.exe",
       key: "hero.dl.win",
     },
   };

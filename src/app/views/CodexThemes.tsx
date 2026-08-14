@@ -167,9 +167,18 @@ const VIEW_KEY = "cam.skins.view";
 const PAGE_SIZE: Record<ViewMode, number> = { card: 12, list: 20 };
 // Store theme categories, in display order. A skin with no (or an unknown)
 // category falls into "other".
-const STORE_CATEGORIES = ["anime", "stars", "tech", "guofeng", "games", "other"] as const;
+const STORE_CATEGORIES = [
+  "wallpaper",
+  "anime",
+  "stars",
+  "tech",
+  "guofeng",
+  "games",
+  "other",
+] as const;
 const CATEGORY_KEY = {
   all: "themes.category.all",
+  wallpaper: "themes.category.wallpaper",
   anime: "themes.category.anime",
   stars: "themes.category.stars",
   tech: "themes.category.tech",

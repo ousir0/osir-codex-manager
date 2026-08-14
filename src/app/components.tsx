@@ -784,6 +784,7 @@ export function Toggle({
   onChange,
   disabled = false,
   ariaLabelledBy,
+  ariaLabel,
 }: {
   checked: boolean;
   onChange?: (v: boolean) => void;
@@ -791,6 +792,8 @@ export function Toggle({
   /** id of the visible row title — the switch itself renders no text, so
    *  without this a screen reader announces a nameless "switch, on". */
   ariaLabelledBy?: string;
+  /** Direct label for compact/dynamic rows where no stable title id exists. */
+  ariaLabel?: string;
 }) {
   return (
     <button
@@ -798,6 +801,7 @@ export function Toggle({
       role="switch"
       aria-checked={checked}
       aria-labelledby={ariaLabelledBy}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange?.(!checked)}
     />

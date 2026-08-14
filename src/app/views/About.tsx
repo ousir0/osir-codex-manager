@@ -10,6 +10,7 @@ import { Sheet } from "../Sheet";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? "0.0.0";
 const REPO_URL = "https://github.com/Wangnov/Codex-App-Manager";
+const AWAI_URL = "https://api.awai.cc";
 
 export function About({ onBack }: { onBack: () => void }) {
   const { t } = useI18n();
@@ -117,6 +118,14 @@ export function About({ onBack }: { onBack: () => void }) {
             <span className="rtext">
               <span className="rtitle">{t("about.feedback")}</span>
               <span className="rsub">{REPO_URL.replace("https://", "")}</span>
+            </span>
+            <Icon name="external" className="chev" />
+          </button>
+          <button className="row" onClick={() => void managerApi.openUrl(AWAI_URL)}>
+            <Icon name="external" className="ricon" />
+            <span className="rtext">
+              <span className="rtitle">{t("about.awaiTitle")}</span>
+              <span className="rsub">{t("about.awaiSub")}</span>
             </span>
             <Icon name="external" className="chev" />
           </button>

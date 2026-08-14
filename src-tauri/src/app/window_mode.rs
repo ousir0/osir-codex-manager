@@ -53,13 +53,25 @@ pub fn normalize_expanded_size(
     work_logical: (f64, f64),
 ) -> (f64, f64) {
     let clamp_axis = |requested: Option<f64>, default: f64, min: f64, work: f64| -> f64 {
-        let value = requested.filter(|v| v.is_finite() && *v > 0.0).unwrap_or(default);
+        let value = requested
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .unwrap_or(default);
         let floor = min.min(work.max(1.0));
         value.clamp(floor, work.max(floor))
     };
     (
-        clamp_axis(width, EXPANDED_DEFAULT_SIZE.0, EXPANDED_MIN_SIZE.0, work_logical.0),
-        clamp_axis(height, EXPANDED_DEFAULT_SIZE.1, EXPANDED_MIN_SIZE.1, work_logical.1),
+        clamp_axis(
+            width,
+            EXPANDED_DEFAULT_SIZE.0,
+            EXPANDED_MIN_SIZE.0,
+            work_logical.0,
+        ),
+        clamp_axis(
+            height,
+            EXPANDED_DEFAULT_SIZE.1,
+            EXPANDED_MIN_SIZE.1,
+            work_logical.1,
+        ),
     )
 }
 
@@ -103,7 +115,9 @@ pub fn apply_window_mode(
 
     // Previous outer frame (physical px) — the center we preserve. An
     // undecorated window's outer frame equals its inner size.
-    let prev_pos = window.outer_position().map_err(|e| win_err("position", e))?;
+    let prev_pos = window
+        .outer_position()
+        .map_err(|e| win_err("position", e))?;
     let prev_size = window.outer_size().map_err(|e| win_err("size", e))?;
     let prev = Rect {
         x: prev_pos.x as f64,

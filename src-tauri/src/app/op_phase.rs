@@ -74,9 +74,7 @@ impl OperationPhase {
             Self::Finishing if kind.is_none() => {
                 "另一个管理器实例正在执行操作，请稍候完成后再关闭。".to_string()
             }
-            Self::Finishing => format!(
-                "正在完成安装收尾（{kind_label}），请稍候完成后再关闭。"
-            ),
+            Self::Finishing => format!("正在完成安装收尾（{kind_label}），请稍候完成后再关闭。"),
             Self::Downloading => format!("正在下载（{kind_label}），关闭将取消或暂停本次操作。"),
             Self::Preparing | Self::Verifying | Self::Applying => {
                 format!("正在准备更新（{kind_label}），关闭将取消本次操作。")

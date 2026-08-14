@@ -64,7 +64,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderSettings() {
+function renderSettings(onOpenConfig = vi.fn()) {
   return render(
     <ThemeProvider>
       <I18nProvider>
@@ -72,7 +72,7 @@ function renderSettings() {
           onBack={vi.fn()}
           onOpenAbout={vi.fn()}
           onOpenUninstall={vi.fn()}
-          onOpenConfig={vi.fn()}
+          onOpenConfig={onOpenConfig}
           onOpenThemes={vi.fn()}
         />
       </I18nProvider>
@@ -111,6 +111,18 @@ describe("Settings runtime contract", () => {
     await waitFor(() => expect(screen.queryByText("正在加载设置…")).not.toBeInTheDocument());
     expect(form).not.toHaveAttribute("inert");
     expect(screen.getByRole("radio", { name: /镜像/ })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("opens the Codex configuration manager from the enabled settings row", async () => {
+    const user = userEvent.setup();
+    const onOpenConfig = vi.fn();
+    api.getSettings.mockResolvedValue(settings());
+    renderSettings(onOpenConfig);
+
+    await waitFor(() => expect(screen.queryByText("正在加载设置…")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /Codex 配置管理/ }));
+
+    expect(onOpenConfig).toHaveBeenCalledTimes(1);
   });
 
   it("does not persist empty custom source selection until a URL is entered", async () => {
@@ -229,13 +241,13 @@ describe("Settings runtime contract", () => {
     expect(screen.getByText("尽量遵循系统代理；不保证完整 PAC 行为")).toBeInTheDocument();
   });
 
-  it("disables the unfinished Codex config entry", async () => {
+  it("shows the enabled Codex config.toml entry", async () => {
     api.getSettings.mockResolvedValue(settings());
     renderSettings();
     await waitFor(() => expect(screen.queryByText("正在加载设置…")).not.toBeInTheDocument());
     const config = screen.getByRole("button", { name: /Codex 配置管理/ });
-    expect(config).toBeDisabled();
-    expect(screen.getByText("当前版本尚未提供")).toBeInTheDocument();
+    expect(config).toBeEnabled();
+    expect(screen.getByText("~/.codex/config.toml")).toBeInTheDocument();
   });
 
   it("keeps repair actions collapsed under More until requested", async () => {

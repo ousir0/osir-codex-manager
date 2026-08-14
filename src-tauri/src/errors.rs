@@ -118,7 +118,9 @@ pub fn classify(message: &str) -> ErrorKind {
     {
         return ErrorKind::Signature;
     }
-    if m.contains("capability probe") || m.contains("sideload policy") || m.contains("developer mode")
+    if m.contains("capability probe")
+        || m.contains("sideload policy")
+        || m.contains("developer mode")
     {
         return ErrorKind::Incompatible;
     }
@@ -241,22 +243,58 @@ mod tests {
 
     #[test]
     fn curl_connect_and_timeout_codes() {
-        assert_eq!(classify("curl failed exit=7: stderr='Failed to connect'"), ErrorKind::Network);
-        assert_eq!(classify("curl failed exit=6: stderr='Could not resolve host'"), ErrorKind::Network);
-        assert_eq!(classify("curl failed exit=28: stderr='Operation timed out'"), ErrorKind::Timeout);
-        assert_eq!(classify("curl failed exit=35: stderr='SSL connect error'"), ErrorKind::Network);
-        assert_eq!(classify("curl failed exit=55: stderr='Failed sending network data'"), ErrorKind::Network);
-        assert_eq!(classify("curl failed exit=22: stderr='The requested URL returned error: 404'"), ErrorKind::Artifact);
+        assert_eq!(
+            classify("curl failed exit=7: stderr='Failed to connect'"),
+            ErrorKind::Network
+        );
+        assert_eq!(
+            classify("curl failed exit=6: stderr='Could not resolve host'"),
+            ErrorKind::Network
+        );
+        assert_eq!(
+            classify("curl failed exit=28: stderr='Operation timed out'"),
+            ErrorKind::Timeout
+        );
+        assert_eq!(
+            classify("curl failed exit=35: stderr='SSL connect error'"),
+            ErrorKind::Network
+        );
+        assert_eq!(
+            classify("curl failed exit=55: stderr='Failed sending network data'"),
+            ErrorKind::Network
+        );
+        assert_eq!(
+            classify("curl failed exit=22: stderr='The requested URL returned error: 404'"),
+            ErrorKind::Artifact
+        );
     }
 
     #[test]
     fn marker_based_classification_without_exit_code() {
-        assert_eq!(classify("Authenticode verification failed"), ErrorKind::Signature);
-        assert_eq!(classify("codesign verification failed: invalid signature"), ErrorKind::Signature);
-        assert_eq!(classify("Access is denied. (os error 5)"), ErrorKind::Permission);
-        assert_eq!(classify("hash mismatch for staged package"), ErrorKind::Artifact);
-        assert_eq!(classify("run Add-AppxPackage: deployment failed"), ErrorKind::Install);
-        assert_eq!(classify("capability probe error: sideloading is disabled"), ErrorKind::Incompatible);
+        assert_eq!(
+            classify("Authenticode verification failed"),
+            ErrorKind::Signature
+        );
+        assert_eq!(
+            classify("codesign verification failed: invalid signature"),
+            ErrorKind::Signature
+        );
+        assert_eq!(
+            classify("Access is denied. (os error 5)"),
+            ErrorKind::Permission
+        );
+        assert_eq!(
+            classify("hash mismatch for staged package"),
+            ErrorKind::Artifact
+        );
+        assert_eq!(
+            classify("run Add-AppxPackage: deployment failed"),
+            ErrorKind::Install
+        );
+        assert_eq!(
+            classify("capability probe error: sideloading is disabled"),
+            ErrorKind::Incompatible
+        );
         assert_eq!(classify("download cancelled"), ErrorKind::Cancelled);
         assert_eq!(
             classify(
@@ -283,14 +321,20 @@ mod tests {
 
     #[test]
     fn unknown_engine_message_falls_back_to_generic() {
-        assert_eq!(classify("something unexpected happened"), ErrorKind::Generic);
+        assert_eq!(
+            classify("something unexpected happened"),
+            ErrorKind::Generic
+        );
         assert_eq!(code_of("something unexpected happened"), "engine_error");
     }
 
     #[test]
     fn non_engine_variants_keep_their_codes() {
         assert_eq!(AppError::UnsupportedPlatform.code(), "unsupported_platform");
-        assert_eq!(AppError::StaleExpectation("x".into()).code(), "stale_expectation");
+        assert_eq!(
+            AppError::StaleExpectation("x".into()).code(),
+            "stale_expectation"
+        );
         assert_eq!(AppError::Busy("x".into()).code(), "operation_busy");
         assert_eq!(AppError::Internal("x".into()).code(), "internal_error");
     }

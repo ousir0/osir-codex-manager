@@ -6,6 +6,10 @@ import type {
   AncillaryRetryRequest,
   AppSettings,
   CatalogSkin,
+  CodexBasicConfigInput,
+  CodexConfigReport,
+  CodexConfigValidation,
+  CodexMcpServerInput,
   CodexThemeStatusReport,
   StoreMigrationReport,
   CodexThemeSummary,
@@ -478,14 +482,29 @@ const FALLBACK_DIAGNOSTICS: Diagnostics = {
   generatedAtUnix: Math.floor(Date.now() / 1000),
 };
 
-// Browser-preview stand-ins so the theme gallery can be developed and styled
-// without a Tauri backend (mirrors guts-terminal / asuka-eva02 palettes).
+// Browser-preview stand-ins so the AWAI theme gallery can be developed and
+// styled without a Tauri backend.
+const BROWSER_SKIN_CATALOG_BASE =
+  "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main";
+
+function browserCatalogUrl(relativePath: string): string {
+  const safe =
+    relativePath.length > 0 &&
+    !relativePath.includes("://") &&
+    !relativePath.startsWith("/") &&
+    !relativePath.includes("..") &&
+    /^[a-z0-9/_\-.]+$/i.test(relativePath);
+  if (!safe) throw new Error("invalid browser catalog path");
+  const base = import.meta.env.DEV ? "/__skins" : BROWSER_SKIN_CATALOG_BASE;
+  return `${base}/${relativePath}`;
+}
+
 const FALLBACK_THEME_META: import("../shared/types").CodexThemeMeta = {
   version: "1.0.0",
-  author: "wangnov",
-  codexVerified: "26.707.91948",
+  author: "AWAI",
+  codexVerified: null,
   appearance: "dual",
-  tags: [],
+  tags: ["wallpaper", "background"],
   license: "personal-use",
   previews: [],
 };
@@ -538,50 +557,27 @@ const MOCK_PALETTES = [
   },
 ];
 const MOCK_SKINS = [
-  [
-    "asuka-eva02",
-    "NERV EVA-02 Asuka Terminal",
-    "碇真嗣与 EVA 初号机：以 CAGE-01 拘束机库、同步诊断和紫绿装甲构成的 NERV 素材化主题。",
-  ],
-  [
-    "caishen-jubao",
-    "财神聚宝阁 · Fortune Pavilion",
-    "金框红底玉字与元宝铜钱的招财主题。",
-  ],
-  [
-    "three-kingdoms",
-    "赤壁风云 · Three Kingdoms",
-    "原创三国演义主题：关羽、青龙偃月刀、赤壁火光、军阵沙盘与三方旌旗构成雄浑而富戏剧性的 Codex 皮肤。",
-  ],
-  [
-    "shinji-eva01",
-    "NERV EVA-01 Shinji Synchronization Terminal",
-    "碇真嗣与 EVA 初号机：以 CAGE-01 拘束机库、同步诊断和紫绿装甲构成的 NERV 素材化主题。",
-  ],
-  ["dilraba-starlight", "迪丽热巴 · STARLIGHT 星蝶光廊", ""],
-  [
-    "luffy-onepiece",
-    "Thousand Sunny — Dawn Adventure",
-    "草帽一伙的黎明冒险配色。",
-  ],
-  ["kakashi-naruto", "Konoha ANBU — Lightning Copy Ninja", ""],
-  [
-    "jensen-infinite-compute",
-    "Jensen Infinite Compute",
-    "皮革夹克与无尽算力的绿色矩阵。",
-  ],
-  ["mai-shiranui", "Shiranui Dojo — Scarlet Flame", "不知火舞的绯红烈焰道场。"],
-  ["ming-imperial", "大明宫阙 · Ming Imperial", ""],
-  [
-    "kaworu-mark06",
-    "SEELE Mark.06 Kaworu Terminal",
-    "渚薰与 Mark.06 的月白终端。",
-  ],
-  ["jay-chou-inkstone", "周杰伦 · 墨键夜航", "水墨与钢琴键的夜航。"],
-  ["luo-feng-domain", "银河领主 — 罗峰·陨墨星域", "吞噬星空罗峰的星域主题。"],
-  ["rem-rezero", "Rem — Oni Maid Devotion", ""],
-  ["western-pure-land", "西方极乐 · Pure Land", "金莲与祥云的极乐净土。"],
-  ["trump-golden-order", "Golden Order", "描金秩序主题。"],
+  ["awai-01", "Ink Wanderer", "AWAI 原创壁纸背景主题：Ink Wanderer。"],
+  ["awai-02", "Quiet Resolve", "AWAI 原创壁纸背景主题：Quiet Resolve。"],
+  ["awai-03", "Skybound Motion", "AWAI 原创壁纸背景主题：Skybound Motion。"],
+  ["awai-04", "Lunar Edge", "AWAI 原创壁纸背景主题：Lunar Edge。"],
+  ["awai-05", "Blue Stroke", "AWAI 原创壁纸背景主题：Blue Stroke。"],
+  ["awai-06", "Lakeside Evening", "AWAI 原创壁纸背景主题：Lakeside Evening。"],
+  ["awai-07", "Window at Night", "AWAI 原创壁纸背景主题：Window at Night。"],
+  ["awai-08", "Pixel Workshop", "AWAI 原创壁纸背景主题：Pixel Workshop。"],
+  ["awai-09", "Neon Ridge", "AWAI 原创壁纸背景主题：Neon Ridge。"],
+  ["awai-10", "Sea Wind", "AWAI 原创壁纸背景主题：Sea Wind。"],
+  ["awai-11", "Ashen Machine", "AWAI 原创壁纸背景主题：Ashen Machine。"],
+  ["awai-12", "Red Signal", "AWAI 原创壁纸背景主题：Red Signal。"],
+  ["awai-13", "Blue Guardians", "AWAI 原创壁纸背景主题：Blue Guardians。"],
+  ["awai-14", "Mountain River", "AWAI 原创壁纸背景主题：Mountain River。"],
+  ["awai-15", "Sunset Mark", "AWAI 原创壁纸背景主题：Sunset Mark。"],
+  ["awai-16", "Cosmic Pair", "AWAI 原创壁纸背景主题：Cosmic Pair。"],
+  ["awai-17", "Open Field", "AWAI 原创壁纸背景主题：Open Field。"],
+  ["awai-18", "Red Frequency", "AWAI 原创壁纸背景主题：Red Frequency。"],
+  ["awai-19", "Monochrome Strings", "AWAI 原创壁纸背景主题：Monochrome Strings。"],
+  ["awai-20", "Skyline Story", "AWAI 原创壁纸背景主题：Skyline Story。"],
+  ["awai-21", "Forest Afternoon", "AWAI 原创壁纸背景主题：Forest Afternoon。"],
 ];
 function mockTheme(index: number, origin: "dev" | "store"): CodexThemeSummary {
   const [id, name, description] = MOCK_SKINS[index % MOCK_SKINS.length];
@@ -594,35 +590,29 @@ function mockTheme(index: number, origin: "dev" | "store"): CodexThemeSummary {
     hasNativeTheme: true,
     colors: { ...p },
     preview: null,
-    meta: { ...FALLBACK_THEME_META, version: `1.${index % 3}.0` },
+    meta: { ...FALLBACK_THEME_META },
     origin,
   };
 }
 const BROWSER_FALLBACK_THEMES: CodexThemeSummary[] = MOCK_SKINS.map((_, i) =>
-  mockTheme(i, i % 5 === 0 ? "dev" : "store"),
+  mockTheme(i, "store"),
 );
-const MOCK_CATEGORIES = ["anime", "stars", "tech", "guofeng", "games"];
-const MOCK_TAG_SETS = [
-  ["dark", "terminal"],
-  ["light", "minimal"],
-  ["dark", "vibrant"],
-];
 const BROWSER_FALLBACK_CATALOG: CatalogSkin[] = MOCK_SKINS.map(
   ([id, name, description], i) => ({
     id,
     name,
     description,
-    version: "1.2.0",
-    author: "Wangnov",
+    version: "1.0.0",
+    author: "AWAI",
     appearance: "dual",
     license: "personal-use",
-    tags: MOCK_TAG_SETS[i % MOCK_TAG_SETS.length],
-    codexVerified: "26.715.21425",
+    tags: ["wallpaper", "background"],
+    codexVerified: null,
     bytes: 3_000_000 + i * 100_000,
     sha256: "0".repeat(64),
-    pack: `packs/${id}-1.2.0.codexskin`,
+    pack: `packs/${id}-1.0.0.codexskin`,
     preview: `previews/${id}.webp`,
-    category: MOCK_CATEGORIES[i % MOCK_CATEGORIES.length],
+    category: "wallpaper",
   }),
 );
 
@@ -637,6 +627,173 @@ const BROWSER_FALLBACK_THEME_STATUS: CodexThemeStatusReport = {
   tryOnStash: false,
   recoveryRequired: false,
 };
+
+const BROWSER_FALLBACK_MODELS = [
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.2",
+];
+
+let BROWSER_FALLBACK_CODEX_CONFIG: CodexConfigReport = {
+  path: "C:\\Users\\wei\\.codex\\config.toml",
+  authPath: "C:\\Users\\wei\\.codex\\auth.json",
+  exists: true,
+  raw: `model = "gpt-5.6-sol"
+model_provider = "awai"
+model_reasoning_effort = "high"
+disable_response_storage = true
+personality = "pragmatic"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[features]
+goals = true
+
+[model_providers.awai]
+name = "AWAI"
+base_url = "https://api.awai.cc/v1"
+wire_api = "responses"
+requires_openai_auth = true
+
+[mcp_servers.context7]
+type = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+enabled = true
+
+[mcp_servers.docs]
+type = "http"
+url = "https://example.test/mcp"
+enabled = false
+`,
+  redactedRaw: `model = "gpt-5.6-sol"
+model_provider = "awai"
+model_reasoning_effort = "high"
+disable_response_storage = true
+personality = "pragmatic"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[features]
+goals = true
+
+[model_providers.awai]
+name = "AWAI"
+base_url = "https://api.awai.cc/v1"
+wire_api = "responses"
+requires_openai_auth = true
+
+[mcp_servers.context7]
+type = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+enabled = true
+
+[mcp_servers.docs]
+type = "http"
+url = "https://example.test/mcp"
+enabled = false
+`,
+  parseError: null,
+  model: "gpt-5.6-sol",
+  provider: "awai",
+  baseUrl: "https://api.awai.cc/v1",
+  reasoningEffort: "high",
+  personality: "pragmatic",
+  approvalPolicy: "never",
+  sandboxMode: "danger-full-access",
+  disableResponseStorage: true,
+  goalMode: true,
+  mcpServers: [
+    {
+      name: "context7",
+      enabled: true,
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@upstash/context7-mcp"],
+      url: null,
+      hasSensitiveValues: true,
+    },
+    {
+      name: "docs",
+      enabled: false,
+      transport: "http",
+      command: null,
+      args: [],
+      url: "https://example.test/mcp",
+      hasSensitiveValues: false,
+    },
+  ],
+  backupAvailable: true,
+  apiKeyConfigured: false,
+  authError: null,
+  codexRunning: false,
+};
+
+function browserConfigReport(
+  patch: Partial<CodexConfigReport> = {},
+): CodexConfigReport {
+  BROWSER_FALLBACK_CODEX_CONFIG = {
+    ...BROWSER_FALLBACK_CODEX_CONFIG,
+    ...patch,
+  };
+  return {
+    ...BROWSER_FALLBACK_CODEX_CONFIG,
+    mcpServers: BROWSER_FALLBACK_CODEX_CONFIG.mcpServers.map((server) => ({
+      ...server,
+      args: [...server.args],
+    })),
+  };
+}
+
+function renderBrowserConfig(report: CodexConfigReport): string {
+  const lines = [
+    report.model ? `model = ${JSON.stringify(report.model)}` : "",
+    report.provider ? `model_provider = ${JSON.stringify(report.provider)}` : "",
+    report.reasoningEffort
+      ? `model_reasoning_effort = ${JSON.stringify(report.reasoningEffort)}`
+      : "",
+    report.disableResponseStorage ? "disable_response_storage = true" : "disable_response_storage = false",
+    report.personality ? `personality = ${JSON.stringify(report.personality)}` : "",
+    report.approvalPolicy ? `approval_policy = ${JSON.stringify(report.approvalPolicy)}` : "",
+    report.sandboxMode ? `sandbox_mode = ${JSON.stringify(report.sandboxMode)}` : "",
+  ].filter(Boolean);
+  lines.push("", "[features]", `goals = ${report.goalMode}`);
+  if (report.provider) {
+    lines.push(
+      "",
+      `[model_providers.${report.provider}]`,
+      `name = ${JSON.stringify(report.provider === "awai" ? "AWAI" : report.provider)}`,
+    );
+    if (report.baseUrl) lines.push(`base_url = ${JSON.stringify(report.baseUrl)}`);
+    lines.push('wire_api = "responses"', "requires_openai_auth = true");
+  }
+  for (const server of report.mcpServers) {
+    lines.push("", `[mcp_servers.${server.name}]`, `type = ${JSON.stringify(server.transport)}`);
+    if (server.transport === "stdio") {
+      lines.push(`command = ${JSON.stringify(server.command ?? "")}`);
+      if (server.args.length) {
+        lines.push(`args = ${JSON.stringify(server.args)}`);
+      }
+    } else {
+      lines.push(`url = ${JSON.stringify(server.url ?? "")}`);
+    }
+    lines.push(`enabled = ${server.enabled}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function browserRenderedConfigReport(
+  patch: Partial<CodexConfigReport>,
+): CodexConfigReport {
+  const next = browserConfigReport(patch);
+  const raw = renderBrowserConfig(next);
+  return browserConfigReport({ raw, redactedRaw: raw, backupAvailable: true });
+}
 
 // ── Contract guards ──────────────────────────────────────────────────────────
 // invoke<T>() is a bare type assertion: if the backend contract drifts (field
@@ -1196,6 +1353,114 @@ export const managerApi = {
     }
     return invoke<boolean>("get_autostart");
   },
+  // ── Codex config.toml ─────────────────────────────────────────────────
+  codexConfigGet(): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(browserConfigReport());
+    }
+    return invoke<CodexConfigReport>("codex_config_get");
+  },
+  codexConfigFetchModels(baseUrl: string): Promise<string[]> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve([...BROWSER_FALLBACK_MODELS]);
+    }
+    return invoke<string[]>("codex_config_fetch_models", { baseUrl });
+  },
+  codexConfigValidate(raw: string): Promise<CodexConfigValidation> {
+    if (!hasTauriRuntime()) {
+      const invalid = raw.includes("model = [") || raw.includes("[broken");
+      return Promise.resolve({
+        valid: !invalid,
+        error: invalid ? "TOML 格式错误（浏览器预览）" : null,
+      });
+    }
+    return invoke<CodexConfigValidation>("codex_config_validate", { raw });
+  },
+  codexConfigSaveRaw(raw: string): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(
+        browserConfigReport({
+          raw,
+          redactedRaw: raw,
+          exists: true,
+          parseError: null,
+          backupAvailable: true,
+        }),
+      );
+    }
+    return invoke<CodexConfigReport>("codex_config_save_raw", { raw });
+  },
+  codexConfigSaveBasic(input: CodexBasicConfigInput): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(
+        browserRenderedConfigReport({
+          model: input.model.trim(),
+          provider: input.provider.trim(),
+          baseUrl: input.baseUrl.trim(),
+          reasoningEffort: input.reasoningEffort.trim(),
+          personality: input.personality.trim(),
+          approvalPolicy: input.approvalPolicy.trim(),
+          sandboxMode: input.sandboxMode.trim(),
+          disableResponseStorage: input.disableResponseStorage,
+          goalMode: input.goalMode,
+        }),
+      );
+    }
+    return invoke<CodexConfigReport>("codex_config_save_basic", { input });
+  },
+  codexConfigSetApiKey(apiKey: string): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(
+        browserConfigReport({ apiKeyConfigured: Boolean(apiKey.trim()), authError: null }),
+      );
+    }
+    return invoke<CodexConfigReport>("codex_config_set_api_key", { apiKey });
+  },
+  codexConfigDeleteApiKey(): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(browserConfigReport({ apiKeyConfigured: false, authError: null }));
+    }
+    return invoke<CodexConfigReport>("codex_config_delete_api_key");
+  },
+  codexConfigUpsertMcp(input: CodexMcpServerInput): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      const current = browserConfigReport();
+      const replaced = current.mcpServers.filter(
+        (server) =>
+          server.name !== input.name && server.name !== input.originalName,
+      );
+      const previous = current.mcpServers.find(
+        (server) => server.name === input.originalName,
+      );
+      replaced.push({
+        name: input.name,
+        enabled: input.enabled,
+        transport: input.transport,
+        command: input.transport === "stdio" ? input.command : null,
+        args: input.transport === "stdio" ? input.args : [],
+        url: input.transport === "http" ? input.url : null,
+        hasSensitiveValues: previous?.hasSensitiveValues ?? false,
+      });
+      replaced.sort((a, b) => a.name.localeCompare(b.name));
+      return Promise.resolve(browserRenderedConfigReport({ mcpServers: replaced }));
+    }
+    return invoke<CodexConfigReport>("codex_config_upsert_mcp", { input });
+  },
+  codexConfigDeleteMcp(name: string): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      const mcpServers = browserConfigReport().mcpServers.filter(
+        (server) => server.name !== name,
+      );
+      return Promise.resolve(browserRenderedConfigReport({ mcpServers }));
+    }
+    return invoke<CodexConfigReport>("codex_config_delete_mcp", { name });
+  },
+  codexConfigRestoreBackup(): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(browserConfigReport({ backupAvailable: true }));
+    }
+    return invoke<CodexConfigReport>("codex_config_restore_backup");
+  },
   // ── Codex UI themes ────────────────────────────────────────────────────
   /** Locally installed theme packages (managed dir + optional dev dir). */
   codexThemeList(): Promise<CodexThemeSummary[]> {
@@ -1295,17 +1560,27 @@ export const managerApi = {
     }
     return invoke<string | null>("codex_theme_preview", { themeRef });
   },
-  /** Online skin catalog (skins.agentsmirror.com). */
-  codexThemeCatalog(): Promise<CatalogSkin[]> {
+  /** Online skin catalog (GitHub primary, Gitee fallback). */
+  async codexThemeCatalog(): Promise<CatalogSkin[]> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(BROWSER_FALLBACK_CATALOG);
+      try {
+        const response = await fetch(browserCatalogUrl("index.json"), {
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error(`catalog HTTP ${response.status}`);
+        const payload = (await response.json()) as { skins?: unknown };
+        if (!Array.isArray(payload.skins)) throw new Error("invalid catalog shape");
+        return payload.skins as CatalogSkin[];
+      } catch {
+        return BROWSER_FALLBACK_CATALOG;
+      }
     }
     return invoke<CatalogSkin[]>("codex_theme_catalog");
   },
   /** Catalog cover preview as a data URL. */
   codexThemeCatalogPreview(preview: string, version: string): Promise<string> {
     if (!hasTauriRuntime()) {
-      return Promise.reject(new Error("catalog requires the desktop app"));
+      return Promise.resolve(browserCatalogUrl(preview));
     }
     return invoke<string>("codex_theme_catalog_preview", { preview, version });
   },

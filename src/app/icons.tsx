@@ -3,9 +3,7 @@
 
 import type { ReactNode } from "react";
 
-import { useTheme } from "./theme";
-import logoLight from "./assets/logo-light.png";
-import logoDark from "./assets/logo-dark.png";
+import logoAwai from "./assets/logo-awai.svg";
 
 export type IconName =
   | "check"
@@ -37,9 +35,16 @@ export type IconName =
   | "minimize"
   | "grid"
   | "list"
-  | "close";
+  | "close"
+  | "plus";
 
 const PATHS: Record<IconName, ReactNode> = {
+  plus: (
+    <g>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </g>
+  ),
   grid: (
     <g>
       <rect x="4" y="4" width="7" height="7" rx="1.4" />
@@ -231,15 +236,12 @@ export function Icon({ name, className }: { name: IconName; className?: string }
   );
 }
 
-/** Our own brand mark — the app-icon logo, swapping the Default(light) / Dark
- *  variants with the system theme so it always matches the surrounding chrome.
- *  Sized by its container (`.mark` sets width/height). */
+/** AWAI-blue cloud terminal mark. Sized by its container (`.mark`). */
 export function CodexMark({ className }: { className?: string }) {
-  const { resolved } = useTheme();
   return (
     <img
       className={className}
-      src={resolved === "dark" ? logoDark : logoLight}
+      src={logoAwai}
       alt=""
       aria-hidden="true"
       draggable={false}

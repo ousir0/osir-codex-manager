@@ -116,7 +116,8 @@ fn write_snapshot_with_tx(
             &codex_theme_engine::native::snapshot_plan(snapshot),
         )
         .map_err(|e| AppError::Engine(e.to_string()))?;
-        tx.stage(&planned).map_err(|e| AppError::Engine(e.to_string()))?;
+        tx.stage(&planned)
+            .map_err(|e| AppError::Engine(e.to_string()))?;
         codex_theme_engine::native::write_config_atomic(&paths, &planned)
             .map_err(|e| AppError::Engine(e.to_string()))?;
         let on_disk = std::fs::read_to_string(&paths.config)
@@ -207,13 +208,14 @@ fn theme_supported() -> bool {
 /// between detection and launch.
 #[cfg(target_os = "windows")]
 fn codex_version_hint() -> Option<String> {
-    installed_windows_codex().ok().map(|installed| installed.version)
+    installed_windows_codex()
+        .ok()
+        .map(|installed| installed.version)
 }
 
 #[cfg(target_os = "macos")]
 fn codex_version_hint() -> Option<String> {
-    crate::app::mac_update::detect_managed_installed()
-        .map(|installed| installed.short_version)
+    crate::app::mac_update::detect_managed_installed().map(|installed| installed.short_version)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -273,9 +275,9 @@ fn move_dir(src: &Path, dst: &Path) -> Result<(), AppError> {
         }
         Ok(())
     }
-    copy_tree(src, dst).map_err(|e| AppError::Internal(format!("迁移 {} 失败: {e}", src.display())))?;
-    std::fs::remove_dir_all(src)
-        .map_err(|e| AppError::Internal(format!("清理旧目录失败: {e}")))?;
+    copy_tree(src, dst)
+        .map_err(|e| AppError::Internal(format!("迁移 {} 失败: {e}", src.display())))?;
+    std::fs::remove_dir_all(src).map_err(|e| AppError::Internal(format!("清理旧目录失败: {e}")))?;
     Ok(())
 }
 
@@ -360,8 +362,7 @@ pub fn delete_store_skin(settings: &AppSettings, skin_id: &str) -> Result<(), Ap
             "{skin_id} 不是有效皮肤目录，拒绝删除"
         )));
     }
-    std::fs::remove_dir_all(&dir)
-        .map_err(|e| AppError::Internal(format!("删除皮肤失败: {e}")))?;
+    std::fs::remove_dir_all(&dir).map_err(|e| AppError::Internal(format!("删除皮肤失败: {e}")))?;
     log::info!("deleted store skin id={skin_id}");
     Ok(())
 }
@@ -507,16 +508,24 @@ pub fn merged_theme_list(settings: &AppSettings) -> Vec<ThemeListEntry> {
         .map(str::trim)
         .filter(|d| !d.is_empty())
     {
-        entries.extend(list_themes(Path::new(dir)).into_iter().map(|summary| ThemeListEntry {
-            summary,
-            origin: ThemeOrigin::Dev,
-        }));
+        entries.extend(
+            list_themes(Path::new(dir))
+                .into_iter()
+                .map(|summary| ThemeListEntry {
+                    summary,
+                    origin: ThemeOrigin::Dev,
+                }),
+        );
     }
     if let Ok(store) = store_dir(settings) {
-        entries.extend(list_themes(&store).into_iter().map(|summary| ThemeListEntry {
-            summary,
-            origin: ThemeOrigin::Store,
-        }));
+        entries.extend(
+            list_themes(&store)
+                .into_iter()
+                .map(|summary| ThemeListEntry {
+                    summary,
+                    origin: ThemeOrigin::Store,
+                }),
+        );
     }
     entries
 }
@@ -538,14 +547,17 @@ pub fn resolve_theme_for_keep(settings: &AppSettings, theme_ref: &str) -> Result
     Ok(theme.config.id)
 }
 
-// ── Online catalog (skins.agentsmirror.com) ────────────────────────────────
-// The catalog is published by awesome-codex-skins' CI; URLs inside it are
-// relative and resolved ONLY against this fixed base — a hostile catalog
-// cannot redirect downloads elsewhere. All transfers go through the system
-// curl (the repo's networking idiom; Windows 10+ ships curl.exe) with https
-// pinned, size caps, and a sha256 gate before anything reaches the importer.
+// ── Online catalog ─────────────────────────────────────────────────────────
+// GitHub is the primary source and Gitee is the mainland-China fallback.
+// Catalog URLs stay relative and are resolved ONLY against these fixed bases,
+// so a hostile catalog cannot redirect downloads elsewhere. All transfers go
+// through system curl (Windows 10+ ships curl.exe) with https pinned, size
+// caps, and a sha256 gate before anything reaches the importer.
 
-const SKINS_BASE: &str = "https://skins.agentsmirror.com";
+const SKINS_BASES: &[&str] = &[
+    "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main",
+    "https://gitee.com/qq501987849/codex-app-manager-skins/raw/master",
+];
 const CATALOG_MAX_BYTES: &str = "1048576"; // 1 MB index.json cap
 const PACK_MAX_BYTES: &str = "52428800"; // 50 MB archive cap (importer re-checks)
 
@@ -577,10 +589,14 @@ pub struct CatalogSkin {
     pub pack: String,
     #[serde(default)]
     pub preview: String,
-    /// Theme category for store grouping (e.g. "anime", "stars", "tech",
-    /// "guofeng", "games"). Absent → grouped under "other" in the UI.
+    /// Theme category for store grouping (e.g. "wallpaper", "anime", "stars",
+    /// "tech", "guofeng", "games"). Absent → grouped under "other" in the UI.
     #[serde(default)]
     pub category: Option<String>,
+    /// Backend-only origin used to keep package downloads on the catalog's
+    /// successful mirror. Never exposed to the frontend contract.
+    #[serde(skip)]
+    source_base: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -591,7 +607,10 @@ struct CatalogIndex {
 
 /// A catalog-relative path is plain (`packs/x.codexskin`) — no scheme, no
 /// authority, no parent hops. Everything else is rejected before URL joining.
-fn safe_catalog_path(rel: &str) -> Result<String, AppError> {
+fn safe_catalog_path(base: &str, rel: &str) -> Result<String, AppError> {
+    if !SKINS_BASES.contains(&base) {
+        return Err(AppError::Engine("皮肤目录源不受信任".to_string()));
+    }
     let ok = !rel.is_empty()
         && !rel.contains("://")
         && !rel.starts_with('/')
@@ -600,7 +619,7 @@ fn safe_catalog_path(rel: &str) -> Result<String, AppError> {
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"/-_.".contains(&b));
     if ok {
-        Ok(format!("{SKINS_BASE}/{rel}"))
+        Ok(format!("{base}/{rel}"))
     } else {
         Err(AppError::Engine(format!("目录条目路径非法: {rel}")))
     }
@@ -717,17 +736,42 @@ fn curl_fetch(url: &str, max_bytes: &str, timeout_secs: &str) -> Result<Vec<u8>,
     Ok(output.stdout)
 }
 
-pub fn fetch_catalog() -> Result<Vec<CatalogSkin>, AppError> {
-    let bytes = curl_fetch(&format!("{SKINS_BASE}/index.json"), CATALOG_MAX_BYTES, "15")?;
+fn fetch_catalog_from(base: &str) -> Result<Vec<CatalogSkin>, AppError> {
+    let url = safe_catalog_path(base, "index.json")?;
+    let bytes = curl_fetch(&url, CATALOG_MAX_BYTES, "15")?;
     let index: CatalogIndex = serde_json::from_slice(&bytes)
         .map_err(|e| AppError::Engine(format!("皮肤目录解析失败: {e}")))?;
     let mut skins: Vec<CatalogSkin> = index
         .skins
         .into_iter()
         .filter(|s| !s.id.is_empty() && !s.pack.is_empty() && s.sha256.len() == 64)
+        .map(|mut skin| {
+            skin.source_base = base.to_string();
+            skin
+        })
         .collect();
     skins.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(skins)
+}
+
+pub fn fetch_catalog() -> Result<Vec<CatalogSkin>, AppError> {
+    let mut failures = Vec::new();
+    for base in SKINS_BASES {
+        match fetch_catalog_from(base) {
+            Ok(skins) => return Ok(skins),
+            Err(error) => {
+                log::warn!(
+                    "theme catalog source failed base={} error={error}",
+                    crate::app::logging::redact_url(base)
+                );
+                failures.push(error.to_string());
+            }
+        }
+    }
+    Err(AppError::Engine(format!(
+        "所有皮肤目录源均不可用: {}",
+        failures.join("；")
+    )))
 }
 
 /// On-disk cache for catalog preview thumbnails, keyed by a per-URL FNV-1a hash
@@ -746,16 +790,16 @@ fn preview_cache_path(url: &str, version: &str) -> Option<PathBuf> {
             }
         })
         .collect();
-    let vsafe = if vsafe.is_empty() { "v".to_string() } else { vsafe };
-    Some(
-        paths::cache_dir()?
-            .join("catalog-previews")
-            .join(format!(
-                "{:016x}-{}.webp",
-                crate::app::staging::fnv1a64(url.as_bytes()),
-                vsafe
-            )),
-    )
+    let vsafe = if vsafe.is_empty() {
+        "v".to_string()
+    } else {
+        vsafe
+    };
+    Some(paths::cache_dir()?.join("catalog-previews").join(format!(
+        "{:016x}-{}.webp",
+        crate::app::staging::fnv1a64(url.as_bytes()),
+        vsafe
+    )))
 }
 
 /// Cheap structural check that bytes look like a WebP (RIFF container + WEBP
@@ -806,42 +850,74 @@ fn write_cached_preview(url: &str, version: &str, bytes: &[u8]) {
 /// once over the network and cached so later opens don't re-hit the mirror.
 pub fn catalog_preview_data_url(preview_rel: &str, version: &str) -> Result<String, AppError> {
     use base64::Engine as _;
-    let url = safe_catalog_path(preview_rel)?;
-    let bytes = match read_cached_preview(&url, version) {
-        Some(cached) => cached,
-        None => {
-            let fetched = curl_fetch(&url, "2097152", "15")?;
-            write_cached_preview(&url, version, &fetched);
-            fetched
+    let mut failures = Vec::new();
+    for base in SKINS_BASES {
+        let url = safe_catalog_path(base, preview_rel)?;
+        let fetched = match read_cached_preview(&url, version) {
+            Some(cached) => Ok(cached),
+            None => curl_fetch(&url, "2097152", "15"),
+        };
+        match fetched {
+            Ok(bytes) if is_webp(&bytes) => {
+                write_cached_preview(&url, version, &bytes);
+                return Ok(format!(
+                    "data:image/webp;base64,{}",
+                    base64::engine::general_purpose::STANDARD.encode(bytes)
+                ));
+            }
+            Ok(_) => failures.push(format!("{} 返回的预览格式无效", base)),
+            Err(error) => failures.push(error.to_string()),
         }
-    };
-    Ok(format!(
-        "data:image/webp;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    ))
+    }
+    Err(AppError::Engine(format!(
+        "所有皮肤预览源均不可用: {}",
+        failures.join("；")
+    )))
 }
 
 /// Download + sha256-gate + install one catalog skin. Returns the installed
 /// summary (the importer re-validates everything structurally).
-pub fn install_from_catalog(skin_id: &str) -> Result<codex_theme_engine::theme::ThemeSummary, AppError> {
+pub fn install_from_catalog(
+    skin_id: &str,
+) -> Result<codex_theme_engine::theme::ThemeSummary, AppError> {
     use sha2::Digest as _;
     let skin = fetch_catalog()?
         .into_iter()
         .find(|s| s.id == skin_id)
         .ok_or_else(|| AppError::Engine(format!("目录中没有该皮肤: {skin_id}")))?;
-    let url = safe_catalog_path(&skin.pack)?;
-    let bytes = curl_fetch(&url, PACK_MAX_BYTES, "120")?;
-
-    let digest = sha2::Sha256::digest(&bytes);
-    let hex = digest
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
-    if !hex.eq_ignore_ascii_case(&skin.sha256) {
-        return Err(AppError::Engine(format!(
-            "校验失败：{skin_id} 的 sha256 与目录不符"
-        )));
+    let mut source_order = Vec::with_capacity(SKINS_BASES.len());
+    if SKINS_BASES.contains(&skin.source_base.as_str()) {
+        source_order.push(skin.source_base.as_str());
     }
+    source_order.extend(
+        SKINS_BASES
+            .iter()
+            .copied()
+            .filter(|base| *base != skin.source_base),
+    );
+    let mut failures = Vec::new();
+    let mut downloaded = None;
+    for base in source_order {
+        let url = safe_catalog_path(base, &skin.pack)?;
+        match curl_fetch(&url, PACK_MAX_BYTES, "120") {
+            Ok(bytes) => {
+                let digest = sha2::Sha256::digest(&bytes);
+                let hex = digest
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>();
+                if hex.eq_ignore_ascii_case(&skin.sha256) {
+                    downloaded = Some(bytes);
+                    break;
+                }
+                failures.push(format!("{base} 返回的皮肤包校验失败"));
+            }
+            Err(error) => failures.push(error.to_string()),
+        }
+    }
+    let bytes = downloaded.ok_or_else(|| {
+        AppError::Engine(format!("所有皮肤包源均不可用: {}", failures.join("；")))
+    })?;
 
     let staging = std::env::temp_dir().join(format!(
         "codexskin-online-{}-{}.codexskin",
@@ -1154,7 +1230,8 @@ impl ThemeService {
                     handle
                         .send(Some(dir.clone()))
                         .map_err(|_| AppError::Internal("主题守护未运行".to_string()))?;
-                    self.wait_daemon_theme(&theme_id, Duration::from_secs(30)).await?;
+                    self.wait_daemon_theme(&theme_id, Duration::from_secs(30))
+                        .await?;
                     remove_stash(); // applied == kept: the try-on stash is consumed
                     return Ok(());
                 }
@@ -1207,9 +1284,7 @@ impl ThemeService {
         let deadline = tokio::time::Instant::now() + CDP_WAIT;
         while !codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await {
             if tokio::time::Instant::now() >= deadline {
-                return Err(AppError::Engine(
-                    "Codex 已启动但调试端口未就绪".to_string(),
-                ));
+                return Err(AppError::Engine("Codex 已启动但调试端口未就绪".to_string()));
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
@@ -1233,7 +1308,8 @@ impl ThemeService {
             .send(Some(dir))
             .map_err(|_| AppError::Internal("主题守护未运行".to_string()))?;
         if matches!(sync, NativeSync::HotThenFile) {
-            self.wait_daemon_theme(&theme_id, Duration::from_secs(30)).await?;
+            self.wait_daemon_theme(&theme_id, Duration::from_secs(30))
+                .await?;
             remove_stash();
         }
         Ok(())
@@ -1257,8 +1333,8 @@ impl ThemeService {
         let id = theme_id.to_string();
 
         // Blocking half: quit, settle, write-under-transaction, relaunch.
-        let mut tx = tauri::async_runtime::spawn_blocking(
-            move || -> Result<NativeTransaction, AppError> {
+        let mut tx =
+            tauri::async_runtime::spawn_blocking(move || -> Result<NativeTransaction, AppError> {
                 let installed = installed_codex_path()?;
                 let was_running = codex_running();
                 quit_codex(&installed)?;
@@ -1286,7 +1362,8 @@ impl ThemeService {
                         &codex_theme_engine::native::apply_plan(&native_clone),
                     )
                     .map_err(|e| AppError::Engine(e.to_string()))?;
-                    tx.stage(&planned).map_err(|e| AppError::Engine(e.to_string()))?;
+                    tx.stage(&planned)
+                        .map_err(|e| AppError::Engine(e.to_string()))?;
                     codex_theme_engine::native::write_config_atomic(&paths, &planned)
                         .map_err(|e| AppError::Engine(e.to_string()))?;
                     let on_disk = std::fs::read_to_string(&paths.config)
@@ -1313,19 +1390,16 @@ impl ThemeService {
                         Err(error)
                     }
                 }
-            },
-        )
-        .await
-        .map_err(|e| AppError::Internal(format!("主题应用任务失败: {e}")))??;
+            })
+            .await
+            .map_err(|e| AppError::Internal(format!("主题应用任务失败: {e}")))??;
 
         // Async half: CDP ready → inject → daemon confirmation → commit.
         let post_launch: Result<(), AppError> = async {
             let deadline = tokio::time::Instant::now() + CDP_WAIT;
             while !codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await {
                 if tokio::time::Instant::now() >= deadline {
-                    return Err(AppError::Engine(
-                        "Codex 已启动但调试端口未就绪".to_string(),
-                    ));
+                    return Err(AppError::Engine("Codex 已启动但调试端口未就绪".to_string()));
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
@@ -1333,7 +1407,8 @@ impl ThemeService {
             handle
                 .send(Some(dir.to_path_buf()))
                 .map_err(|_| AppError::Internal("主题守护未运行".to_string()))?;
-            self.wait_daemon_theme(theme_id, Duration::from_secs(30)).await?;
+            self.wait_daemon_theme(theme_id, Duration::from_secs(30))
+                .await?;
             Ok(())
         }
         .await;
@@ -1417,7 +1492,8 @@ impl ThemeService {
                 let planned = codex_theme_engine::native::planned_restore_text(&paths, &current)
                     .map_err(|e| AppError::Engine(e.to_string()))?
                     .ok_or_else(|| AppError::Engine("原生备份缺失".to_string()))?;
-                tx.stage(&planned).map_err(|e| AppError::Engine(e.to_string()))?;
+                tx.stage(&planned)
+                    .map_err(|e| AppError::Engine(e.to_string()))?;
                 codex_theme_engine::native::write_config_atomic(&paths, &planned)
                     .map_err(|e| AppError::Engine(e.to_string()))?;
                 let on_disk = std::fs::read_to_string(&paths.config)
@@ -1463,7 +1539,7 @@ fn installed_codex_path() -> Result<PathBuf, AppError> {
 }
 
 #[cfg(target_os = "macos")]
-fn codex_running() -> bool {
+pub(crate) fn codex_running() -> bool {
     installed_codex_path()
         .map(|path| codex_mac_engine::swap::codex_running_at(&path))
         .unwrap_or(false)
@@ -1513,8 +1589,7 @@ fn launch_codex_plain() -> Result<(), AppError> {
 #[cfg(target_os = "windows")]
 fn windows_domain_settings() -> crate::domain::settings::AppSettings {
     let saved = AppSettings::load();
-    let mut settings =
-        crate::domain::settings::AppSettings::new(String::new(), saved.install_root);
+    let mut settings = crate::domain::settings::AppSettings::new(String::new(), saved.install_root);
     settings.disable_codex_self_updates = saved.disable_codex_self_updates;
     settings
 }
@@ -1532,7 +1607,7 @@ fn installed_codex_path() -> Result<PathBuf, AppError> {
 }
 
 #[cfg(target_os = "windows")]
-fn codex_running() -> bool {
+pub(crate) fn codex_running() -> bool {
     installed_codex_path()
         .and_then(|path| {
             codex_win_engine::codex_running_for_root(&path)
@@ -1589,7 +1664,7 @@ fn installed_codex_path() -> Result<PathBuf, AppError> {
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn codex_running() -> bool {
+pub(crate) fn codex_running() -> bool {
     false
 }
 
@@ -1638,7 +1713,19 @@ pub async fn launch_with_active_theme(
 
 #[cfg(test)]
 mod catalog_network_tests {
-    use super::is_schannel_revocation_offline;
+    use super::{is_schannel_revocation_offline, safe_catalog_path, SKINS_BASES};
+
+    #[test]
+    fn catalog_paths_are_relative_and_stay_on_allowlisted_sources() {
+        let primary = safe_catalog_path(SKINS_BASES[0], "packs/theme-1.0.0.codexskin").unwrap();
+        assert_eq!(
+            primary,
+            "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main/packs/theme-1.0.0.codexskin"
+        );
+        assert!(safe_catalog_path(SKINS_BASES[0], "../secret").is_err());
+        assert!(safe_catalog_path(SKINS_BASES[0], "https://evil.example/skin").is_err());
+        assert!(safe_catalog_path("https://evil.example", "packs/skin.codexskin").is_err());
+    }
 
     #[test]
     fn detects_only_the_windows_revocation_offline_tls_error() {
@@ -1707,7 +1794,10 @@ mod delete_store_skin_tests {
         std::os::unix::fs::symlink(&target, &link).unwrap();
 
         let err = delete_store_skin(&settings_with_store(&store), "linky").unwrap_err();
-        assert!(matches!(err, AppError::Engine(_)), "a symlink must be refused");
+        assert!(
+            matches!(err, AppError::Engine(_)),
+            "a symlink must be refused"
+        );
         assert!(
             std::fs::symlink_metadata(&link)
                 .unwrap()

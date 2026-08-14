@@ -121,14 +121,23 @@ mod tests {
     #[test]
     fn from_parts_joins_details_and_flags() {
         let settings = StoreLoadHealth::corrupt("settings broken".into()).with_backup(true);
-        let provenance = StoreLoadHealth::recovered("provenance from bak".into()).with_backup(false);
+        let provenance =
+            StoreLoadHealth::recovered("provenance from bak".into()).with_backup(false);
         let health = ConfigHealth::from_parts(settings, provenance);
         assert_eq!(health.settings_status, "corrupt");
         assert_eq!(health.provenance_status, "recovered");
         assert!(health.settings_backup_available);
         assert!(!health.provenance_backup_available);
-        assert!(health.detail.as_deref().unwrap().contains("settings broken"));
-        assert!(health.detail.as_deref().unwrap().contains("provenance from bak"));
+        assert!(health
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("settings broken"));
+        assert!(health
+            .detail
+            .as_deref()
+            .unwrap()
+            .contains("provenance from bak"));
         assert!(health.needs_attention());
         assert!(!health.is_ok());
     }

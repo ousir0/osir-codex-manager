@@ -1,7 +1,7 @@
 /* ───────────────────────────────────────────────────────────────────────────
    Codex App 管理器 — design system  (v2 · "温润材质感 / warm tactile material")
    Confident evolution of the Linear/Raycast developer-tool DNA: same brand
-   (violet→blue cloud+terminal mark, the ring-status hero, the popover shell),
+   (sky-blue cloud+terminal mark, the ring-status hero, the popover shell),
    rebuilt around ONE consistent top-down light source. Every raised surface
    earns its elevation with a top bevel highlight + a two-layer brand-tinted
    shadow + a faint surface gradient. Palette is OKLCH, neutrals tinted toward
@@ -10,10 +10,10 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Codex brand — the violet→blue cloud, expressed perceptually (hue 274). */
+  /* AWAI / Manager brand blue. Keep the exact source color available to art. */
   --brand-violet: oklch(0.78 0.13 286);
-  --brand-blue: oklch(0.72 0.15 264);
-  --brand-deep: oklch(0.52 0.24 266);
+  --brand-blue: #69a5fa;
+  --brand-deep: #2f6fbd;
 
   /* radii — a touch softer than v1 for the warmer, more tactile read */
   --r-xl: 22px;
@@ -89,11 +89,11 @@
   --text-soft: oklch(0.74 0.02 274);
   --text-faint: oklch(0.58 0.022 274);
 
-  /* accent — interactive blue-violet (the cloud's core) */
-  --accent: oklch(0.71 0.155 274);
-  --accent-2: oklch(0.62 0.19 270);
-  --accent-deep: oklch(0.82 0.11 280); /* legible accent text on tint */
-  --accent-ink: oklch(0.99 0.01 274);
+  /* #69A5FA is bright enough that dark ink is the accessible primary label. */
+  --accent: #69a5fa;
+  --accent-2: #3f7fce;
+  --accent-deep: #9fc8ff; /* legible accent text on a dark tint */
+  --accent-ink: #10243d;
 
   /* semantics */
   --success: oklch(0.78 0.155 168);
@@ -153,10 +153,10 @@
   --text-soft: oklch(0.47 0.028 274);
   --text-faint: oklch(0.62 0.026 274);
 
-  /* deeper, more saturated so it reads on white */
-  --accent: oklch(0.56 0.2 272);
-  --accent-2: oklch(0.49 0.21 270);
-  --accent-deep: oklch(0.5 0.19 272);
+  /* Darker companion values keep the sky-blue brand legible on white. */
+  --accent: #3f7fce;
+  --accent-2: #2f68ae;
+  --accent-deep: #2e65a8;
   --accent-ink: oklch(0.99 0.01 274);
 
   --success: oklch(0.62 0.15 162);
@@ -2673,6 +2673,441 @@ button.row.danger:hover {
   font-family: var(--mono);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Codex configuration workbench ─────────────────────────────────────── */
+.config-view {
+  gap: 12px;
+}
+.config-filebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-block: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.config-filecopy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+.config-eyebrow,
+.config-field > span {
+  color: var(--text-faint);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+}
+.config-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: ltr;
+  text-align: start;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.config-filemeta {
+  color: var(--text-soft);
+  font-size: var(--fs-caption);
+}
+.config-error-jump {
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+}
+.config-error-jump span {
+  flex: 1;
+}
+.config-error-jump .cam-icon-chevron {
+  width: 15px;
+  height: 15px;
+}
+.config-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+  padding-bottom: 6px;
+}
+.config-awai {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--accent) 6%, var(--surface-2));
+}
+.config-awai-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 17px;
+  font-weight: 800;
+}
+.config-awai-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.config-awai-copy strong {
+  font-size: var(--fs-sm);
+}
+.config-awai-copy span {
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 11px;
+}
+.config-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.config-select {
+  min-height: 37px;
+}
+.config-model-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 37px;
+  gap: 7px;
+}
+.config-model-control .icon-only {
+  width: 37px;
+  min-width: 37px;
+  height: 37px;
+}
+.config-switches {
+  display: grid;
+  border-block: 1px solid var(--line);
+}
+.config-switches .config-toggle-row + .config-toggle-row {
+  border-top: 1px solid var(--line);
+}
+.config-access {
+  display: grid;
+  gap: 9px;
+}
+.config-danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in oklch, var(--danger) 30%, var(--line));
+  border-radius: var(--r-sm);
+  background: var(--danger-tint);
+  color: var(--danger-deep);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+.config-danger-note svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.config-auth {
+  display: grid;
+  gap: 11px;
+  padding-block: 13px;
+  border-block: 1px solid var(--line);
+}
+.config-auth-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.config-auth-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.config-auth-copy strong {
+  font-size: var(--fs-sm);
+}
+.config-auth-copy .config-path {
+  color: var(--text-soft);
+  font-weight: 550;
+}
+.config-auth-status {
+  min-height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+.config-auth-status.configured {
+  border-color: color-mix(in oklch, var(--success) 30%, var(--line));
+  background: var(--success-tint);
+  color: var(--success-deep);
+}
+.config-auth-status svg {
+  width: 14px;
+  height: 14px;
+}
+.config-auth-error {
+  padding: 8px 10px;
+}
+.config-auth-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+.config-auth-reveal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+}
+.config-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.config-actions-wrap {
+  flex-wrap: wrap;
+}
+.config-sectionbar {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.config-sectioncount {
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+}
+.config-mcp-list {
+  display: grid;
+  gap: 8px;
+}
+.config-mcp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+}
+.config-mcp-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+}
+.config-mcp-main:disabled {
+  opacity: 0.55;
+}
+.config-transport {
+  width: 42px;
+  height: 22px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+.config-transport.http {
+  background: var(--success-tint);
+  color: var(--success-deep);
+}
+.config-mcp-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.config-mcp-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+}
+.config-mcp-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+.config-mcp .tag {
+  flex: 0 1 auto;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-empty {
+  min-height: 130px;
+  display: grid;
+  place-items: center;
+  border-block: 1px dashed var(--line-2);
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+.config-mcp-editor {
+  display: grid;
+  gap: 12px;
+}
+.config-args {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.45;
+}
+.config-toggle-row {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 2px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.config-preserve-note,
+.config-mask-note,
+.config-dirty {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+.config-preserve-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--success);
+}
+.config-mask-note {
+  padding: 8px 10px;
+  border-left: 2px solid var(--line-2);
+  background: var(--surface-2);
+}
+.config-dirty {
+  color: var(--amber-deep);
+}
+.config-editor {
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  outline: none;
+  padding: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  tab-size: 2;
+  direction: ltr;
+  text-align: left;
+  white-space: pre;
+  overflow: auto;
+  box-shadow: inset 0 1px 3px var(--shadow-1);
+}
+.config-editor:focus:not(:read-only) {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: inset 0 1px 2px var(--shadow-1), 0 0 0 3px var(--accent-tint);
+}
+.config-editor:read-only {
+  color: var(--text-soft);
+}
+.config-confirm {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(340px, calc(100% - 32px));
+  display: grid;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-3);
+}
+.config-confirm strong {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-body);
+}
+:root[data-window-mode="expanded"] .config-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+:root[data-window-mode="expanded"] .config-field-wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 460px) {
+  .config-auth-head,
+  .config-auth-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .config-auth-status {
+    align-self: flex-start;
+  }
+  .config-auth-reveal {
+    justify-content: space-between;
+  }
+  .config-mcp .tag {
+    display: none;
+  }
+  .config-actions .btn {
+    flex: 1 1 auto;
+  }
+  .config-actions-wrap .btn {
+    flex-basis: 100%;
+  }
 }
 
 /* ── Banner / note ───────────────────────────────────────────────────────── */

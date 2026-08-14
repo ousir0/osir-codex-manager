@@ -667,6 +667,68 @@ export interface WinInstallStatus {
   status: InstallClass;
 }
 
+export type CodexMcpTransport = "stdio" | "http";
+
+export interface CodexMcpServer {
+  name: string;
+  enabled: boolean;
+  transport: CodexMcpTransport;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  hasSensitiveValues: boolean;
+}
+
+export interface CodexConfigReport {
+  path: string;
+  authPath: string;
+  exists: boolean;
+  raw: string;
+  redactedRaw: string;
+  parseError: string | null;
+  model: string;
+  provider: string;
+  baseUrl: string;
+  reasoningEffort: string;
+  personality: string;
+  approvalPolicy: string;
+  sandboxMode: string;
+  disableResponseStorage: boolean;
+  goalMode: boolean;
+  mcpServers: CodexMcpServer[];
+  backupAvailable: boolean;
+  apiKeyConfigured: boolean;
+  authError: string | null;
+  codexRunning: boolean;
+}
+
+export interface CodexConfigValidation {
+  valid: boolean;
+  error: string | null;
+}
+
+export interface CodexBasicConfigInput {
+  model: string;
+  provider: string;
+  baseUrl: string;
+  reasoningEffort: string;
+  personality: string;
+  approvalPolicy: string;
+  sandboxMode: string;
+  disableResponseStorage: boolean;
+  goalMode: boolean;
+}
+
+export interface CodexMcpServerInput {
+  originalName: string | null;
+  name: string;
+  enabled: boolean;
+  transport: CodexMcpTransport;
+  command: string | null;
+  args: string[];
+  url: string | null;
+}
+
 /** Delivery metadata (optional schemaVersion-2 fields; packer enforces). */
 export interface CodexThemeMeta {
   version: string | null;
@@ -734,7 +796,7 @@ export interface StoreMigrationReport {
   skipped: string[];
 }
 
-/** One entry of the online skin catalog (skins.agentsmirror.com). */
+/** One entry of the online skin catalog (GitHub primary, Gitee fallback). */
 export interface CatalogSkin {
   id: string;
   name: string;
@@ -750,7 +812,7 @@ export interface CatalogSkin {
   /** Catalog-relative paths, resolved backend-side against the pinned origin. */
   pack: string;
   preview: string;
-  /** Theme category for store grouping (anime/stars/tech/guofeng/games);
+  /** Theme category for store grouping (wallpaper/anime/stars/tech/guofeng/games);
    *  absent → grouped under "other". */
   category?: string | null;
 }

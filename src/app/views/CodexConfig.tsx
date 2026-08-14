@@ -1,25 +1,949 @@
-import { useI18n } from "../i18n";
-import { NavBar, Ring } from "../components";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-// Reserved section for the upcoming ~/.codex management (sessions / auth /
-// config). The route, nav entry and view shell exist so the feature drops in
-// without restructuring; the backend port is stubbed in app/codex_config.
+import { errorMessage, managerApi } from "../../services/managerApi";
+import type {
+  CodexBasicConfigInput,
+  CodexConfigReport,
+  CodexMcpServer,
+  CodexMcpServerInput,
+  CodexMcpTransport,
+} from "../../shared/types";
+import { NavBar, Segmented, Toggle } from "../components";
+import { Icon } from "../icons";
+import { useI18n } from "../i18n";
+
+type ConfigTab = "basic" | "mcp" | "advanced";
+
+interface McpDraft extends CodexMcpServerInput {
+  argsText: string;
+}
+
+const EMPTY_BASIC: CodexBasicConfigInput = {
+  model: "gpt-5.6-sol",
+  provider: "",
+  baseUrl: "",
+  reasoningEffort: "",
+  personality: "",
+  approvalPolicy: "",
+  sandboxMode: "",
+  disableResponseStorage: false,
+  goalMode: false,
+};
+
+const ZH_COPY = {
+  loading: "正在读取 Codex 配置…",
+  file: "配置文件",
+  openFolder: "打开目录",
+  fileMissing: "保存后将创建 config.toml",
+  backupReady: "可恢复上一版本",
+  invalid: "当前 TOML 有错误，请在高级编辑中修复",
+  running: "Codex 正在运行，请先退出后再保存",
+  basic: "基础",
+  mcp: "MCP",
+  advanced: "高级",
+  awaiUse: "使用",
+  awaiActive: "已填入",
+  model: "模型",
+  modelPlaceholder: "例如 gpt-5.6-sol",
+  fetchModels: "获取模型",
+  modelsFetched: "已获取 {count} 个模型",
+  provider: "供应商标识",
+  providerPlaceholder: "例如 awai",
+  baseUrl: "Base URL",
+  credentials: "API 凭据",
+  authFile: "凭据文件",
+  apiKey: "API Key",
+  apiKeyPlaceholder: "输入新的 API Key",
+  apiKeyConfigured: "已配置",
+  apiKeyMissing: "未配置",
+  apiKeyHint: "已保存的密钥不会回显",
+  showApiKey: "显示正在输入的 API Key",
+  saveApiKey: "保存 API Key",
+  apiKeySaved: "API Key 已安全保存",
+  deleteApiKey: "删除 API Key",
+  deleteApiKeyConfirm: "确认从 auth.json 删除 API Key？",
+  apiKeyDeleted: "API Key 已删除",
+  reasoning: "推理等级",
+  personality: "Personality",
+  goalMode: "Goal Mode",
+  disableResponseStorage: "禁用响应存储",
+  executionAccess: "执行权限",
+  approvalPolicy: "审批策略",
+  sandboxMode: "沙箱模式",
+  dangerousCombination: "当前组合允许 Codex 无需确认访问系统全部文件并执行命令。仅在你完全信任当前任务时使用。",
+  automatic: "跟随 Codex 默认",
+  saveBasic: "保存基础配置",
+  saved: "配置已保存，并保留了上一版本备份",
+  emptyMcp: "尚未配置 MCP 服务器",
+  addMcp: "添加 MCP",
+  editMcp: "编辑 MCP",
+  newMcp: "新建 MCP",
+  name: "名称",
+  namePlaceholder: "例如 context7",
+  transport: "传输方式",
+  command: "命令",
+  commandPlaceholder: "例如 npx",
+  args: "参数（每行一项）",
+  url: "服务 URL",
+  enabled: "启用",
+  sensitive: "含敏感字段",
+  sensitiveKept: "未显示的环境变量、请求头和扩展字段会原样保留",
+  saveMcp: "保存 MCP",
+  cancel: "取消",
+  delete: "删除",
+  deleteConfirm: "确认删除 {name}？",
+  showSecrets: "显示敏感值",
+  hiddenHint: "敏感值已遮挡。开启“显示敏感值”后才能编辑原始 TOML。",
+  validate: "校验 TOML",
+  valid: "TOML 格式正确",
+  saveRaw: "保存原始配置",
+  restore: "恢复上一版本",
+  restored: "已恢复上一版本；恢复前的内容现在仍可撤销",
+  noBackup: "还没有可恢复的备份",
+  rawDirty: "原始配置有未保存修改",
+};
+
+const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
+  loading: "Reading Codex configuration…",
+  file: "Configuration file",
+  openFolder: "Open folder",
+  fileMissing: "config.toml will be created on save",
+  backupReady: "Previous version can be restored",
+  invalid: "The current TOML is invalid. Repair it in Advanced.",
+  running: "Codex is running. Quit it before saving.",
+  basic: "Basic",
+  mcp: "MCP",
+  advanced: "Advanced",
+  awaiUse: "Use",
+  awaiActive: "Filled",
+  model: "Model",
+  modelPlaceholder: "For example, gpt-5.6-sol",
+  fetchModels: "Fetch models",
+  modelsFetched: "Fetched {count} models",
+  provider: "Provider key",
+  providerPlaceholder: "For example, awai",
+  baseUrl: "Base URL",
+  credentials: "API credentials",
+  authFile: "Credential file",
+  apiKey: "API Key",
+  apiKeyPlaceholder: "Enter a new API Key",
+  apiKeyConfigured: "Configured",
+  apiKeyMissing: "Not configured",
+  apiKeyHint: "Saved keys are never shown again",
+  showApiKey: "Show the API Key being entered",
+  saveApiKey: "Save API Key",
+  apiKeySaved: "API Key saved securely",
+  deleteApiKey: "Delete API Key",
+  deleteApiKeyConfirm: "Delete the API Key from auth.json?",
+  apiKeyDeleted: "API Key deleted",
+  reasoning: "Reasoning effort",
+  personality: "Personality",
+  goalMode: "Goal Mode",
+  disableResponseStorage: "Disable response storage",
+  executionAccess: "Execution access",
+  approvalPolicy: "Approval policy",
+  sandboxMode: "Sandbox mode",
+  dangerousCombination: "This combination lets Codex access all system files and run commands without confirmation. Use it only for tasks you fully trust.",
+  automatic: "Use Codex default",
+  saveBasic: "Save basic configuration",
+  saved: "Configuration saved with a previous-version backup",
+  emptyMcp: "No MCP servers configured",
+  addMcp: "Add MCP",
+  editMcp: "Edit MCP",
+  newMcp: "New MCP",
+  name: "Name",
+  namePlaceholder: "For example, context7",
+  transport: "Transport",
+  command: "Command",
+  commandPlaceholder: "For example, npx",
+  args: "Arguments (one per line)",
+  url: "Service URL",
+  enabled: "Enabled",
+  sensitive: "Contains sensitive fields",
+  sensitiveKept: "Hidden environment, header, and extension fields will be preserved",
+  saveMcp: "Save MCP",
+  cancel: "Cancel",
+  delete: "Delete",
+  deleteConfirm: "Delete {name}?",
+  showSecrets: "Show sensitive values",
+  hiddenHint: "Sensitive values are masked. Enable “Show sensitive values” to edit raw TOML.",
+  validate: "Validate TOML",
+  valid: "TOML is valid",
+  saveRaw: "Save raw configuration",
+  restore: "Restore previous version",
+  restored: "Previous version restored; the pre-restore content remains undoable",
+  noBackup: "No backup is available yet",
+  rawDirty: "Raw configuration has unsaved changes",
+};
+
+function mcpDraft(server?: CodexMcpServer): McpDraft {
+  return {
+    originalName: server?.name ?? null,
+    name: server?.name ?? "",
+    enabled: server?.enabled ?? true,
+    transport: server?.transport ?? "stdio",
+    command: server?.command ?? "",
+    args: server?.args ?? [],
+    argsText: server?.args.join("\n") ?? "",
+    url: server?.url ?? "",
+  };
+}
+
+function serverInput(draft: McpDraft): CodexMcpServerInput {
+  return {
+    originalName: draft.originalName,
+    name: draft.name.trim(),
+    enabled: draft.enabled,
+    transport: draft.transport,
+    command: draft.transport === "stdio" ? draft.command?.trim() || null : null,
+    args:
+      draft.transport === "stdio"
+        ? draft.argsText
+            .split("\n")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [],
+    url: draft.transport === "http" ? draft.url?.trim() || null : null,
+  };
+}
+
 export function CodexConfig({ onBack }: { onBack: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const copy = lang === "zh-CN" || lang === "zh-TW" ? ZH_COPY : EN_COPY;
+  const [tab, setTab] = useState<ConfigTab>("basic");
+  const [report, setReport] = useState<CodexConfigReport | null>(null);
+  const [basic, setBasic] = useState<CodexBasicConfigInput>(EMPTY_BASIC);
+  const [rawDraft, setRawDraft] = useState("");
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [models, setModels] = useState<string[]>(["gpt-5.6-sol"]);
+  const [draft, setDraft] = useState<McpDraft | null>(null);
+  const [deleteName, setDeleteName] = useState<string | null>(null);
+  const [deleteApiKeyConfirm, setDeleteApiKeyConfirm] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const applyReport = useCallback((next: CodexConfigReport) => {
+    setReport(next);
+    setBasic({
+      model: next.model || "gpt-5.6-sol",
+      provider: next.provider,
+      baseUrl: next.baseUrl,
+      reasoningEffort: next.reasoningEffort,
+      personality: next.personality,
+      approvalPolicy: next.approvalPolicy,
+      sandboxMode: next.sandboxMode,
+      disableResponseStorage: next.disableResponseStorage,
+      goalMode: next.goalMode,
+    });
+    setRawDraft(next.raw);
+    setDraft(null);
+    setDeleteName(null);
+    setDeleteApiKeyConfirm(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy("load");
+    setError(null);
+    try {
+      applyReport(await managerApi.codexConfigGet());
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  }, [applyReport]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const run = async (
+    kind: string,
+    action: () => Promise<CodexConfigReport>,
+    success: string,
+  ) => {
+    setBusy(kind);
+    setError(null);
+    setNotice(null);
+    try {
+      applyReport(await action());
+      setNotice(success);
+      return true;
+    } catch (cause) {
+      setError(errorMessage(cause));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveBasic = () =>
+    run("basic", () => managerApi.codexConfigSaveBasic(basic), copy.saved);
+
+  const fetchModels = async () => {
+    setBusy("models");
+    setError(null);
+    setNotice(null);
+    try {
+      const fetched = await managerApi.codexConfigFetchModels(basic.baseUrl);
+      setModels(fetched);
+      setNotice(copy.modelsFetched.replace("{count}", String(fetched.length)));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveMcp = (input: CodexMcpServerInput) =>
+    run("mcp", () => managerApi.codexConfigUpsertMcp(input), copy.saved);
+
+  const saveApiKey = async () => {
+    const saved = await run(
+      "api-key",
+      () => managerApi.codexConfigSetApiKey(apiKey),
+      copy.apiKeySaved,
+    );
+    if (saved) {
+      setApiKey("");
+      setShowApiKey(false);
+    }
+  };
+
+  const toggleMcp = (server: CodexMcpServer, enabled: boolean) => {
+    void saveMcp({
+      ...serverInput(mcpDraft(server)),
+      enabled,
+    });
+  };
+
+  const validateRaw = async () => {
+    setBusy("validate");
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await managerApi.codexConfigValidate(rawDraft);
+      if (result.valid) setNotice(copy.valid);
+      else setError(result.error ?? copy.invalid);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const rawDirty = Boolean(report && rawDraft !== report.raw);
+  const locked = Boolean(busy) || Boolean(report?.codexRunning);
+  const awaiFilled = basic.provider === "awai" && basic.baseUrl === "https://api.awai.cc/v1";
+  const dangerousCombination =
+    basic.approvalPolicy === "never" && basic.sandboxMode === "danger-full-access";
+  const shownRaw = showSecrets ? rawDraft : report?.redactedRaw ?? "";
+  const tabs = useMemo(
+    () => [
+      { key: "basic", label: copy.basic },
+      { key: "mcp", label: `${copy.mcp}${report ? ` (${report.mcpServers.length})` : ""}` },
+      { key: "advanced", label: copy.advanced },
+    ],
+    [copy, report],
+  );
+
   return (
-    <div className="pop">
+    <div className="pop config-pop">
       <NavBar title={t("nav.config")} onBack={onBack} />
-      <div className="scroll view">
-        <section className="hero" style={{ marginTop: 24 }}>
-          <Ring icon="sliders" variant="muted" />
-          <div className="headline" style={{ fontSize: 18 }}>
-            {t("nav.config")}
+      <div className="scroll view config-view">
+        {busy === "load" && !report ? (
+          <div className="banner info" role="status">
+            <Icon name="loader" />
+            <span>{copy.loading}</span>
           </div>
-          <div className="desc">{t("config.desc")}</div>
-          <span className="tag soon" style={{ marginTop: 14 }}>
-            {t("config.soon")}
-          </span>
-        </section>
+        ) : null}
+
+        {report ? (
+          <section className="config-filebar" aria-label={copy.file}>
+            <div className="config-filecopy">
+              <span className="config-eyebrow">{copy.file}</span>
+              <strong className="config-path" title={report.path}>
+                {report.path}
+              </strong>
+              <span className="config-filemeta">
+                {report.exists ? (report.backupAvailable ? copy.backupReady : copy.noBackup) : copy.fileMissing}
+              </span>
+            </div>
+            <button
+              className="btn ghost icon-only"
+              type="button"
+              title={copy.openFolder}
+              aria-label={copy.openFolder}
+              onClick={() => void managerApi.openCodexHome().catch((cause) => setError(errorMessage(cause)))}
+            >
+              <Icon name="folder" />
+            </button>
+          </section>
+        ) : null}
+
+        {report?.codexRunning ? (
+          <div className="banner warn" role="status">
+            <Icon name="alert" />
+            <span>{copy.running}</span>
+          </div>
+        ) : null}
+        {report?.parseError ? (
+          <button className="banner err config-error-jump" type="button" onClick={() => setTab("advanced")}>
+            <Icon name="alert" />
+            <span>{copy.invalid}</span>
+            <Icon name="chevron" />
+          </button>
+        ) : null}
+        {error ? (
+          <div className="banner err" role="alert">
+            <Icon name="alert" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+        {notice ? (
+          <div className="banner ok" role="status">
+            <Icon name="check" />
+            <span>{notice}</span>
+          </div>
+        ) : null}
+
+        <Segmented
+          items={tabs}
+          value={tab}
+          onChange={(next) => setTab(next as ConfigTab)}
+          ariaLabel={t("nav.config")}
+        />
+
+        {report && tab === "basic" ? (
+          <section className="config-panel" aria-label={copy.basic}>
+            <div className="config-awai">
+              <div className="config-awai-mark">A</div>
+              <div className="config-awai-copy">
+                <strong>AWAI API</strong>
+                <span>api.awai.cc</span>
+              </div>
+              <button
+                className="btn ghost sm"
+                type="button"
+                disabled={locked || awaiFilled}
+                onClick={() =>
+                  setBasic((current) => ({
+                    ...current,
+                    provider: "awai",
+                    baseUrl: "https://api.awai.cc/v1",
+                  }))
+                }
+              >
+                {awaiFilled ? copy.awaiActive : copy.awaiUse}
+              </button>
+            </div>
+
+            <div className="config-grid">
+              <div className="config-field">
+                <span>{copy.model}</span>
+                <div className="config-model-control">
+                  <input
+                    className="input mono"
+                    value={basic.model}
+                    disabled={locked}
+                    list="codex-model-options"
+                    aria-label={copy.model}
+                    placeholder={copy.modelPlaceholder}
+                    onChange={(event) => setBasic({ ...basic, model: event.target.value })}
+                  />
+                  <datalist id="codex-model-options">
+                    {models.map((model) => <option key={model} value={model} />)}
+                  </datalist>
+                  <button
+                    className="btn ghost icon-only"
+                    type="button"
+                    title={copy.fetchModels}
+                    aria-label={copy.fetchModels}
+                    disabled={locked}
+                    onClick={() => void fetchModels()}
+                  >
+                    <Icon name={busy === "models" ? "loader" : "refresh"} />
+                  </button>
+                </div>
+              </div>
+              <label className="config-field">
+                <span>{copy.provider}</span>
+                <input
+                  className="input mono"
+                  value={basic.provider}
+                  disabled={locked}
+                  placeholder={copy.providerPlaceholder}
+                  onChange={(event) => setBasic({ ...basic, provider: event.target.value })}
+                />
+              </label>
+              <label className="config-field config-field-wide">
+                <span>{copy.baseUrl}</span>
+                <input
+                  className="input mono"
+                  inputMode="url"
+                  value={basic.baseUrl}
+                  disabled={locked}
+                  placeholder="https://api.example.com/v1"
+                  onChange={(event) => setBasic({ ...basic, baseUrl: event.target.value })}
+                />
+              </label>
+              <label className="config-field">
+                <span>{copy.reasoning}</span>
+                <select
+                  className="input config-select"
+                  value={basic.reasoningEffort}
+                  disabled={locked}
+                  onChange={(event) => setBasic({ ...basic, reasoningEffort: event.target.value })}
+                >
+                  <option value="">{copy.automatic}</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="xhigh">XHigh</option>
+                </select>
+              </label>
+              <label className="config-field">
+                <span>{copy.personality}</span>
+                <select
+                  className="input config-select"
+                  value={basic.personality}
+                  disabled={locked}
+                  onChange={(event) => setBasic({ ...basic, personality: event.target.value })}
+                >
+                  <option value="">{copy.automatic}</option>
+                  <option value="none">none</option>
+                  <option value="friendly">friendly</option>
+                  <option value="pragmatic">pragmatic</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="config-switches">
+              <div className="config-toggle-row">
+                <span>{copy.goalMode}</span>
+                <Toggle
+                  checked={basic.goalMode}
+                  disabled={locked}
+                  ariaLabel={copy.goalMode}
+                  onChange={(goalMode) => setBasic({ ...basic, goalMode })}
+                />
+              </div>
+              <div className="config-toggle-row">
+                <span>{copy.disableResponseStorage}</span>
+                <Toggle
+                  checked={basic.disableResponseStorage}
+                  disabled={locked}
+                  ariaLabel={copy.disableResponseStorage}
+                  onChange={(disableResponseStorage) => setBasic({ ...basic, disableResponseStorage })}
+                />
+              </div>
+            </div>
+
+            <div className="config-access">
+              <span className="config-eyebrow">{copy.executionAccess}</span>
+              <div className="config-grid">
+                <label className="config-field">
+                  <span>{copy.approvalPolicy}</span>
+                  <select
+                    className="input config-select mono"
+                    value={basic.approvalPolicy}
+                    disabled={locked}
+                    onChange={(event) => setBasic({ ...basic, approvalPolicy: event.target.value })}
+                  >
+                    <option value="">{copy.automatic}</option>
+                    <option value="untrusted">untrusted</option>
+                    <option value="on-request">on-request</option>
+                    <option value="never">never</option>
+                  </select>
+                </label>
+                <label className="config-field">
+                  <span>{copy.sandboxMode}</span>
+                  <select
+                    className="input config-select mono"
+                    value={basic.sandboxMode}
+                    disabled={locked}
+                    onChange={(event) => setBasic({ ...basic, sandboxMode: event.target.value })}
+                  >
+                    <option value="">{copy.automatic}</option>
+                    <option value="read-only">read-only</option>
+                    <option value="workspace-write">workspace-write</option>
+                    <option value="danger-full-access">danger-full-access</option>
+                  </select>
+                </label>
+              </div>
+              {dangerousCombination ? (
+                <div className="config-danger-note" role="alert">
+                  <Icon name="alert" />
+                  <span>{copy.dangerousCombination}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="config-actions">
+              <button
+                className="btn primary"
+                type="button"
+                disabled={locked || Boolean(report.parseError)}
+                onClick={() => void saveBasic()}
+              >
+                <Icon name={busy === "basic" ? "loader" : "check"} />
+                {copy.saveBasic}
+              </button>
+            </div>
+
+            <section className="config-auth" aria-label={copy.credentials}>
+              <div className="config-auth-head">
+                <div className="config-auth-copy">
+                  <span className="config-eyebrow">{copy.authFile}</span>
+                  <strong>{copy.apiKey}</strong>
+                  <span className="config-path" title={report.authPath}>
+                    {report.authPath}
+                  </span>
+                </div>
+                <span
+                  className={`config-auth-status${report.apiKeyConfigured ? " configured" : ""}`}
+                >
+                  <Icon name={report.apiKeyConfigured ? "check" : "alert"} />
+                  {report.apiKeyConfigured ? copy.apiKeyConfigured : copy.apiKeyMissing}
+                </span>
+              </div>
+              {report.authError ? (
+                <div className="banner err config-auth-error" role="alert">
+                  <Icon name="alert" />
+                  <span>{report.authError}</span>
+                </div>
+              ) : null}
+              <label className="config-field">
+                <span>{copy.apiKey}</span>
+                <input
+                  className="input mono"
+                  type={showApiKey ? "text" : "password"}
+                  name="codex-api-key"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  value={apiKey}
+                  disabled={locked}
+                  placeholder={copy.apiKeyPlaceholder}
+                  onChange={(event) => setApiKey(event.target.value)}
+                />
+              </label>
+              <div className="config-auth-meta">
+                <span>{copy.apiKeyHint}</span>
+                <div className="config-auth-reveal">
+                  <span>{copy.showApiKey}</span>
+                  <Toggle
+                    checked={showApiKey}
+                    disabled={locked || !apiKey}
+                    ariaLabel={copy.showApiKey}
+                    onChange={setShowApiKey}
+                  />
+                </div>
+              </div>
+              <div className="config-actions config-actions-wrap">
+                {report.apiKeyConfigured ? (
+                  <button
+                    className="btn ghost danger"
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setDeleteApiKeyConfirm(true)}
+                  >
+                    <Icon name="trash" />
+                    {copy.deleteApiKey}
+                  </button>
+                ) : null}
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={locked || !apiKey.trim()}
+                  onClick={() => void saveApiKey()}
+                >
+                  <Icon name={busy === "api-key" ? "loader" : "shield"} />
+                  {copy.saveApiKey}
+                </button>
+              </div>
+            </section>
+          </section>
+        ) : null}
+
+        {report && tab === "mcp" ? (
+          <section className="config-panel" aria-label={copy.mcp}>
+            {!draft ? (
+              <>
+                <div className="config-sectionbar">
+                  <span className="config-sectioncount">{report.mcpServers.length}</span>
+                  <button
+                    className="btn ghost sm"
+                    type="button"
+                    disabled={locked || Boolean(report.parseError)}
+                    onClick={() => setDraft(mcpDraft())}
+                  >
+                    <Icon name="plus" />
+                    {copy.addMcp}
+                  </button>
+                </div>
+                {report.mcpServers.length ? (
+                  <div className="config-mcp-list">
+                    {report.mcpServers.map((server) => (
+                      <div className="config-mcp" key={server.name}>
+                        <button
+                          className="config-mcp-main"
+                          type="button"
+                          disabled={Boolean(busy)}
+                          onClick={() => setDraft(mcpDraft(server))}
+                        >
+                          <span className={`config-transport ${server.transport}`}>
+                            {server.transport}
+                          </span>
+                          <span className="config-mcp-copy">
+                            <strong>{server.name}</strong>
+                            <span className="mono">
+                              {server.transport === "stdio"
+                                ? [server.command, ...server.args].filter(Boolean).join(" ")
+                                : server.url}
+                            </span>
+                          </span>
+                          {server.hasSensitiveValues ? (
+                            <span className="tag">{copy.sensitive}</span>
+                          ) : null}
+                        </button>
+                        <Toggle
+                          checked={server.enabled}
+                          disabled={locked}
+                          ariaLabel={`${copy.enabled} ${server.name}`}
+                          onChange={(enabled) => toggleMcp(server, enabled)}
+                        />
+                        <button
+                          className="btn ghost danger icon-only"
+                          type="button"
+                          title={copy.delete}
+                          aria-label={`${copy.delete} ${server.name}`}
+                          disabled={locked}
+                          onClick={() => setDeleteName(server.name)}
+                        >
+                          <Icon name="trash" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="config-empty">{copy.emptyMcp}</div>
+                )}
+              </>
+            ) : (
+              <div className="config-mcp-editor">
+                <div className="config-sectionbar">
+                  <strong>{draft.originalName ? copy.editMcp : copy.newMcp}</strong>
+                  <button className="linkbtn" type="button" disabled={Boolean(busy)} onClick={() => setDraft(null)}>
+                    {copy.cancel}
+                  </button>
+                </div>
+                <div className="config-grid">
+                  <label className="config-field config-field-wide">
+                    <span>{copy.name}</span>
+                    <input
+                      className="input mono"
+                      value={draft.name}
+                      disabled={locked}
+                      placeholder={copy.namePlaceholder}
+                      onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                    />
+                  </label>
+                  <div className="config-field config-field-wide">
+                    <span>{copy.transport}</span>
+                    <Segmented
+                      items={[
+                        { key: "stdio", label: "stdio" },
+                        { key: "http", label: "HTTP" },
+                      ]}
+                      value={draft.transport}
+                      onChange={(transport) =>
+                        setDraft({ ...draft, transport: transport as CodexMcpTransport })
+                      }
+                      ariaLabel={copy.transport}
+                    />
+                  </div>
+                  {draft.transport === "stdio" ? (
+                    <>
+                      <label className="config-field config-field-wide">
+                        <span>{copy.command}</span>
+                        <input
+                          className="input mono"
+                          value={draft.command ?? ""}
+                          disabled={locked}
+                          placeholder={copy.commandPlaceholder}
+                          onChange={(event) => setDraft({ ...draft, command: event.target.value })}
+                        />
+                      </label>
+                      <label className="config-field config-field-wide">
+                        <span>{copy.args}</span>
+                        <textarea
+                          className="input mono config-args"
+                          value={draft.argsText}
+                          disabled={locked}
+                          onChange={(event) => setDraft({ ...draft, argsText: event.target.value })}
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <label className="config-field config-field-wide">
+                      <span>{copy.url}</span>
+                      <input
+                        className="input mono"
+                        inputMode="url"
+                        value={draft.url ?? ""}
+                        disabled={locked}
+                        placeholder="https://example.com/mcp"
+                        onChange={(event) => setDraft({ ...draft, url: event.target.value })}
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="config-toggle-row">
+                  <span>{copy.enabled}</span>
+                  <Toggle
+                    checked={draft.enabled}
+                    disabled={locked}
+                    ariaLabel={copy.enabled}
+                    onChange={(enabled) => setDraft({ ...draft, enabled })}
+                  />
+                </div>
+                {draft.originalName && report.mcpServers.find((item) => item.name === draft.originalName)?.hasSensitiveValues ? (
+                  <div className="config-preserve-note">
+                    <Icon name="shield" />
+                    <span>{copy.sensitiveKept}</span>
+                  </div>
+                ) : null}
+                <div className="config-actions">
+                  <button
+                    className="btn primary"
+                    type="button"
+                    disabled={locked || !draft.name.trim()}
+                    onClick={() => void saveMcp(serverInput(draft))}
+                  >
+                    <Icon name={busy === "mcp" ? "loader" : "check"} />
+                    {copy.saveMcp}
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {report && tab === "advanced" ? (
+          <section className="config-panel config-advanced" aria-label={copy.advanced}>
+            <div className="config-toggle-row">
+              <span>{copy.showSecrets}</span>
+              <Toggle
+                checked={showSecrets}
+                ariaLabel={copy.showSecrets}
+                onChange={setShowSecrets}
+              />
+            </div>
+            {!showSecrets ? <div className="config-mask-note">{copy.hiddenHint}</div> : null}
+            <textarea
+              className="config-editor"
+              value={shownRaw}
+              readOnly={!showSecrets}
+              spellCheck={false}
+              aria-label="config.toml"
+              onChange={(event) => setRawDraft(event.target.value)}
+            />
+            {rawDirty ? <div className="config-dirty">{copy.rawDirty}</div> : null}
+            <div className="config-actions config-actions-wrap">
+              <button
+                className="btn ghost"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() => void validateRaw()}
+              >
+                <Icon name={busy === "validate" ? "loader" : "check"} />
+                {copy.validate}
+              </button>
+              <button
+                className="btn ghost"
+                type="button"
+                disabled={locked || !report.backupAvailable}
+                title={!report.backupAvailable ? copy.noBackup : undefined}
+                onClick={() =>
+                  void run("restore", () => managerApi.codexConfigRestoreBackup(), copy.restored)
+                }
+              >
+                <Icon name={busy === "restore" ? "loader" : "refresh"} />
+                {copy.restore}
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                disabled={locked || !showSecrets || !rawDirty}
+                onClick={() =>
+                  void run("raw", () => managerApi.codexConfigSaveRaw(rawDraft), copy.saved)
+                }
+              >
+                <Icon name={busy === "raw" ? "loader" : "check"} />
+                {copy.saveRaw}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {deleteName ? (
+          <div className="config-confirm" role="dialog" aria-modal="true">
+            <strong>{copy.deleteConfirm.replace("{name}", deleteName)}</strong>
+            <div className="config-actions">
+              <button className="btn ghost" type="button" onClick={() => setDeleteName(null)}>
+                {copy.cancel}
+              </button>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void run(
+                    "delete",
+                    () => managerApi.codexConfigDeleteMcp(deleteName),
+                    copy.saved,
+                  )
+                }
+              >
+                <Icon name="trash" />
+                {copy.delete}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {deleteApiKeyConfirm ? (
+          <div className="config-confirm" role="dialog" aria-modal="true">
+            <strong>{copy.deleteApiKeyConfirm}</strong>
+            <div className="config-actions">
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => setDeleteApiKeyConfirm(false)}
+              >
+                {copy.cancel}
+              </button>
+              <button
+                className="btn danger"
+                type="button"
+                disabled={Boolean(busy)}
+                onClick={() =>
+                  void run(
+                    "delete-api-key",
+                    () => managerApi.codexConfigDeleteApiKey(),
+                    copy.apiKeyDeleted,
+                  )
+                }
+              >
+                <Icon name="trash" />
+                {copy.deleteApiKey}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

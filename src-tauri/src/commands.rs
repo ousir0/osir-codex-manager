@@ -2244,6 +2244,101 @@ pub fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), Command
     result.map_err(|e| AppError::Internal(format!("autostart: {e}")).into())
 }
 
+// ── Codex config.toml ───────────────────────────────────────────────────────
+
+fn ensure_config_may_write(state: &ManagerState) -> Result<(), CommandError> {
+    if state.operations.snapshot().is_some() {
+        return Err(AppError::Busy("有正在进行的安装或更新，请稍后再保存配置".to_string()).into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn codex_config_get() -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    crate::app::codex_config::report(crate::app::codex_theme::codex_running()).map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn codex_config_fetch_models(base_url: String) -> Result<Vec<String>, CommandError> {
+    tauri::async_runtime::spawn_blocking(move || crate::app::codex_config::fetch_models(&base_url))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_validate(raw: String) -> crate::app::codex_config::CodexConfigValidation {
+    crate::app::codex_config::validate(&raw)
+}
+
+#[tauri::command]
+pub fn codex_config_save_raw(
+    state: State<'_, ManagerState>,
+    raw: String,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::save_raw(&raw, crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_save_basic(
+    state: State<'_, ManagerState>,
+    input: crate::app::codex_config::CodexBasicConfigInput,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::save_basic(input, crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_set_api_key(
+    state: State<'_, ManagerState>,
+    api_key: String,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::set_api_key(&api_key, crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_delete_api_key(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::delete_api_key(crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_upsert_mcp(
+    state: State<'_, ManagerState>,
+    input: crate::app::codex_config::CodexMcpServerInput,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::upsert_mcp(input, crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_delete_mcp(
+    state: State<'_, ManagerState>,
+    name: String,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::delete_mcp(&name, crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_restore_backup(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::restore_backup(crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
 // ── Codex UI themes ──────────────────────────────────────────────────────────
 // CDP-injected theme packages (see crates/codex-theme-engine). Live try-on
 // needs a debuggable Codex; the apply path restarts Codex with the loopback

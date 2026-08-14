@@ -5,10 +5,9 @@ import { useI18n } from "./i18n";
 import { navLocked, subscribeNavLock } from "./navLock";
 import { useWindowModeOptional } from "./windowMode";
 
-/** Views the rail can jump to directly. Sub-views that live *under* Settings
- *  (About, Uninstall, Codex config) highlight the Settings item — the rail
- *  reflects sections, not the full view stack. */
-export type RailSection = "home" | "themes" | "settings";
+/** Views the expanded workbench can jump to directly. About and Uninstall
+ *  remain subordinate to Settings; Codex config is a first-class workspace. */
+export type RailSection = "home" | "themes" | "config" | "settings";
 
 /** Left navigation card, shown only in the expanded workbench. It is a second
  *  floating `.pop` card beside the active view's card — same material, same
@@ -33,6 +32,7 @@ export function Rail({
   const items: Array<{ key: RailSection; icon: IconName; label: string }> = [
     { key: "home", icon: "house", label: t("rail.home") },
     { key: "themes", icon: "palette", label: t("themes.title") },
+    { key: "config", icon: "sliders", label: t("nav.config") },
     { key: "settings", icon: "gear", label: t("nav.settings") },
   ];
 
