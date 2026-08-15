@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/awai-mark.svg" width="150" alt="AWAI Codex App Manager logo">
+  <img src="./assets/logo.png" width="160" alt="AWAI Codex App Manager logo">
 </p>
 
 <h1 align="center">AWAI Codex App Manager</h1>
@@ -30,6 +30,23 @@
   <a href="docs/privacy.md">隐私政策</a> ·
   <a href="#readme-en">English</a>
 </p>
+
+---
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="170">
+      <a href="https://api.awai.cc"><img src="./assets/logo.png" alt="AWAI API" width="96"></a>
+    </td>
+    <td width="560">
+      <b>本项目由 <a href="https://api.awai.cc">AWAI API 中转站</a> 提供服务支持</b><br>
+      为 Codex 提供兼容 OpenAI API 的统一入口，默认地址为 <code>https://api.awai.cc/v1</code>。<br>
+      <b>Powered by <a href="https://api.awai.cc">AWAI API</a></b> — one compatible endpoint for your Codex configuration.
+    </td>
+  </tr>
+</table>
+</div>
 
 ---
 

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">AWAI mark</title>
-  <desc id="desc">A blue verified route mark for AWAI Codex App Manager.</desc>
-  <rect width="256" height="256" rx="56" fill="#0E172A"/>
-  <path d="M128 34L196 72V148L128 222L60 148V72Z" fill="#162A49" stroke="#69A5FA" stroke-width="8" stroke-linejoin="round"/>
-  <path d="M128 68L166 90V132L128 174L90 132V90Z" fill="none" stroke="#69A5FA" stroke-width="8" stroke-linejoin="round"/>
-  <circle cx="128" cy="124" r="25" fill="#8DE1D0"/>
-  <path d="M114 124L124 134L144 111" fill="none" stroke="#0E172A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
