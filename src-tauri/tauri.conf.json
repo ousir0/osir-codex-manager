@@ -48,6 +48,10 @@
     "targets": ["nsis", "dmg", "app"],
     "resources": ["resources/*"],
     "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
       "nsis": {
         "displayLanguageSelector": true,
         "installMode": "currentUser",

@@ -26,8 +26,8 @@
 请求可能经过系统代理、用户配置的代理或直连。网络服务通常会看到 IP、时间、路径、
 User-Agent、状态码和安全日志；这些是服务端正常运行所需的元数据，不是项目应用层遥测。
 
-Windows 安装器在系统没有可用 WebView2 Runtime 时，可能访问 Microsoft 的 bootstrapper
-地址；已有 Runtime 的系统不会重复下载。
+Windows 安装器包含 WebView2 Evergreen 离线安装器。系统已有可用 WebView2 Runtime 时不会
+重复安装；没有 Runtime 时也不需要临时访问 Microsoft 的 bootstrapper 地址。
 
 ## 本地保存的数据
 
