@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 
-import logoAwai from "./assets/logo-awai.svg";
+import logoAwai from "./assets/logo-awai.png";
 
 export type IconName =
   | "check"
@@ -236,7 +236,7 @@ export function Icon({ name, className }: { name: IconName; className?: string }
   );
 }
 
-/** AWAI-blue cloud terminal mark. Sized by its container (`.mark`). */
+/** AWAI-blue cloud mark. Sized by its container (`.mark`). */
 export function CodexMark({ className }: { className?: string }) {
   return (
     <img
