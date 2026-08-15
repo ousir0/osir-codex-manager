@@ -708,6 +708,14 @@ enabled = false
   sandboxMode: "danger-full-access",
   disableResponseStorage: true,
   goalMode: true,
+  providers: [
+    {
+      id: "awai",
+      name: "AWAI",
+      baseUrl: "https://api.awai.cc/v1",
+      wireApi: "responses",
+    },
+  ],
   mcpServers: [
     {
       name: "context7",
@@ -732,6 +740,7 @@ enabled = false
   apiKeyConfigured: false,
   authError: null,
   codexRunning: false,
+  imageGenerationCompatibility: false,
 };
 
 function browserConfigReport(
@@ -763,14 +772,24 @@ function renderBrowserConfig(report: CodexConfigReport): string {
     report.sandboxMode ? `sandbox_mode = ${JSON.stringify(report.sandboxMode)}` : "",
   ].filter(Boolean);
   lines.push("", "[features]", `goals = ${report.goalMode}`);
-  if (report.provider) {
+  const providers = report.providers.length
+    ? report.providers
+    : report.provider
+      ? [{
+          id: report.provider,
+          name: report.provider === "awai" ? "AWAI" : report.provider,
+          baseUrl: report.baseUrl,
+          wireApi: "responses",
+        }]
+      : [];
+  for (const provider of providers) {
     lines.push(
       "",
-      `[model_providers.${report.provider}]`,
-      `name = ${JSON.stringify(report.provider === "awai" ? "AWAI" : report.provider)}`,
+      `[model_providers.${provider.id}]`,
+      `name = ${JSON.stringify(provider.name || provider.id)}`,
     );
-    if (report.baseUrl) lines.push(`base_url = ${JSON.stringify(report.baseUrl)}`);
-    lines.push('wire_api = "responses"', "requires_openai_auth = true");
+    if (provider.baseUrl) lines.push(`base_url = ${JSON.stringify(provider.baseUrl)}`);
+    lines.push(`wire_api = ${JSON.stringify(provider.wireApi || "responses")}`, "requires_openai_auth = true");
   }
   for (const server of report.mcpServers) {
     lines.push("", `[mcp_servers.${server.name}]`, `type = ${JSON.stringify(server.transport)}`);
@@ -1403,6 +1422,7 @@ export const managerApi = {
           sandboxMode: input.sandboxMode.trim(),
           disableResponseStorage: input.disableResponseStorage,
           goalMode: input.goalMode,
+          imageGenerationCompatibility: input.imageGenerationCompatibility,
         }),
       );
     }

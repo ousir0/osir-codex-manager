@@ -36,6 +36,7 @@ export type IconName =
   | "grid"
   | "list"
   | "close"
+  | "star"
   | "plus";
 
 const PATHS: Record<IconName, ReactNode> = {
@@ -216,6 +217,9 @@ const PATHS: Record<IconName, ReactNode> = {
       <line className="cam-close-a" x1="6" y1="6" x2="18" y2="18" />
       <line className="cam-close-b" x1="18" y1="6" x2="6" y2="18" />
     </>
+  ),
+  star: (
+    <path d="m12 3.5 2.65 5.37 5.92.86-4.29 4.18 1.01 5.9L12 17.02l-5.29 2.79 1.01-5.9-4.29-4.18 5.92-.86L12 3.5Z" />
   ),
 };
 

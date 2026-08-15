@@ -47,11 +47,22 @@ pub struct CodexConfigReport {
     pub sandbox_mode: String,
     pub disable_response_storage: bool,
     pub goal_mode: bool,
+    pub providers: Vec<CodexProviderProfile>,
     pub mcp_servers: Vec<CodexMcpServer>,
     pub backup_available: bool,
     pub api_key_configured: bool,
     pub auth_error: Option<String>,
     pub codex_running: bool,
+    pub image_generation_compatibility: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexProviderProfile {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub wire_api: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -85,6 +96,7 @@ pub struct CodexBasicConfigInput {
     pub sandbox_mode: String,
     pub disable_response_storage: bool,
     pub goal_mode: bool,
+    pub image_generation_compatibility: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -327,6 +339,55 @@ fn mcp_servers(document: &DocumentMut) -> Vec<CodexMcpServer> {
     result
 }
 
+fn provider_profiles(document: &DocumentMut) -> Vec<CodexProviderProfile> {
+    let Some(providers) = document.get("model_providers").and_then(Item::as_table) else {
+        return Vec::new();
+    };
+    let mut result = providers
+        .iter()
+        .filter_map(|(id, item)| {
+            let table = item.as_table()?;
+            Some(CodexProviderProfile {
+                id: id.to_string(),
+                name: {
+                    let name = string_at(table, "name");
+                    if name.is_empty() {
+                        id.to_string()
+                    } else {
+                        name
+                    }
+                },
+                base_url: string_at(table, "base_url"),
+                wire_api: string_at(table, "wire_api"),
+            })
+        })
+        .collect::<Vec<_>>();
+    result.sort_by_key(|provider| provider.id.to_lowercase());
+    result
+}
+
+fn image_generation_compatibility(document: &DocumentMut, provider: &str, base_url: &str) -> bool {
+    let Some(table) = document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(provider))
+        .and_then(Item::as_table)
+    else {
+        return false;
+    };
+    let requires_auth = table
+        .get("requires_openai_auth")
+        .and_then(Item::as_bool)
+        .unwrap_or(true);
+    let actor = table
+        .get("http_headers")
+        .and_then(Item::as_value)
+        .and_then(|value| value.as_inline_table())
+        .and_then(|headers| headers.get("x-openai-actor-authorization"))
+        .and_then(|value| value.as_str());
+    !requires_auth && actor == Some(base_url)
+}
+
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let auth_path = auth_path_for_config(path);
     let (api_key_configured, auth_error) = auth_status(&auth_path);
@@ -350,7 +411,9 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         sandbox_mode,
         disable_response_storage,
         goal_mode,
+        providers,
         servers,
+        image_compatibility,
     ) = match parsed {
         Ok(document) => {
             let provider = string_at(document.as_table(), "model_provider");
@@ -361,6 +424,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 .and_then(Item::as_table)
                 .map(|table| string_at(table, "base_url"))
                 .unwrap_or_default();
+            let image_compatibility = image_generation_compatibility(&document, &provider, &base_url);
             (
                 None,
                 string_at(document.as_table(), "model"),
@@ -380,7 +444,9 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                     .and_then(|features| features.get("goals"))
                     .and_then(Item::as_bool)
                     .unwrap_or(false),
+                provider_profiles(&document),
                 mcp_servers(&document),
+                image_compatibility,
             )
         }
         Err(error) => (
@@ -395,6 +461,8 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
             false,
             false,
             Vec::new(),
+            Vec::new(),
+            false,
         ),
     };
     Ok(CodexConfigReport {
@@ -413,11 +481,13 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         sandbox_mode,
         disable_response_storage,
         goal_mode,
+        providers,
         mcp_servers: servers,
         backup_available: atomic_file::backup_path(path).is_file(),
         api_key_configured,
         auth_error,
         codex_running,
+        image_generation_compatibility: image_compatibility,
     })
 }
 
@@ -435,16 +505,6 @@ pub fn validate(raw: &str) -> CodexConfigValidation {
             valid: false,
             error: Some(error.to_string()),
         },
-    }
-}
-
-fn ensure_stopped(codex_running: bool) -> Result<(), AppError> {
-    if codex_running {
-        Err(AppError::Busy(
-            "Codex 正在运行。请先退出 Codex，避免它在退出时覆盖配置或凭据。".to_string(),
-        ))
-    } else {
-        Ok(())
     }
 }
 
@@ -471,9 +531,7 @@ fn tighten_auth_permissions(_path: &Path) -> Result<(), AppError> {
 fn write_auth_verified(
     path: &Path,
     auth: &JsonMap<String, JsonValue>,
-    codex_running: bool,
 ) -> Result<(), AppError> {
-    ensure_stopped(codex_running)?;
     if path.is_symlink() {
         return Err(AppError::Engine(
             "auth.json 是符号链接，为避免改写错误目标，管理器拒绝保存".to_string(),
@@ -503,8 +561,7 @@ fn write_auth_verified(
     Ok(())
 }
 
-fn set_api_key_at(path: &Path, api_key: &str, codex_running: bool) -> Result<(), AppError> {
-    ensure_stopped(codex_running)?;
+fn set_api_key_at(path: &Path, api_key: &str) -> Result<(), AppError> {
     let api_key = api_key.trim();
     if api_key.is_empty() {
         return Err(AppError::Engine("API Key 不能为空".to_string()));
@@ -526,11 +583,10 @@ fn set_api_key_at(path: &Path, api_key: &str, codex_running: bool) -> Result<(),
         "OPENAI_API_KEY".to_string(),
         JsonValue::String(api_key.to_string()),
     );
-    write_auth_verified(path, &auth, codex_running)
+    write_auth_verified(path, &auth)
 }
 
-fn delete_api_key_at(path: &Path, codex_running: bool) -> Result<(), AppError> {
-    ensure_stopped(codex_running)?;
+fn delete_api_key_at(path: &Path) -> Result<(), AppError> {
     if path.is_symlink() {
         return Err(AppError::Engine(
             "auth.json 是符号链接，为避免改写错误目标，管理器拒绝保存".to_string(),
@@ -543,18 +599,18 @@ fn delete_api_key_at(path: &Path, codex_running: bool) -> Result<(), AppError> {
         }
         return Ok(());
     }
-    write_auth_verified(path, &auth, codex_running)
+    write_auth_verified(path, &auth)
 }
 
 pub fn set_api_key(api_key: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
-    set_api_key_at(&auth_path_for_config(&config_path), api_key, codex_running)?;
+    set_api_key_at(&auth_path_for_config(&config_path), api_key)?;
     report_for_path(&config_path, codex_running)
 }
 
 pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
-    delete_api_key_at(&auth_path_for_config(&config_path), codex_running)?;
+    delete_api_key_at(&auth_path_for_config(&config_path))?;
     report_for_path(&config_path, codex_running)
 }
 
@@ -695,8 +751,9 @@ pub fn fetch_models(base_url: &str) -> Result<Vec<String>, AppError> {
     parse_models_response(&output.stdout)
 }
 
-fn write_verified(path: &Path, raw: &str, codex_running: bool) -> Result<(), AppError> {
-    ensure_stopped(codex_running)?;
+/// Atomically write a validated config. Running Codex is allowed; the UI
+/// surfaces that the new values take effect after the next restart.
+fn write_verified(path: &Path, raw: &str) -> Result<(), AppError> {
     parse_document(raw)?;
     if path.is_symlink() {
         return Err(AppError::Engine(
@@ -725,7 +782,7 @@ fn write_verified(path: &Path, raw: &str, codex_running: bool) -> Result<(), App
 
 pub fn save_raw(raw: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
-    write_verified(&path, raw, codex_running)?;
+    write_verified(&path, raw)?;
     report_for_path(&path, codex_running)
 }
 
@@ -856,6 +913,25 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         } else {
             selected["base_url"] = value(&base_url);
         }
+        selected["requires_openai_auth"] = value(!input.image_generation_compatibility);
+        if input.image_generation_compatibility {
+            let headers = selected
+                .entry("http_headers")
+                .or_insert_with(|| Item::Value(toml_edit::Value::InlineTable(toml_edit::InlineTable::new())))
+                .as_value_mut()
+                .and_then(toml_edit::Value::as_inline_table_mut)
+                .ok_or_else(|| AppError::Engine(format!("model_providers.{provider}.http_headers 必须是内联表")))?;
+            headers.insert(
+                "x-openai-actor-authorization",
+                toml_edit::Value::from(base_url.clone()),
+            );
+        } else if let Some(headers) = selected
+            .get_mut("http_headers")
+            .and_then(Item::as_value_mut)
+            .and_then(toml_edit::Value::as_inline_table_mut)
+        {
+            headers.remove("x-openai-actor-authorization");
+        }
     }
     Ok(())
 }
@@ -864,11 +940,10 @@ pub fn save_basic(
     input: CodexBasicConfigInput,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
-    ensure_stopped(codex_running)?;
     let path = config_path()?;
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
-    write_verified(&path, &document.to_string(), codex_running)?;
+    write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
 
@@ -940,16 +1015,14 @@ pub fn upsert_mcp(
     input: CodexMcpServerInput,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
-    ensure_stopped(codex_running)?;
     let path = config_path()?;
     let mut document = load_document(&path)?;
     apply_mcp(&mut document, input)?;
-    write_verified(&path, &document.to_string(), codex_running)?;
+    write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
 
 pub fn delete_mcp(name: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
-    ensure_stopped(codex_running)?;
     let path = config_path()?;
     let name = checked_id(name, "MCP 名称", false)?;
     let mut document = load_document(&path)?;
@@ -960,18 +1033,17 @@ pub fn delete_mcp(name: &str, codex_running: bool) -> Result<CodexConfigReport, 
     if removed.is_none() {
         return Err(AppError::Engine(format!("找不到 MCP：{name}")));
     }
-    write_verified(&path, &document.to_string(), codex_running)?;
+    write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
 
 pub fn restore_backup(codex_running: bool) -> Result<CodexConfigReport, AppError> {
-    ensure_stopped(codex_running)?;
     let path = config_path()?;
     let backup = atomic_file::backup_path(&path);
     let raw = fs::read_to_string(&backup)
         .map_err(|error| AppError::Internal(format!("读取 config.toml 备份失败：{error}")))?;
     parse_document(&raw)?;
-    write_verified(&path, &raw, codex_running)?;
+    write_verified(&path, &raw)?;
     report_for_path(&path, codex_running)
 }
 
@@ -1011,6 +1083,11 @@ goals = true
 [model_providers.awai]
 base_url = "https://api.awai.cc/v1"
 
+[model_providers.backup]
+name = "Backup"
+base_url = "https://backup.example/v1"
+wire_api = "chat"
+
 [mcp_servers.demo]
 type = "stdio"
 command = "npx"
@@ -1026,6 +1103,9 @@ second-secret"""
         assert_eq!(report.model, "gpt-5");
         assert_eq!(report.provider, "awai");
         assert_eq!(report.base_url, "https://api.awai.cc/v1");
+        assert_eq!(report.providers.len(), 2);
+        assert_eq!(report.providers[0].id, "awai");
+        assert_eq!(report.providers[1].id, "backup");
         assert_eq!(report.personality, "pragmatic");
         assert_eq!(report.approval_policy, "never");
         assert_eq!(report.sandbox_mode, "danger-full-access");
@@ -1043,24 +1123,23 @@ second-secret"""
     fn atomic_save_validates_and_keeps_previous_version() {
         let path = test_path("atomic");
         fs::write(&path, "model = \"old\"\n").unwrap();
-        write_verified(&path, "model = \"new\"\n", false).unwrap();
+        write_verified(&path, "model = \"new\"\n").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "model = \"new\"\n");
         assert_eq!(
             fs::read_to_string(atomic_file::backup_path(&path)).unwrap(),
             "model = \"old\"\n"
         );
-        let error = write_verified(&path, "model = [\n", false).unwrap_err();
+        let error = write_verified(&path, "model = [\n").unwrap_err();
         assert!(error.to_string().contains("TOML"));
         assert_eq!(fs::read_to_string(&path).unwrap(), "model = \"new\"\n");
     }
 
     #[test]
-    fn stopped_guard_refuses_writes_without_touching_disk() {
+    fn running_config_writes_are_atomic_and_verified() {
         let path = test_path("running");
         fs::write(&path, "model = \"old\"\n").unwrap();
-        let error = write_verified(&path, "model = \"new\"\n", true).unwrap_err();
-        assert!(matches!(error, AppError::Busy(_)));
-        assert_eq!(fs::read_to_string(path).unwrap(), "model = \"old\"\n");
+        write_verified(&path, "model = \"new\"\n").unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), "model = \"new\"\n");
     }
 
     #[test]
@@ -1098,6 +1177,7 @@ custom_capability = "keep"
                 sandbox_mode: "danger-full-access".to_string(),
                 disable_response_storage: true,
                 goal_mode: true,
+                image_generation_compatibility: false,
             },
         )
         .unwrap();
@@ -1188,7 +1268,7 @@ API_KEY = "keep-secret"
         )
         .unwrap();
 
-        set_api_key_at(&auth_path, "sk-new-secret", false).unwrap();
+        set_api_key_at(&auth_path, "sk-new-secret").unwrap();
         let written: JsonValue = serde_json::from_slice(&fs::read(&auth_path).unwrap()).unwrap();
         assert_eq!(written["auth_mode"], "chatgpt");
         assert_eq!(written["tokens"]["access_token"], "keep-token");
@@ -1234,7 +1314,7 @@ API_KEY = "keep-secret"
         )
         .unwrap();
 
-        delete_api_key_at(&auth_path, false).unwrap();
+        delete_api_key_at(&auth_path).unwrap();
         let written: JsonValue = serde_json::from_slice(&fs::read(&auth_path).unwrap()).unwrap();
         assert!(written.get("OPENAI_API_KEY").is_none());
         assert_eq!(written["tokens"]["refresh_token"], "keep");
@@ -1255,21 +1335,20 @@ API_KEY = "keep-secret"
         let report = report_for_path(&config_path, false).unwrap();
         assert!(!report.api_key_configured);
         assert!(report.auth_error.is_some());
-        assert!(set_api_key_at(&auth_path, "sk-replacement", false).is_err());
+        assert!(set_api_key_at(&auth_path, "sk-replacement").is_err());
         assert_eq!(fs::read(&auth_path).unwrap(), invalid);
     }
 
     #[test]
-    fn running_guard_refuses_api_key_writes() {
+    fn running_api_key_writes_are_allowed() {
         let config_path = test_path("auth-running");
         let auth_path = auth_path_for_config(&config_path);
         fs::write(&auth_path, r#"{"OPENAI_API_KEY":"old-secret"}"#).unwrap();
 
-        let error = set_api_key_at(&auth_path, "sk-new-secret", true).unwrap_err();
-        assert!(matches!(error, AppError::Busy(_)));
+        set_api_key_at(&auth_path, "sk-new-secret").unwrap();
         assert_eq!(
             fs::read_to_string(&auth_path).unwrap(),
-            r#"{"OPENAI_API_KEY":"old-secret"}"#
+            "{\n  \"OPENAI_API_KEY\": \"sk-new-secret\"\n}\n"
         );
     }
 }

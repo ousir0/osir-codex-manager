@@ -76,6 +76,10 @@ mod imp {
 
     const PROCESS_SYNCHRONIZE: u32 = 0x0010_0000;
     const FORCE_CLOSE_TIMEOUT: Duration = Duration::from_secs(5);
+    // Electron can hand off the window to a replacement process just after
+    // the last observed PID exits. Require a short empty window before the
+    // caller is allowed to replace or remove files under the install root.
+    const PROCESS_QUIET_WINDOW: Duration = Duration::from_millis(750);
     const POLL_INTERVAL: Duration = Duration::from_millis(250);
     const MAX_PROCESS_PATH_UTF16: usize = 32_768;
 
@@ -257,14 +261,14 @@ mod imp {
         }
     }
 
-    fn wait_until_exited(targets: &[TargetProcess], timeout: Duration) -> bool {
+    fn wait_until_quiet(root: &Path, timeout: Duration) -> Result<bool, EngineError> {
         let deadline = Instant::now() + timeout;
         loop {
-            if targets.iter().all(|target| !target.is_running()) {
-                return true;
+            if !target_processes_under_root(root)?.is_empty() {
+                return Ok(false);
             }
             if Instant::now() >= deadline {
-                return false;
+                return Ok(true);
             }
             thread::sleep(POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())));
         }
@@ -274,48 +278,78 @@ mod imp {
         timeout_secs: u64,
         root: &Path,
     ) -> Result<(), EngineError> {
-        let targets = target_processes_under_root(root)?;
-        if targets.is_empty() {
+        if target_processes_under_root(root)?.is_empty()
+            && wait_until_quiet(root, PROCESS_QUIET_WINDOW)?
+        {
             return Ok(());
         }
 
-        request_graceful_close(&targets);
-        if wait_until_exited(&targets, Duration::from_secs(timeout_secs)) {
-            return Ok(());
-        }
-
-        let force_ids: Vec<u32> = targets
-            .iter()
-            .filter(|target| target.is_running())
-            .map(|target| target.pid)
-            .collect();
-        for target in targets.iter().filter(|target| target.is_running()) {
-            if !target.can_terminate {
-                log::warn!(
-                    "managed install process cannot be force-closed without PROCESS_TERMINATE access pid={}",
-                    target.pid
-                );
+        // Do not retain one PID snapshot for the whole shutdown. Electron may
+        // replace its browser process while handling WM_CLOSE; the replacement
+        // is still holding files under the managed install root and must get
+        // the same close request.
+        let graceful_deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        loop {
+            let targets = target_processes_under_root(root)?;
+            if targets.is_empty() {
+                if wait_until_quiet(root, PROCESS_QUIET_WINDOW)? {
+                    return Ok(());
+                }
                 continue;
             }
-            // SAFETY: handle was opened with PROCESS_TERMINATE and is still owned.
-            if unsafe { TerminateProcess(target.handle.raw(), 1) } == 0 {
-                log::warn!(
-                    "force-close managed install process failed pid={} error={}",
-                    target.pid,
-                    std::io::Error::last_os_error()
-                );
+            request_graceful_close(&targets);
+            if Instant::now() >= graceful_deadline {
+                break;
             }
-        }
-
-        if wait_until_exited(&targets, FORCE_CLOSE_TIMEOUT) {
-            log::warn!(
-                "managed install processes required native force-close pids={:?}",
-                force_ids
+            thread::sleep(
+                POLL_INTERVAL.min(graceful_deadline.saturating_duration_since(Instant::now())),
             );
-            return Ok(());
         }
 
-        let remaining: Vec<u32> = targets
+        // Force-close is also dynamic: a replacement process can appear after
+        // the graceful phase's last scan. Keep rescanning until the bounded
+        // force-close budget is exhausted, rather than declaring success for a
+        // stale snapshot.
+        let force_deadline = Instant::now() + FORCE_CLOSE_TIMEOUT;
+        let mut force_ids = Vec::new();
+        loop {
+            let targets = target_processes_under_root(root)?;
+            if targets.is_empty() {
+                if wait_until_quiet(root, PROCESS_QUIET_WINDOW)? {
+                    log::warn!(
+                        "managed install processes required native force-close pids={force_ids:?}"
+                    );
+                    return Ok(());
+                }
+                continue;
+            }
+            for target in targets.iter().filter(|target| target.is_running()) {
+                force_ids.push(target.pid);
+                if !target.can_terminate {
+                    log::warn!(
+                        "managed install process cannot be force-closed without PROCESS_TERMINATE access pid={}",
+                        target.pid
+                    );
+                    continue;
+                }
+                // SAFETY: handle was opened with PROCESS_TERMINATE and is still owned.
+                if unsafe { TerminateProcess(target.handle.raw(), 1) } == 0 {
+                    log::warn!(
+                        "force-close managed install process failed pid={} error={}",
+                        target.pid,
+                        std::io::Error::last_os_error()
+                    );
+                }
+            }
+            if Instant::now() >= force_deadline {
+                break;
+            }
+            thread::sleep(
+                POLL_INTERVAL.min(force_deadline.saturating_duration_since(Instant::now())),
+            );
+        }
+
+        let remaining: Vec<u32> = target_processes_under_root(root)?
             .iter()
             .filter(|target| target.is_running())
             .map(|target| target.pid)
@@ -332,11 +366,36 @@ mod imp {
         use super::*;
 
         const HELPER_ENV: &str = "CODEX_APP_MANAGER_PROCESS_HELPER";
+        const REPLACEMENT_ENV: &str = "CODEX_APP_MANAGER_PROCESS_REPLACEMENT";
+        const HANDOFF_MARKER_ENV: &str = "CODEX_APP_MANAGER_PROCESS_HANDOFF_MARKER";
 
         #[test]
         fn closes_unlisted_helper_process_without_powershell() {
             if std::env::var_os(HELPER_ENV).is_some() {
-                thread::sleep(Duration::from_secs(30));
+                if std::env::var_os(REPLACEMENT_ENV).is_none() {
+                    // Simulate Electron handing off to a replacement process
+                    // after the original PID has been observed by the caller.
+                    let marker = std::env::var_os(HANDOFF_MARKER_ENV)
+                        .expect("handoff marker is set by the parent test");
+                    std::fs::write(marker, b"ready").unwrap();
+                    thread::sleep(Duration::from_millis(100));
+                    let mut replacement = Command::new(std::env::current_exe().unwrap())
+                        .args([
+                            "--exact",
+                            "windows_process::imp::windows_tests::closes_unlisted_helper_process_without_powershell",
+                            "--nocapture",
+                        ])
+                        .env(HELPER_ENV, "1")
+                        .env(REPLACEMENT_ENV, "1")
+                        .spawn()
+                        .unwrap();
+                    // Keep the original process alive while the replacement
+                    // is running so the parent observes a genuine handoff.
+                    thread::sleep(Duration::from_secs(30));
+                    let _ = replacement.kill();
+                } else {
+                    thread::sleep(Duration::from_secs(30));
+                }
                 return;
             }
 
@@ -346,6 +405,7 @@ mod imp {
                 uuid::Uuid::new_v4()
             ));
             std::fs::create_dir_all(&root).unwrap();
+            let handoff_marker = root.join("handoff.ready");
             // The scanner must not depend on the two known entrypoint names:
             // Chromium/Electron helpers can hold payload files open too.
             let helper = root.join("Codex.Helper.exe");
@@ -357,6 +417,7 @@ mod imp {
                     "--nocapture",
                 ])
                 .env(HELPER_ENV, "1")
+                .env(HANDOFF_MARKER_ENV, &handoff_marker)
                 .spawn()
                 .unwrap();
 
@@ -369,14 +430,24 @@ mod imp {
                 thread::sleep(Duration::from_millis(50));
             }
             assert!(codex_processes_running_for_root(&root).unwrap());
+            while !handoff_marker.exists() {
+                thread::sleep(Duration::from_millis(10));
+            }
 
-            let result = close_codex_processes_for_root(0, &root);
-            if result.is_err() {
+            // Leave a graceful window so the helper can hand off to its
+            // replacement while the original PID is still alive.
+            let result = close_codex_processes_for_root(1, &root);
+            // Give a replacement that was launched just after the first scan
+            // time to appear. The close gate must have already handled it.
+            thread::sleep(Duration::from_millis(500));
+            let replacement_left_running = codex_processes_running_for_root(&root).unwrap();
+            if result.is_err() || replacement_left_running {
                 let _ = child.kill();
+                let _ = close_codex_processes_for_root(1, &root);
             }
             result.unwrap();
             assert!(child.wait().unwrap().code().is_some());
-            assert!(!codex_processes_running_for_root(&root).unwrap());
+            assert!(!replacement_left_running);
             let _ = std::fs::remove_dir_all(root);
         }
     }

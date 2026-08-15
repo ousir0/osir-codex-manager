@@ -62,6 +62,14 @@ API_KEY = "secret-value"
     sandboxMode: "danger-full-access",
     disableResponseStorage: true,
     goalMode: true,
+    providers: [
+      {
+        id: "custom",
+        name: "Custom",
+        baseUrl: "https://old.example/v1",
+        wireApi: "responses",
+      },
+    ],
     mcpServers: [
       {
         name: "demo",
@@ -125,7 +133,7 @@ describe("Codex configuration manager", () => {
     renderConfig();
 
     await screen.findByDisplayValue("gpt-5");
-    await user.click(screen.getByRole("button", { name: "使用" }));
+    await user.click(screen.getByRole("button", { name: /AWAI.*推荐/ }));
 
     expect(screen.getByDisplayValue("awai")).toBeInTheDocument();
     expect(screen.getByDisplayValue("https://api.awai.cc/v1")).toBeInTheDocument();
@@ -146,20 +154,78 @@ describe("Codex configuration manager", () => {
     );
   });
 
+  it("lists multiple providers and switches the active draft without deleting the others", async () => {
+    const user = userEvent.setup();
+    api.codexConfigGet.mockResolvedValue(
+      config({
+        providers: [
+          {
+            id: "custom",
+            name: "Custom",
+            baseUrl: "https://old.example/v1",
+            wireApi: "responses",
+          },
+          {
+            id: "backup",
+            name: "Backup",
+            baseUrl: "https://backup.example/v1",
+            wireApi: "chat",
+          },
+        ],
+      }),
+    );
+    renderConfig();
+
+    await screen.findByDisplayValue("gpt-5");
+    expect(screen.getByText("已配置供应商")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Backup.*backup.*https:\/\/backup\.example/ }));
+    expect(screen.getByDisplayValue("backup")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://backup.example/v1")).toBeInTheDocument();
+  });
+
+  it("allows saving while Codex is running and explains that restart is required", async () => {
+    const user = userEvent.setup();
+    api.codexConfigGet.mockResolvedValue(config({ codexRunning: true }));
+    api.codexConfigSaveBasic.mockImplementation(async (input) =>
+      config({ ...input, codexRunning: true }),
+    );
+    renderConfig();
+
+    const model = await screen.findByDisplayValue("gpt-5");
+    expect(screen.getByRole("status")).toHaveTextContent(/修改可以保存/);
+    expect(model).not.toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /保存基础配置/ }));
+
+    await waitFor(() => expect(api.codexConfigSaveBasic).toHaveBeenCalledOnce());
+    expect(screen.getByText("配置已保存；重启 Codex 后生效")).toBeInTheDocument();
+  });
+
+  it("keeps AWAI as the single recommended provider and places providers beside details", async () => {
+    renderConfig();
+    await screen.findByDisplayValue("gpt-5");
+
+    expect(screen.getByRole("button", { name: /AWAI.*推荐/ })).toBeInTheDocument();
+    expect(screen.getByText("推荐供应商")).toBeInTheDocument();
+    expect(screen.getByLabelText("已配置供应商")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前供应商详情")).toBeInTheDocument();
+  });
+
   it("fetches models from the selected provider and keeps the model editable", async () => {
     const user = userEvent.setup();
     renderConfig();
 
     const model = await screen.findByLabelText("模型");
+    expect(model.tagName).toBe("INPUT");
     await user.click(screen.getByRole("button", { name: "获取模型" }));
     await waitFor(() =>
       expect(api.codexConfigFetchModels).toHaveBeenCalledWith("https://old.example/v1"),
     );
     expect(screen.getByText("已获取 2 个模型")).toBeInTheDocument();
 
-    await user.clear(model);
-    await user.type(model, "custom-model");
-    expect(model).toHaveValue("custom-model");
+    const modelSelect = screen.getByRole("combobox", { name: "模型" });
+    expect(modelSelect).toHaveValue("gpt-5");
+    await user.selectOptions(modelSelect, "gpt-5.6-sol");
+    expect(modelSelect).toHaveValue("gpt-5.6-sol");
   });
 
   it("warns before saving the unrestricted no-approval combination", async () => {

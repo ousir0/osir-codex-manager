@@ -28,6 +28,7 @@ const EMPTY_BASIC: CodexBasicConfigInput = {
   sandboxMode: "",
   disableResponseStorage: false,
   goalMode: false,
+  imageGenerationCompatibility: false,
 };
 
 const ZH_COPY = {
@@ -37,18 +38,23 @@ const ZH_COPY = {
   fileMissing: "保存后将创建 config.toml",
   backupReady: "可恢复上一版本",
   invalid: "当前 TOML 有错误，请在高级编辑中修复",
-  running: "Codex 正在运行，请先退出后再保存",
+  running: "Codex 正在运行，修改可以保存；重启 Codex 后生效",
   basic: "基础",
   mcp: "MCP",
   advanced: "高级",
-  awaiUse: "使用",
-  awaiActive: "已填入",
   model: "模型",
   modelPlaceholder: "例如 gpt-5.6-sol",
   fetchModels: "获取模型",
   modelsFetched: "已获取 {count} 个模型",
   provider: "供应商标识",
   providerPlaceholder: "例如 awai",
+  providers: "已配置供应商",
+  providerCount: "{count} 个",
+  newProvider: "新建供应商",
+  providerSelected: "当前",
+  providerDetails: "当前供应商详情",
+  recommended: "推荐",
+  recommendedProvider: "推荐供应商",
   baseUrl: "Base URL",
   credentials: "API 凭据",
   authFile: "凭据文件",
@@ -67,6 +73,8 @@ const ZH_COPY = {
   personality: "Personality",
   goalMode: "Goal Mode",
   disableResponseStorage: "禁用响应存储",
+  imageGenerationCompatibility: "第三方图像生成兼容",
+  imageGenerationCompatibilityHint: "为当前供应商关闭官方认证校验，并添加 Codex 图像输出所需请求头。API Key 仍保存在 auth.json。",
   executionAccess: "执行权限",
   approvalPolicy: "审批策略",
   sandboxMode: "沙箱模式",
@@ -74,6 +82,7 @@ const ZH_COPY = {
   automatic: "跟随 Codex 默认",
   saveBasic: "保存基础配置",
   saved: "配置已保存，并保留了上一版本备份",
+  savedRunning: "配置已保存；重启 Codex 后生效",
   emptyMcp: "尚未配置 MCP 服务器",
   addMcp: "添加 MCP",
   editMcp: "编辑 MCP",
@@ -110,18 +119,23 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   fileMissing: "config.toml will be created on save",
   backupReady: "Previous version can be restored",
   invalid: "The current TOML is invalid. Repair it in Advanced.",
-  running: "Codex is running. Quit it before saving.",
+  running: "Codex is running. Changes can be saved; restart Codex to apply them.",
   basic: "Basic",
   mcp: "MCP",
   advanced: "Advanced",
-  awaiUse: "Use",
-  awaiActive: "Filled",
   model: "Model",
   modelPlaceholder: "For example, gpt-5.6-sol",
   fetchModels: "Fetch models",
   modelsFetched: "Fetched {count} models",
   provider: "Provider key",
   providerPlaceholder: "For example, awai",
+  providers: "Configured providers",
+  providerCount: "{count}",
+  newProvider: "New provider",
+  providerSelected: "Active",
+  providerDetails: "Active provider details",
+  recommended: "Recommended",
+  recommendedProvider: "Recommended provider",
   baseUrl: "Base URL",
   credentials: "API credentials",
   authFile: "Credential file",
@@ -140,6 +154,8 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   personality: "Personality",
   goalMode: "Goal Mode",
   disableResponseStorage: "Disable response storage",
+  imageGenerationCompatibility: "Third-party image generation compatibility",
+  imageGenerationCompatibilityHint: "Disables official auth validation for this provider and adds the request header used by Codex image output. The API Key remains in auth.json.",
   executionAccess: "Execution access",
   approvalPolicy: "Approval policy",
   sandboxMode: "Sandbox mode",
@@ -147,6 +163,7 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   automatic: "Use Codex default",
   saveBasic: "Save basic configuration",
   saved: "Configuration saved with a previous-version backup",
+  savedRunning: "Configuration saved; restart Codex to apply it",
   emptyMcp: "No MCP servers configured",
   addMcp: "Add MCP",
   editMcp: "Edit MCP",
@@ -217,7 +234,8 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const [showSecrets, setShowSecrets] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [models, setModels] = useState<string[]>(["gpt-5.6-sol"]);
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsBaseUrl, setModelsBaseUrl] = useState<string | null>(null);
   const [draft, setDraft] = useState<McpDraft | null>(null);
   const [deleteName, setDeleteName] = useState<string | null>(null);
   const [deleteApiKeyConfirm, setDeleteApiKeyConfirm] = useState(false);
@@ -237,6 +255,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
       sandboxMode: next.sandboxMode,
       disableResponseStorage: next.disableResponseStorage,
       goalMode: next.goalMode,
+      imageGenerationCompatibility: next.imageGenerationCompatibility ?? false,
     });
     setRawDraft(next.raw);
     setDraft(null);
@@ -281,7 +300,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   };
 
   const saveBasic = () =>
-    run("basic", () => managerApi.codexConfigSaveBasic(basic), copy.saved);
+    run("basic", () => managerApi.codexConfigSaveBasic(basic), report?.codexRunning ? copy.savedRunning : copy.saved);
 
   const fetchModels = async () => {
     setBusy("models");
@@ -290,6 +309,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
     try {
       const fetched = await managerApi.codexConfigFetchModels(basic.baseUrl);
       setModels(fetched);
+      setModelsBaseUrl(basic.baseUrl);
       setNotice(copy.modelsFetched.replace("{count}", String(fetched.length)));
     } catch (cause) {
       setError(errorMessage(cause));
@@ -299,13 +319,13 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   };
 
   const saveMcp = (input: CodexMcpServerInput) =>
-    run("mcp", () => managerApi.codexConfigUpsertMcp(input), copy.saved);
+    run("mcp", () => managerApi.codexConfigUpsertMcp(input), report?.codexRunning ? copy.savedRunning : copy.saved);
 
   const saveApiKey = async () => {
     const saved = await run(
       "api-key",
       () => managerApi.codexConfigSetApiKey(apiKey),
-      copy.apiKeySaved,
+      report?.codexRunning ? copy.savedRunning : copy.apiKeySaved,
     );
     if (saved) {
       setApiKey("");
@@ -336,8 +356,22 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   };
 
   const rawDirty = Boolean(report && rawDraft !== report.raw);
-  const locked = Boolean(busy) || Boolean(report?.codexRunning);
-  const awaiFilled = basic.provider === "awai" && basic.baseUrl === "https://api.awai.cc/v1";
+  const locked = Boolean(busy);
+  const saveNotice = report?.codexRunning ? copy.savedRunning : copy.saved;
+  const modelsReady = modelsBaseUrl === basic.baseUrl && models.length > 0;
+  const providerProfiles = useMemo(() => {
+    if (!report) return [];
+    return [
+      {
+        id: "awai",
+        name: "AWAI",
+        baseUrl: "https://api.awai.cc/v1",
+        wireApi: "responses",
+      },
+      ...report.providers.filter((profile) => profile.id !== "awai"),
+    ];
+  }, [report]);
+  const selectedProvider = providerProfiles.find((profile) => profile.id === basic.provider);
   const dangerousCombination =
     basic.approvalPolicy === "never" && basic.sandboxMode === "danger-full-access";
   const shownRaw = showSecrets ? rawDraft : report?.redactedRaw ?? "";
@@ -419,46 +453,103 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
 
         {report && tab === "basic" ? (
           <section className="config-panel" aria-label={copy.basic}>
-            <div className="config-awai">
-              <div className="config-awai-mark">A</div>
-              <div className="config-awai-copy">
-                <strong>AWAI API</strong>
-                <span>api.awai.cc</span>
-              </div>
-              <button
-                className="btn ghost sm"
-                type="button"
-                disabled={locked || awaiFilled}
-                onClick={() =>
-                  setBasic((current) => ({
-                    ...current,
-                    provider: "awai",
-                    baseUrl: "https://api.awai.cc/v1",
-                  }))
-                }
-              >
-                {awaiFilled ? copy.awaiActive : copy.awaiUse}
-              </button>
-            </div>
+            <div className="config-basic-layout">
+              <aside className="config-provider-sidebar" aria-label={copy.providers}>
+                <div className="config-sectionbar">
+                  <span className="config-eyebrow">{copy.providers}</span>
+                  <span className="config-sectioncount">
+                    {copy.providerCount.replace("{count}", String(providerProfiles.length))}
+                  </span>
+                </div>
+                <div className="config-provider-cards">
+                  {providerProfiles.map((profile) => {
+                    const active = basic.provider === profile.id;
+                    const recommended = profile.id === "awai";
+                    return (
+                      <button
+                        className={`config-provider-card${active ? " active" : ""}${recommended ? " recommended" : ""}`}
+                        type="button"
+                        key={profile.id}
+                        disabled={locked}
+                        aria-pressed={active}
+                        aria-label={`${profile.name || profile.id} ${profile.id} ${profile.baseUrl || copy.automatic}${recommended ? ` ${copy.recommendedProvider}` : ""}`}
+                        onClick={() =>
+                          setBasic((current) => ({
+                            ...current,
+                            provider: profile.id,
+                            baseUrl: profile.baseUrl,
+                          }))
+                        }
+                      >
+                        <span className="config-provider-card-copy">
+                          <strong>{profile.name || profile.id}</strong>
+                          <span className="mono">{profile.id}</span>
+                          <small>{profile.baseUrl || copy.automatic}</small>
+                        </span>
+                        <span className="config-provider-card-meta">
+                          {recommended ? (
+                            <span className="config-provider-recommended" title={copy.recommendedProvider}>
+                              <Icon name="star" />
+                              <span>{copy.recommendedProvider}</span>
+                            </span>
+                          ) : null}
+                          {active ? <span className="config-provider-active">{copy.providerSelected}</span> : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    className="config-provider-card new"
+                    type="button"
+                    disabled={locked}
+                    onClick={() =>
+                      setBasic((current) => ({ ...current, provider: "", baseUrl: "" }))
+                    }
+                  >
+                    <Icon name="plus" />
+                    <span>{copy.newProvider}</span>
+                  </button>
+                </div>
+              </aside>
 
-            <div className="config-grid">
+              <section className="config-provider-details" aria-label={copy.providerDetails}>
+                <div className="config-detail-head">
+                  <div className="config-detail-copy">
+                    <span className="config-eyebrow">{copy.providerDetails}</span>
+                    <strong>{selectedProvider?.name || basic.provider || copy.newProvider}</strong>
+                    <span className="config-path" title={basic.baseUrl || undefined}>
+                      {basic.baseUrl || copy.automatic}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="config-grid">
               <div className="config-field">
                 <span>{copy.model}</span>
                 <div className="config-model-control">
-                  <input
-                    className="input mono"
-                    value={basic.model}
-                    disabled={locked}
-                    list="codex-model-options"
-                    aria-label={copy.model}
-                    placeholder={copy.modelPlaceholder}
-                    onChange={(event) => setBasic({ ...basic, model: event.target.value })}
-                  />
-                  <datalist id="codex-model-options">
-                    {models.map((model) => <option key={model} value={model} />)}
-                  </datalist>
+                  {modelsReady ? (
+                    <select
+                      className="input config-select mono"
+                      value={basic.model}
+                      disabled={locked}
+                      aria-label={copy.model}
+                      onChange={(event) => setBasic({ ...basic, model: event.target.value })}
+                    >
+                      {!models.includes(basic.model) ? <option value={basic.model}>{basic.model}（当前）</option> : null}
+                      {models.map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="input mono"
+                      value={basic.model}
+                      disabled={locked}
+                      aria-label={copy.model}
+                      placeholder={copy.modelPlaceholder}
+                      onChange={(event) => setBasic({ ...basic, model: event.target.value })}
+                    />
+                  )}
                   <button
-                    className="btn ghost icon-only"
+                    className="btn ghost config-fetch-models"
                     type="button"
                     title={copy.fetchModels}
                     aria-label={copy.fetchModels}
@@ -466,6 +557,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                     onClick={() => void fetchModels()}
                   >
                     <Icon name={busy === "models" ? "loader" : "refresh"} />
+                    <span>{copy.fetchModels}</span>
                   </button>
                 </div>
               </div>
@@ -475,9 +567,13 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                   className="input mono"
                   value={basic.provider}
                   disabled={locked}
+                  list="codex-provider-options"
                   placeholder={copy.providerPlaceholder}
                   onChange={(event) => setBasic({ ...basic, provider: event.target.value })}
                 />
+                <datalist id="codex-provider-options">
+                  {providerProfiles.map((profile) => <option key={profile.id} value={profile.id} />)}
+                </datalist>
               </label>
               <label className="config-field config-field-wide">
                 <span>{copy.baseUrl}</span>
@@ -530,6 +626,18 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                   disabled={locked}
                   ariaLabel={copy.goalMode}
                   onChange={(goalMode) => setBasic({ ...basic, goalMode })}
+                />
+              </div>
+              <div className="config-toggle-row config-toggle-row-wide">
+                <div>
+                  <span>{copy.imageGenerationCompatibility}</span>
+                  <small>{copy.imageGenerationCompatibilityHint}</small>
+                </div>
+                <Toggle
+                  checked={basic.imageGenerationCompatibility}
+                  disabled={locked || !basic.provider || !basic.baseUrl}
+                  ariaLabel={copy.imageGenerationCompatibility}
+                  onChange={(imageGenerationCompatibility) => setBasic({ ...basic, imageGenerationCompatibility })}
                 />
               </div>
               <div className="config-toggle-row">
@@ -666,6 +774,8 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 </button>
               </div>
             </section>
+              </section>
+            </div>
           </section>
         ) : null}
 
@@ -869,7 +979,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 disabled={locked || !report.backupAvailable}
                 title={!report.backupAvailable ? copy.noBackup : undefined}
                 onClick={() =>
-                  void run("restore", () => managerApi.codexConfigRestoreBackup(), copy.restored)
+                  void run("restore", () => managerApi.codexConfigRestoreBackup(), saveNotice)
                 }
               >
                 <Icon name={busy === "restore" ? "loader" : "refresh"} />
@@ -880,7 +990,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 type="button"
                 disabled={locked || !showSecrets || !rawDirty}
                 onClick={() =>
-                  void run("raw", () => managerApi.codexConfigSaveRaw(rawDraft), copy.saved)
+                  void run("raw", () => managerApi.codexConfigSaveRaw(rawDraft), saveNotice)
                 }
               >
                 <Icon name={busy === "raw" ? "loader" : "check"} />

@@ -2732,40 +2732,151 @@ button.row.danger:hover {
   min-width: 0;
   padding-bottom: 6px;
 }
-.config-awai {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--line));
-  border-radius: var(--r-md);
-  background: color-mix(in oklch, var(--accent) 6%, var(--surface-2));
-}
-.config-awai-mark {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+.config-basic-layout {
   display: grid;
-  place-items: center;
-  border-radius: var(--r-sm);
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 17px;
-  font-weight: 800;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
 }
-.config-awai-copy {
-  flex: 1;
+.config-provider-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.config-provider-details {
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  min-width: 0;
+}
+.config-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.config-detail-copy {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
-.config-awai-copy strong {
-  font-size: var(--fs-sm);
+.config-detail-copy strong {
+  font-size: var(--fs-lg);
+  line-height: 1.25;
 }
-.config-awai-copy span {
+.config-detail-copy .config-path {
   color: var(--text-soft);
+  font-weight: 550;
+}
+.config-provider-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.config-provider-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease),
+    transform 0.12s var(--ease);
+}
+.config-provider-card:hover:not(:disabled),
+.config-provider-card.active {
+  border-color: color-mix(in oklch, var(--accent) 48%, var(--line));
+  background: color-mix(in oklch, var(--accent) 9%, var(--surface-2));
+}
+.config-provider-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.config-provider-card.recommended {
+  border-color: color-mix(in oklch, var(--accent) 34%, var(--line));
+  background: color-mix(in oklch, var(--accent) 5%, var(--surface-2));
+}
+.config-provider-card:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+.config-provider-card-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  padding-right: 34px;
+}
+.config-provider-card-copy strong,
+.config-provider-card-copy span,
+.config-provider-card-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-provider-card-copy strong {
+  font-size: var(--fs-label);
+}
+.config-provider-card-copy span,
+.config-provider-card-copy small {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+.config-provider-card-copy small {
   font-family: var(--mono);
-  font-size: 11.5px;
+}
+.config-provider-active {
+  position: absolute;
+  right: 9px;
+  bottom: 8px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 750;
+}
+.config-provider-card-meta {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.config-provider-recommended {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #f2bd48;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+[data-theme="light"] .config-provider-recommended {
+  color: #a96e00;
+}
+.config-provider-recommended svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.config-provider-card.new {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+.config-provider-card.new svg {
+  width: 15px;
+  height: 15px;
 }
 .config-grid {
   display: grid;
@@ -2782,13 +2893,15 @@ button.row.danger:hover {
 }
 .config-model-control {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 37px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 7px;
 }
-.config-model-control .icon-only {
-  width: 37px;
-  min-width: 37px;
+.config-fetch-models {
+  min-width: 96px;
   height: 37px;
+  padding: 8px 11px;
+  font-size: var(--fs-label);
+  white-space: nowrap;
 }
 .config-switches {
   display: grid;
@@ -3086,6 +3199,17 @@ button.row.danger:hover {
 }
 :root[data-window-mode="expanded"] .config-field-wide {
   grid-column: 1 / -1;
+}
+:root[data-window-mode="expanded"] .config-view > .config-panel {
+  max-width: 1120px;
+}
+:root[data-window-mode="expanded"] .config-basic-layout {
+  grid-template-columns: minmax(230px, 0.32fr) minmax(0, 0.68fr);
+  gap: 22px;
+}
+:root[data-window-mode="expanded"] .config-provider-sidebar {
+  padding-right: 18px;
+  border-right: 1px solid var(--line);
 }
 @media (max-width: 460px) {
   .config-auth-head,

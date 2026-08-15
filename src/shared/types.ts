@@ -695,11 +695,20 @@ export interface CodexConfigReport {
   sandboxMode: string;
   disableResponseStorage: boolean;
   goalMode: boolean;
+  providers: CodexProviderProfile[];
   mcpServers: CodexMcpServer[];
   backupAvailable: boolean;
   apiKeyConfigured: boolean;
   authError: string | null;
   codexRunning: boolean;
+  imageGenerationCompatibility?: boolean;
+}
+
+export interface CodexProviderProfile {
+  id: string;
+  name: string;
+  baseUrl: string;
+  wireApi: string;
 }
 
 export interface CodexConfigValidation {
@@ -717,6 +726,7 @@ export interface CodexBasicConfigInput {
   sandboxMode: string;
   disableResponseStorage: boolean;
   goalMode: boolean;
+  imageGenerationCompatibility: boolean;
 }
 
 export interface CodexMcpServerInput {
