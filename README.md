@@ -14,6 +14,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/qq501987847/codex-app-manager">GitHub 仓库</a> ·
+  <a href="https://gitee.com/qq501987849/codex-app-manager">Gitee 仓库</a> ·
   <a href="https://codexapp.awai.cc">下载镜像</a> ·
   <a href="https://api.awai.cc">AWAI API</a> ·
   <a href="https://github.com/qq501987847/codex-app-manager-skins">AWAI 皮肤库</a> ·
