@@ -290,8 +290,8 @@ export default {
     github: {
       title: "GitHub",
       note: "代码、Issue 与每一次发布记录,都公开在这里。",
-      managerLabel: "Wangnov/Codex-App-Manager",
-      mirrorLabel: "Wangnov/codex-app-mirror",
+      managerLabel: "qq501987847/codex-app-manager",
+      mirrorLabel: "AWAI/codexapp.awai.cc",
     },
     signing: {
       status: "Windows Authenticode 的 SignPath Foundation 申请仍在审核;当前 Windows 安装器未签名。",

@@ -48,7 +48,7 @@ without showing the hidden window.
 ## Repeatable PR matrix
 
 The `macOS packaged smoke` workflow builds an isolated bundle identifier
-(`io.github.wangnov.codexappmanager.smoke`) and never reads release secrets.
+(`cc.awai.codexappmanager.smoke`) and never reads release secrets.
 The harness also creates a private `0700` child of the system temporary
 directory. Rust accepts that data-directory override only when its exact leaf
 matches the sanitized smoke run ID; a missing, partial, symlinked, broad-access,

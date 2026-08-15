@@ -20,7 +20,7 @@ npm run fonts      # Source Han Serif SC + Fraunces 子集化 → public/fonts/*
 npm run images     # assets/raw/*.png → public/img/*.{avif,webp} 多分辨率 + og.jpg
 ```
 
-- 装饰图像由 gpt-image-2-skill(DuckCoding provider)生成;透明素材经
+- 装饰图像由项目维护者生成或取得授权;透明素材经
   `transparent generate` / `transparent extract --method dual` 提取并通过 `--strict` 验收。
 - 修改 `src/locales/*.ts` 或 `index.html` 文案后需重跑 `npm run fonts`
   (子集按实际用字收集,缺字会回退到系统字体)。

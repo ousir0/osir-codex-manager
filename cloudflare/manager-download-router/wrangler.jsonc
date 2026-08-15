@@ -1,8 +1,8 @@
 {
   // Serves the manager's own update artifacts at
-  // https://codexapp.agentsmirror.com/manager/* — global traffic from the
+  // https://codexapp.awai.cc/manager/* — global traffic from the
   // dedicated R2 bucket (bound directly), mainland-China traffic from a
-  // presigned IHEP S3 URL (parallel to the codex-app-mirror download-router,
+  // presigned IHEP S3 URL (parallel to the AWAI current-artifact router,
   // but on the manager's OWN bucket so the two never mix).
   "name": "codex-app-manager-download-router",
   "main": "src/index.js",
@@ -22,7 +22,7 @@
   // Until they exist the worker serves everyone from R2 (CN included).
   "routes": [
     {
-      "pattern": "codexapp.agentsmirror.com/manager/*",
+      "pattern": "codexapp.awai.cc/manager/*",
       "zone_id": "a5bae9b722f3c5fe1a24aaebe7a8e663"
     }
   ]

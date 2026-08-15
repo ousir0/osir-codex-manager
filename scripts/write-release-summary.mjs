@@ -3,8 +3,8 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
 const env = process.env;
 const tag = env.RELEASE_TAG || env.GITHUB_REF_NAME || "";
-const repo = env.GITHUB_REPOSITORY || "Wangnov/Codex-App-Manager";
-const mirrorBase = (env.MIRROR_BASE_URL || "https://codexapp.agentsmirror.com/manager").replace(/\/$/, "");
+const repo = env.GITHUB_REPOSITORY || "qq501987847/codex-app-manager";
+const mirrorBase = (env.MIRROR_BASE_URL || "https://codexapp.awai.cc/manager").replace(/\/$/, "");
 const summaryPath = env.GITHUB_STEP_SUMMARY;
 
 if (!summaryPath) {

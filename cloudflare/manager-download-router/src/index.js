@@ -1,11 +1,11 @@
-// Manager update-artifact router for https://codexapp.agentsmirror.com/manager/*
+// Manager update-artifact router for https://codexapp.awai.cc/manager/*
 //
 // Global  → served directly from the bound R2 bucket (codex-app-manager).
 // Mainland China (request.cf.country in SECONDARY_COUNTRY_CODES) → 302 to a
 //          presigned IHEP S3 URL, when those secrets are configured.
 //
 // The path after /manager/ is the object key (e.g. /manager/latest.json →
-// "latest.json"). Mirrors codex-app-mirror's download-router, but binds R2
+// "latest.json"). Uses the same AWAI routing contract, but binds R2
 // directly (self-contained, no extra public domain) and keys on /manager/.
 
 const PREFIX = "/manager/";
@@ -167,7 +167,7 @@ function withVersion(file, version) {
   return match ? `CodexAppManager_${version}_${match[1]}-setup.exe` : file;
 }
 
-// ── AWS SigV4 presigner (GET/HEAD), identical scheme to codex-app-mirror ─────
+// ── AWS SigV4 presigner (GET/HEAD) ──────────────────────────────────────────
 async function presignS3Url(options) {
   const endpointUrl = new URL(options.endpoint);
   const now = new Date();

@@ -752,7 +752,7 @@ describe("release workflow recovery invariants", () => {
     expect(attestStep).toContain("actions/attest-build-provenance@");
     expect(attestStep).toContain("actions/attest@");
     expect(attestStep).toContain(
-      "https://codexapp.agentsmirror.com/attestations/release-binding/v1",
+      "https://codexapp.awai.cc/attestations/release-binding/v1",
     );
     expect(attestStep).toContain("predicate-path: release-binding.json");
     expect(attestStep).not.toContain("continue-on-error: true");

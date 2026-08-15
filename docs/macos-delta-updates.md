@@ -71,9 +71,9 @@ timestamp), then the outer app (same, plus `src-tauri/entitlements.macos.plist`
 
 ## Mirror coupling
 
-The mirror work that produces the delta enclosures lives in `codex-app-mirror`
-(probe captures deltas → download mirrors `.delta` → build-appcast emits the
-`<sparkle:deltas>` block with mirror URLs + official signatures → sync uploads
-`.delta` before the appcast → prune keep-list protects live `.delta` basenames).
+The mirror work that produces the delta enclosures lives in the AWAI download
+service (capture deltas → mirror `.delta` files → build the `<sparkle:deltas>`
+block with AWAI URLs and official signatures → upload `.delta` before the
+appcast → prune only objects outside the live keep-list).
 Until the mirror serves deltas, CAM simply uses full updates; once it does, no
 client change is required — a delta-capable build just starts using them.

@@ -1,350 +1,142 @@
 <p align="center">
-  <img src="./assets/banner.svg" alt="Codex App Manager — 一键装好官方 Codex,持续最新" width="100%">
+  <img src="./assets/banner.svg" alt="AWAI Codex App Manager" width="100%">
 </p>
 
 <p align="center">
-  <img src="./assets/logo.png" width="200" alt="Codex App Manager logo">
+  <img src="./assets/logo.png" width="160" alt="AWAI Codex App Manager logo">
 </p>
 
-<h1 align="center">Codex App Manager</h1>
+<h1 align="center">AWAI Codex App Manager</h1>
 
 <p align="center">
-  跨平台桌面客户端 —— 一键安装、增量更新、干净卸载官方 Codex 桌面应用,自带国内可达的自更新。<br>
-  A cross-platform desktop client to install, incrementally update, and cleanly uninstall the official Codex desktop app — with built-in, China-reachable self-update.
-</p>
-
-<p align="center">
-  <a href="https://codexapp.agentsmirror.com"><img src="https://img.shields.io/badge/website-codexapp.agentsmirror.com-7c83ff" alt="Official website"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/github/downloads/Wangnov/Codex-App-Manager/total?logo=github&label=GitHub%20downloads&color=2ea44f" alt="GitHub release downloads (mirror downloads not counted)"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/stargazers"><img src="https://img.shields.io/github/stars/Wangnov/Codex-App-Manager?logo=github&label=stars&color=f5c518" alt="GitHub stars"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/github/v/release/Wangnov/Codex-App-Manager?logo=github&label=release" alt="Latest release"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/github/release-date/Wangnov/Codex-App-Manager?label=updated&logo=github" alt="Latest update time"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Wangnov/Codex-App-Manager/ci.yml?branch=main&label=CI&logo=githubactions" alt="CI workflow"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/badge/self--update-R2%20%2B%20IHEP%20S3-2ea44f" alt="Self-update via R2 + IHEP S3"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/badge/macOS-arm64%20%7C%20x64-000000?logo=apple" alt="macOS arm64 and x64"></a>
-  <a href="https://github.com/Wangnov/Codex-App-Manager/releases/latest"><img src="https://img.shields.io/badge/Windows-x64-0078d4?logo=windows" alt="Windows x64"></a>
-  <a href="https://v2.tauri.app/"><img src="https://img.shields.io/badge/Tauri-v2-24C8DB?logo=tauri&logoColor=white" alt="Tauri v2"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License"></a>
+  一个面向 Windows 和 macOS 的 Codex 桌面应用管理器：安装、更新、配置、卸载和主题管理。<br>
+  An AWAI desktop manager for installing, updating, configuring, uninstalling, and theming Codex.
 </p>
 
 <p align="center">
-  <a href="https://codexapp.agentsmirror.com"><b>官网 · Official Website</b></a> · <a href="docs/code-signing-policy.md">代码签名政策 · Code signing policy</a> · <a href="docs/privacy.md">隐私政策 · Privacy policy</a> · <a href="#readme-cn">中文</a> · <a href="#readme-en">English</a>
+  <a href="https://codexapp.awai.cc">下载镜像</a> ·
+  <a href="https://api.awai.cc">AWAI API</a> ·
+  <a href="https://github.com/qq501987847/codex-app-manager-skins">AWAI 皮肤库</a> ·
+  <a href="docs/code-signing-policy.md">代码签名政策</a>
 </p>
 
----
+## 项目定位
 
-<!-- ⬇ 赞助商 SPONSOR(最顶部,中英双语共享) -->
-<div align="center">
-<table>
-  <tr>
-    <td align="center" width="170">
-      <a href="https://duckcoding.ai"><img src="./assets/sponsor-duckcoding.jpg" alt="DuckCoding" width="108"></a>
-    </td>
-    <td width="560">
-      <b>本项目由 <a href="https://duckcoding.ai">DuckCoding</a> 赞助支持</b><br>
-      为 Claude Code / Codex / Gemini CLI 提供按量计费的 API 中转服务。<br>
-      <b>Sponsored by <a href="https://duckcoding.ai">DuckCoding</a></b> — a pay-as-you-go API relay for Claude Code / Codex / Gemini CLI.
-    </td>
-  </tr>
-</table>
-</div>
+AWAI Codex App Manager 只负责本地管理体验，不修改 Codex 应用包，也不绕过
+OpenAI 或 Microsoft 的安装策略。Codex 官方安装包通过 `codexapp.awai.cc` 分发，
+下载后仍由 Windows MSIX 签名、macOS Developer ID / Sparkle 签名和 SHA-256 校验
+共同确认完整性。
 
----
+Manager 自身使用 Tauri updater 更新。Manager 更新包、Codex 安装包和 AWAI API
+配置是三条独立链路，不会把 API Key 写入皮肤包或上传到镜像服务器。
 
-<a id="readme-cn"></a>
+## 功能
 
-# 中文
+- 检测已安装的 Codex，规划安装、更新和卸载操作。
+- Windows 优先使用官方 MSIX，必要时提供经过校验的便携回退。
+- macOS 使用官方 Sparkle appcast 和增量更新包，失败时回退完整包。
+- 左侧 `CODEX 配置管理`：API Key、Base URL、模型、人格、Goal Mode、响应存储和安全策略。
+- AWAI 默认入口：`https://api.awai.cc`。用户可以在配置页改为其他兼容 OpenAI 的地址。
+- AWAI 皮肤库：在线安装、导入、试穿、应用和恢复，不修改 Codex 安装文件。
+- 浏览器开发预览：不启动 Tauri 时也可以先验证布局和状态。
 
-`Codex App Manager` 是官方 OpenAI Codex 桌面应用的**安装 / 更新 / 卸载管理器**:在本机检测已安装的 Codex,规划并执行安装、增量更新与干净卸载,并提供一键启动。它消费上游 [codex-app-mirror](https://github.com/Wangnov/codex-app-mirror) 的镜像与 Sparkle 更新源来管理 Codex 本体(payload),同时**自身**也通过一套国内可达的镜像完成自更新。Manager 不构建、不修改 Codex,只做"安装与更新"这层客户端体验。
+## 下载
 
-## 能力一览
+最新镜像地址：<https://codexapp.awai.cc>
 
-| 能力 | 说明 |
-|---|---|
-| 🧭 **一站式管理** | 检测本机 Codex 安装状态,规划安装 / 更新 / 卸载,一键启动 Codex |
-| 🔄 **增量更新(macOS)** | 消费 codex-app-mirror 的 Sparkle appcast,只下载版本间的 **delta 差量**,EdDSA 签名字节级校验,失败自动回滚 |
-| 🪟 **Windows** | MSIX / 便携版安装与暂存更新,安装后做 MSIX 健康检查并对被裁剪的系统给出提示 |
-| 🆕 **应用自更新** | Manager 自身经 **R2(全球)+ IHEP S3(国内)** 镜像更新,GitHub 兜底;更新签名签的是字节,镜像逐字节复制后依旧有效 |
-| 🌏 **国内可达** | 自更新与 payload 下载共用同一条镜像短链,按地域自动选路(国内 IHEP / 海外 R2),对用户透明 |
-| 🎨 **温润材质 UI** | OKLCH 配色、材质质感、明暗双主题精雕,GSAP 编排的入场与转场动效 |
-| 🌐 **11 种语言** | 跟随系统语言自动选择,含阿拉伯语 RTL |
-| 🍎 **签名状态透明** | macOS 走 Developer ID 签名 + Apple 公证;Windows 安装器当前无 Authenticode 代码签名,自更新包有 Tauri updater 签名 |
+| 平台 | 文件 |
+| --- | --- |
+| Windows x64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe` |
+| Windows ARM64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe` |
+| macOS Apple Silicon | `https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg` |
+| macOS Intel | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg` |
 
-## 下载与安装
+Windows 当前版本可能仍显示 SmartScreen 未知发布者，因为 Authenticode 证书尚未
+接入。请先核对同一版本的 `SHA256SUMS`，不要把 Tauri updater 签名误认为 Windows
+发行者签名。测试安装包和预发布版本应标记为测试，不应冒充稳定版本。
 
-### macOS —— Homebrew(推荐)
+## AWAI 镜像
+
+`codexapp.awai.cc` 是本项目的下载服务器，当前提供：
+
+- `/latest/manifest`、`/latest/checksums`：Windows 当前版本元数据。
+- `/latest/win-x64`、`/latest/win-arm64`：官方 MSIX 字节镜像。
+- `/latest/appcast.xml`、`/latest/appcast-x64.xml`：macOS Sparkle feed。
+- `/manager/latest.json` 和 `/manager/*`：Manager 自更新元数据和安装包。
+
+服务器使用 Caddy 自动申请和续期 HTTPS 证书。同步脚本从上游获取当前官方包，
+在发布前保留原始签名和校验值：
 
 ```bash
-brew install --cask wangnov/tap/codex-app-manager
+bash deploy/download-server/bootstrap.sh codexapp.awai.cc
+bash deploy/download-server/sync-current-mirror.sh
 ```
 
-### 直接下载
+当前历史版本选择器仍通过受保护的上游 Release API 获取历史清单；后续兼容 API
+完成后会迁移到 AWAI 镜像，安装校验规则不会放宽。
 
-到 [最新 GitHub Release](https://github.com/Wangnov/Codex-App-Manager/releases/latest) 下载(全球),或用 **agentsmirror 镜像直链**(国内免梯子,Cloudflare Worker 按地域选路:中国大陆走 IHEP、海外走 R2):
-
-| 平台 | 文件 | 镜像直链 |
-|---|---|---|
-| Apple Silicon Mac | `CodexAppManager_aarch64.dmg` | [⤓ 镜像下载](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_aarch64.dmg) |
-| Intel Mac | `CodexAppManager_x86_64.dmg` | [⤓ 镜像下载](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | `CodexAppManager_x64-setup.exe` | [⤓ 镜像下载](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe) |
-| Windows ARM64 | `CodexAppManager_arm64-setup.exe` | [⤓ 镜像下载](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_arm64-setup.exe) |
-
-macOS 版本经 **Developer ID 签名 + Apple 公证**,首次打开不会被 Gatekeeper 拦截。Windows 安装器(`CodexAppManager_x64-setup.exe` / `CodexAppManager_arm64-setup.exe`)当前**没有 Authenticode 代码签名**,首次运行可能出现 SmartScreen 提示;应用内自更新使用的 Tauri updater 签名只校验下载字节,不代表 Windows 发行者信任。SignPath Foundation 申请已提交、仍在审核,当前下载不得被描述为已获批或已签名。详情见 [代码签名政策](docs/code-signing-policy.md)与 [Windows signing and verification](docs/windows-signing.md)。
-
-下载后建议用同一 GitHub Release 的 `SHA256SUMS` 核验文件。Windows 可用 PowerShell,macOS 可用 `shasum`:
-
-```powershell
-Get-FileHash .\CodexAppManager_x64-setup.exe -Algorithm SHA256
-# 或 ARM64:
-Get-FileHash .\CodexAppManager_arm64-setup.exe -Algorithm SHA256
-```
-
-```bash
-shasum -a 256 CodexAppManager_aarch64.dmg
-```
-
-镜像直链恒指向**最新版**——`/manager/latest/` 由 Cloudflare Worker 自动解析到当前发布,无需随版本更新;装好后 Manager 还会通过**应用内自更新**保持最新(见下)。
-
-> 安装 Manager 后,真正的 Codex 桌面应用由 Manager 负责安装与更新——你不需要单独去下载 Codex 本体。
-
-## 应用自更新(Manager 自身)
-
-Manager 内置 Tauri updater,按以下顺序检查自身新版本:
-
-1. `https://codexapp.agentsmirror.com/manager/latest.json` —— 自有镜像,**全球走 R2、中国大陆自动分流到 IHEP S3**
-2. `https://github.com/Wangnov/Codex-App-Manager/releases/latest/download/latest.json` —— GitHub 兜底
-
-`latest.json` 里的签名签的是**安装包字节**而非 URL,镜像只是逐字节复制并改写下载地址,所以签名始终有效。每次正式发版,CI 会自动把产物与改写后的 `latest.json` 同步到两套镜像(安装包置于 `…/manager/<版本>/…` 的版本化路径,长缓存安全;`latest.json` 在固定根路径短缓存),因此**无需依赖 GitHub 也能自更新**——这对国内网络尤其重要。
-
-## 管理与更新 Codex 本体
-
-Manager 通过上游镜像管理 Codex 桌面应用本体:
-
-- **macOS**:读取镜像的 Sparkle appcast(arm64 / x64),对照本机已装版本规划更新,优先下载 delta 差量包,校验 Sparkle 签名后**原地替换**,失败回滚;无匹配 delta 时回退完整包。
-- **Windows**:从镜像获取 MSIX / 便携版并暂存更新,支持自定义安装目录,安装后做健康检查。
-
-## Codex 主题皮肤(素材化 UI)
-
-Manager 内置 [awesome-codex-skins](https://github.com/Wangnov/awesome-codex-skins)(`.codexskin` 标准、工具链与画廊)的官方运行时:
-
-<p align="center">
-  <a href="https://github.com/Wangnov/awesome-codex-skins"><img src="https://raw.githubusercontent.com/Wangnov/awesome-codex-skins/main/skins/guts-terminal/previews/home.webp" width="49%" alt="TPC GUTS 指挥终端"><img src="https://raw.githubusercontent.com/Wangnov/awesome-codex-skins/main/skins/rei-eva00/previews/home.webp" width="49%" alt="NERV 零号机 绫波丽"></a>
-</p>
-
-- **在线皮肤库**:主题页直连 [skins.agentsmirror.com](https://skins.agentsmirror.com/index.json),一键安装(下载后 sha256 校验);
-- **试穿**:对运行中的 Codex 秒级热切换,不落盘、随时还原;**应用**:持久生效,含 Codex 原生 accent/字体配置;**还原**:一键回到原生外观;
-- **导入**:`.codexskin` 文件选择或直接拖入主题页;
-- 皮肤经 CDP 注入,**不修改任何应用文件、签名完好**;每张预览都是质量门下的真机截图。想自己做一款?生产线(Claude Code / Codex 通用的 Agent Skill)就在 [awesome-codex-skins](https://github.com/Wangnov/awesome-codex-skins)。
-
-## 工作原理
-
-### 检测 → 规划 → 执行
-
-应用先在本机探测 Codex 的安装状态与平台能力,生成安装 / 更新 / 卸载计划,确认后再执行破坏性操作(更新前做版本与签名校验,规避 TOCTOU)。
-
-### 双后端镜像 + 按地域分流
-
-自更新与 payload 下载共用 `codexapp.agentsmirror.com` 这条短链,由 Cloudflare Worker 路由:全球从 R2 直供,中国大陆按 `CF-IPCountry` 分流到 IHEP S3 的预签名地址——同一条链接,自动选最优节点。
-
-### 发布流水线
-
-打 `v*` tag 触发 `release.yml`:四平台构建(瞬时下载失败自动重试)→ macOS inside-out Developer ID 签名 + 公证 + 重打 updater 包 → Windows updater 产物签名 → 发布 GitHub Release → 自动同步到 R2 + IHEP 镜像。
-
-### 生态:codex-app-mirror
-
-Manager 是 [codex-app-mirror](https://github.com/Wangnov/codex-app-mirror) 的下游客户端。镜像负责把官方 Codex 安装包原样、可校验、国内可达地分发,并提供 Sparkle 增量更新源;Manager 负责把这些能力变成本地的安装与更新体验。两者职责清晰、各自窄而稳。
-
-## 技术栈与本地开发
-
-- **前端**:React 19 · TypeScript · Vite · GSAP
-- **外壳**:Tauri v2(无边框弹层窗口)
-- **后端**:Rust 命令层 + 应用服务 / 端口 / 平台适配;`codex-mac-engine`(Sparkle)与 `codex-win-engine`(MSIX/便携)两个独立 crate
+## 本地开发
 
 ```bash
 npm install
-npm run tauri:dev      # 本地开发
-npm run check          # 类型检查
-npm run tauri:build    # 本地构建(未签名)
+npm run check
+npm test
+npm run tauri:dev
 ```
 
-## 边界
-
-- 不修改、不重打包 Codex 安装包
-- 不绕过 OpenAI / Microsoft 的授权或本机安装策略
-- 不伪造或重算 Sparkle 签名(只字节级复制官方签名)
-- 不替代 OpenAI、Microsoft Store 的官方分发渠道
-
-## 政策与隐私
-
-- [代码签名政策](docs/code-signing-policy.md):SignPath Foundation 申请状态、项目角色、逐次人工审批、可签工件边界与未来的 trusted-build 验证要求。
-- [隐私政策](docs/privacy.md):Manager 更新检查、下载源/代理网络行为、官网本地存储、本地诊断与第三方连接元数据。
-
-## 致谢
-
-- **[LINUX DO](https://linux.do/)** 社区 —— 安装体验、更新链路、问题反馈的讨论都汇聚于此。
-- **中国科学院高能物理研究所(IHEP)** —— 提供国内 S3 镜像存储,让中国大陆的自更新与下载低延迟直达。
-
-## Star History
-
-<p align="center">
-  <a href="https://star-history.com/#Wangnov/Codex-App-Manager&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wangnov/Codex-App-Manager&type=Date&theme=dark" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wangnov/Codex-App-Manager&type=Date" width="75%" />
-    </picture>
-  </a>
-</p>
-
-## 许可
-
-[MIT](./LICENSE)。本项目与 OpenAI、Microsoft 无隶属或背书关系。
-
----
-
-<a id="readme-en"></a>
-
-# English
-
-`Codex App Manager` is an **install / update / uninstall manager** for the official OpenAI Codex desktop app: it detects the locally installed Codex, plans and performs install, incremental update, and clean uninstall, and offers one-click launch. It consumes the upstream [codex-app-mirror](https://github.com/Wangnov/codex-app-mirror) (mirror + Sparkle update feed) to manage the Codex payload, and **also self-updates** through its own China-reachable mirror. The Manager does not build or modify Codex — it owns only the client-side "install & update" experience.
-
-## At a glance
-
-| Capability | Detail |
-|---|---|
-| 🧭 **One-stop management** | Detects the local Codex install, plans install / update / uninstall, launches Codex in one click |
-| 🔄 **Incremental update (macOS)** | Consumes codex-app-mirror's Sparkle appcast, downloads only the **delta** between versions, verifies EdDSA signatures byte-for-byte, rolls back on failure |
-| 🪟 **Windows** | MSIX / portable install and staged updates; MSIX health check after install, with a warning on stripped systems |
-| 🆕 **Self-update** | The Manager updates itself via **R2 (global) + IHEP S3 (China)**, with GitHub fallback; signatures sign the bytes, so a byte-identical mirror stays valid |
-| 🌏 **Reachable in China** | Self-update and payload downloads share one mirror link, auto-routed by region (IHEP in China, R2 elsewhere) — transparent to users |
-| 🎨 **Warm material UI** | OKLCH palette, material depth, polished dark + light themes, GSAP-orchestrated entrances and transitions |
-| 🌐 **11 languages** | Auto-selected from the system locale, including Arabic RTL |
-| 🍎 **Transparent signing status** | macOS Developer ID signing + Apple notarization; the Windows installer is not Authenticode-signed yet, while self-update artifacts carry the Tauri updater signature |
-
-## Download & install
-
-### macOS — Homebrew (recommended)
+构建 Windows NSIS 安装器：
 
 ```bash
-brew install --cask wangnov/tap/codex-app-manager
+npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
 ```
 
-### Direct download
+本地构建默认未配置 Authenticode。正式发布前还需要配置 Tauri updater 私钥、
+macOS Developer ID / 公证，以及 Windows 代码签名服务（如果不接受未签名发布）。
 
-Grab your platform's file from the [latest GitHub Release](https://github.com/Wangnov/Codex-App-Manager/releases/latest) (global), or use the **agentsmirror mirror** (no VPN needed in China; a Cloudflare Worker routes by region — IHEP for mainland China, R2 elsewhere):
+## 皮肤
 
-| Platform | File | Mirror link |
-|---|---|---|
-| Apple Silicon Mac | `CodexAppManager_aarch64.dmg` | [⤓ mirror](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_aarch64.dmg) |
-| Intel Mac | `CodexAppManager_x86_64.dmg` | [⤓ mirror](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | `CodexAppManager_x64-setup.exe` | [⤓ mirror](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe) |
-| Windows ARM64 | `CodexAppManager_arm64-setup.exe` | [⤓ mirror](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_arm64-setup.exe) |
+AWAI 皮肤库位于：
 
-The macOS builds are **Developer ID signed + Apple notarized**, so Gatekeeper won't block first launch. The Windows installers (`CodexAppManager_x64-setup.exe` / `CodexAppManager_arm64-setup.exe`) are **not Authenticode-signed** yet, so SmartScreen may warn on first run; the Tauri updater signature used for in-app updates verifies bytes only and is not Windows publisher trust. The SignPath Foundation application is pending, so current downloads must not be described as approved or signed by SignPath. See the [code signing policy](docs/code-signing-policy.md) and [Windows signing and verification](docs/windows-signing.md).
+- GitHub: <https://github.com/qq501987847/codex-app-manager-skins>
+- Gitee: <https://gitee.com/qq501987849/codex-app-manager-skins>
 
-After downloading, compare the file with `SHA256SUMS` from the same GitHub Release. Use PowerShell on Windows or `shasum` on macOS:
+皮肤只负责视觉样式和背景图片，不包含品牌推广、API 地址、API Key 或模型配置。
+背景图必须是自己生成、自己拍摄或明确获得授权的素材。MIT 只覆盖软件代码，
+不会自动覆盖第三方人物图或其他艺术素材。
 
-```powershell
-Get-FileHash .\CodexAppManager_x64-setup.exe -Algorithm SHA256
-# Or ARM64:
-Get-FileHash .\CodexAppManager_arm64-setup.exe -Algorithm SHA256
-```
+## 安全边界
 
-```bash
-shasum -a 256 CodexAppManager_aarch64.dmg
-```
+- Manager 不会修改 Codex 安装包内部文件。
+- 下载包先做 HTTPS、SHA-256、原生平台签名和 package identity 校验，再进入安装阶段。
+- 破坏性操作需要用户确认，并保留失败后的可诊断状态。
+- 诊断信息可能包含版本、系统、更新源 host 和错误文本；分享前请自行脱敏。
+- API Key 只写入用户本机配置文件，不进入皮肤库、Git 仓库或发布日志。
 
-The mirror links always resolve to the **latest** release — `/manager/latest/` is auto-resolved to the current version by the Cloudflare Worker, with no per-release edits; after install, the Manager also keeps **itself** up to date via in-app self-update (below).
+## 许可证和上游说明
 
-> Once the Manager is installed, it installs and updates the actual Codex desktop app for you — you don't need to download Codex separately.
+本项目使用 MIT License。根据 MIT 条款，允许修改、再发布和商用，但必须保留
+`LICENSE` 中的原版权声明和许可文本。本仓库是在开源上游基础上的 AWAI fork，
+新增的 AWAI UI、配置管理、镜像部署和皮肤集成由本项目维护。
 
-## Self-update (the Manager itself)
+本项目与 OpenAI、Microsoft 没有隶属或背书关系。官方 Codex 包仍由其原始签名
+和平台安装机制负责信任验证。
 
-The Manager ships the Tauri updater and checks for new versions of itself in this order:
+## English
 
-1. `https://codexapp.agentsmirror.com/manager/latest.json` — its own mirror: **R2 globally, auto-failover to IHEP S3 for mainland China**
-2. `https://github.com/Wangnov/Codex-App-Manager/releases/latest/download/latest.json` — GitHub fallback
+AWAI Codex App Manager is a Tauri desktop manager for the official Codex app. It
+owns the local install, update, configuration, uninstall, and skin workflow; it
+does not rebuild or patch the Codex payload. Current payload and Manager update
+artifacts are served from `https://codexapp.awai.cc`, while AWAI's OpenAI-compatible
+API gateway is `https://api.awai.cc`.
 
-The signatures in `latest.json` sign the **installer bytes**, not the URL, so the mirror only re-hosts the bytes verbatim and rewrites the download URL — the signature stays valid. On every stable release, CI syncs the artifacts and a rewritten `latest.json` to both mirrors (installers under a versioned path `…/manager/<version>/…` so long caching is safe; `latest.json` at the fixed root with a short cache), so **self-update never depends on GitHub** — which matters most inside China.
+The project is an MIT-licensed fork. The original copyright and license text in
+`LICENSE` are retained. New AWAI code and deployment configuration are maintained
+in this repository. Windows installers are currently unsigned by Authenticode;
+verify `SHA256SUMS` and the native package signatures before installation.
 
-## Managing & updating Codex itself
+See the Chinese sections above and these policies:
 
-The Manager manages the Codex desktop payload through the upstream mirror:
-
-- **macOS**: reads the mirror's Sparkle appcast (arm64 / x64), plans against the installed build, prefers the delta enclosure, verifies the Sparkle signature, then **swaps in place** with rollback on failure; falls back to the full archive when no delta matches.
-- **Windows**: fetches the MSIX / portable build from the mirror and stages the update, with a configurable install directory and a post-install health check.
-
-## Codex skins (asset-based UI themes)
-
-The Manager is the official runtime for [awesome-codex-skins](https://github.com/Wangnov/awesome-codex-skins) — the `.codexskin` standard, toolchain & gallery:
-
-<p align="center">
-  <a href="https://github.com/Wangnov/awesome-codex-skins"><img src="https://raw.githubusercontent.com/Wangnov/awesome-codex-skins/main/skins/guts-terminal/previews/home.webp" width="49%" alt="TPC GUTS Command Terminal"><img src="https://raw.githubusercontent.com/Wangnov/awesome-codex-skins/main/skins/rei-eva00/previews/home.webp" width="49%" alt="NERV EVA-00 Rei"></a>
-</p>
-
-- **Online skin library**: the theme page pulls [skins.agentsmirror.com](https://skins.agentsmirror.com/index.json) for one-click installs (sha256-verified downloads);
-- **Try-on**: live hot-swap on a running Codex, nothing persisted, instantly revertible; **Apply**: persistent, incl. native accent/font config; **Restore**: one click back to stock;
-- **Import**: pick or drag a `.codexskin` straight onto the theme page;
-- Skins inject over CDP — **no app file is modified, the signature stays intact**; every preview is a real screenshot taken under an automated quality gate. Want to make your own? The production line (an agent skill for both Claude Code and Codex) lives in [awesome-codex-skins](https://github.com/Wangnov/awesome-codex-skins).
-
-## How it works
-
-### Detect → plan → execute
-
-The app first probes the local Codex install state and platform capabilities, produces an install / update / uninstall plan, and only then performs destructive operations (with a version + signature check before the swap to guard against TOCTOU).
-
-### Two-tier mirror + geo routing
-
-Self-update and payload downloads share the `codexapp.agentsmirror.com` link, fronted by a Cloudflare Worker: global traffic is served straight from R2, mainland-China traffic is routed by `CF-IPCountry` to a presigned IHEP S3 URL — one link, auto-routed to the fastest node.
-
-### Release pipeline
-
-Pushing a `v*` tag triggers `release.yml`: four-platform build (with automatic retry on transient download hiccups) → macOS inside-out Developer ID signing + notarization + updater repackage → Windows updater artifact signing → publish the GitHub Release → auto-sync to the R2 + IHEP mirror.
-
-### Ecosystem: codex-app-mirror
-
-The Manager is the downstream client of [codex-app-mirror](https://github.com/Wangnov/codex-app-mirror). The mirror distributes the official Codex installers verbatim, verifiably, and reachably inside China, and serves the Sparkle incremental-update feed; the Manager turns those into a local install-and-update experience. Both stay narrow and stable, with clear responsibilities.
-
-## Tech stack & local development
-
-- **Frontend**: React 19 · TypeScript · Vite · GSAP
-- **Shell**: Tauri v2 (frameless popover window)
-- **Backend**: Rust command layer with app services / ports / platform adapters; two standalone crates `codex-mac-engine` (Sparkle) and `codex-win-engine` (MSIX/portable)
-
-```bash
-npm install
-npm run tauri:dev      # local development
-npm run check          # type-check
-npm run tauri:build    # local (unsigned) build
-```
-
-## Non-goals
-
-- Does not modify or repackage Codex installers
-- Does not bypass OpenAI / Microsoft authorization or local install policies
-- Does not forge or recompute Sparkle signatures (official signatures are copied verbatim)
-- Is not a replacement for official OpenAI / Microsoft Store distribution
-
-## Policy and privacy
-
-- [Code signing policy](docs/code-signing-policy.md): SignPath Foundation application status, project roles, per-request human approval, artifact scope, and future trusted-build verification requirements.
-- [Privacy policy](docs/privacy.md): Manager update checks, download-source and proxy behavior, website local storage, local diagnostics, and third-party connection metadata.
-
-## Acknowledgements
-
-- **[LINUX DO](https://linux.do/)** community — the home for feedback on install experience, update links, and bug reports.
-- **Institute of High Energy Physics, Chinese Academy of Sciences (IHEP)** — provides the S3 mirror storage that keeps self-update and downloads fast and reachable inside mainland China.
-
-## Star History
-
-<p align="center">
-  <a href="https://star-history.com/#Wangnov/Codex-App-Manager&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Wangnov/Codex-App-Manager&type=Date&theme=dark" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Wangnov/Codex-App-Manager&type=Date" width="75%" />
-    </picture>
-  </a>
-</p>
-
-## License
-
-[MIT](./LICENSE). Not affiliated with or endorsed by OpenAI or Microsoft.
+- [Code signing policy](docs/code-signing-policy.md)
+- [Privacy policy](docs/privacy.md)
+- [Release guide](docs/release.md)
+- [Manifest contract](docs/manifest-contract.md)

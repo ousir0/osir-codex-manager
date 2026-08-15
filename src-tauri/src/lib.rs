@@ -1097,7 +1097,7 @@ mod tests {
             "https://tauri.localhost/",
             "tauri://localhost:1420/",
             "tauri://user@localhost/",
-            "https://github.com/Wangnov/Codex-App-Manager",
+            "https://github.com/qq501987847/codex-app-manager",
             "javascript:alert(1)",
             "data:text/html,boom",
             "file:///tmp/unsafe.html",

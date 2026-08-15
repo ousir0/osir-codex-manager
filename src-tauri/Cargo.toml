@@ -7,11 +7,11 @@ name = "codex-app-manager"
 # defensively to pin `cargo run` to the app should another src/bin/* be added.
 default-run = "codex-app-manager"
 version = "0.5.2"
-description = "A cross-platform manager for installing and updating mirrored official Codex desktop app packages."
-authors = ["Wangnov"]
+description = "AWAI's cross-platform manager for installing, updating, configuring, and theming the official Codex desktop app."
+authors = ["AWAI"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/Wangnov/Codex-App-Manager"
+repository = "https://github.com/qq501987847/codex-app-manager"
 
 [lib]
 name = "codex_app_manager_lib"

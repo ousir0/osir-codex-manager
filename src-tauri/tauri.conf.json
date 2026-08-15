@@ -3,7 +3,7 @@
   "productName": "Codex App Manager",
   "mainBinaryName": "codex-app-manager",
   "version": "0.5.2",
-  "identifier": "io.github.wangnov.codexappmanager",
+  "identifier": "cc.awai.codexappmanager",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -42,9 +42,9 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
-    "copyright": "Copyright (c) 2026 Wangnov",
-    "shortDescription": "Codex App mirror install and update manager.",
-    "longDescription": "A manager app for installing and updating mirrored official Codex desktop app packages.",
+    "copyright": "Copyright (c) 2026 AWAI",
+    "shortDescription": "AWAI Codex install, update, and configuration manager.",
+    "longDescription": "AWAI's manager for installing, updating, configuring, and theming the official Codex desktop app.",
     "targets": ["nsis", "dmg", "app"],
     "resources": ["resources/*"],
     "windows": {
@@ -89,7 +89,7 @@
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIxQThDQzg4QjlFNjE5QTEKUldTaEdlYTVpTXlvSWNQYVRHMjRNQmtLQ25HdE1aV2FoY0hLSldsZHpHM3NMYkJHMk8zVDR0WDEK",
       "endpoints": [
         "https://codexapp.awai.cc/manager/latest.json",
-        "https://github.com/Wangnov/Codex-App-Manager/releases/latest/download/latest.json"
+        "https://github.com/qq501987847/codex-app-manager/releases/latest/download/latest.json"
       ]
     }
   }

@@ -9,7 +9,7 @@ import { formatDiagnostics } from "../diagnostics";
 import { Sheet } from "../Sheet";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? "0.0.0";
-const REPO_URL = "https://github.com/Wangnov/Codex-App-Manager";
+const REPO_URL = "https://github.com/qq501987847/codex-app-manager";
 const AWAI_URL = "https://api.awai.cc";
 
 export function About({ onBack }: { onBack: () => void }) {

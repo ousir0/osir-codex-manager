@@ -304,7 +304,7 @@ launch_app() {
 
 [[ -d "$APP" ]] || fail "bundle" "app bundle not found: $APP"
 BUNDLE_ID=$(plist "$APP" CFBundleIdentifier)
-[[ "$BUNDLE_ID" == "io.github.wangnov.codexappmanager.smoke" ]] ||
+[[ "$BUNDLE_ID" == "cc.awai.codexappmanager.smoke" ]] ||
   fail "bundle" "refusing to smoke non-isolated bundle id: $BUNDLE_ID"
 PRODUCT_NAME=$(plist "$APP" CFBundleName)
 [[ "$PRODUCT_NAME" == "Codex App Manager" ]] ||

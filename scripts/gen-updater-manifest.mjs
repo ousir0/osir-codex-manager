@@ -16,7 +16,7 @@ if (!tag || !dir) {
   process.exit(2);
 }
 const version = tag.replace(/^v/, "");
-const REPO = "Wangnov/Codex-App-Manager";
+const REPO = "qq501987847/codex-app-manager";
 const downloadUrl = (file) =>
   `https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(file)}`;
 

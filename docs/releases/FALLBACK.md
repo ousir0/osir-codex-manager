@@ -1,33 +1,34 @@
-<p align="center">
-  <a href="https://codexapp.agentsmirror.com">
-    <img src="https://raw.githubusercontent.com/Wangnov/Codex-App-Manager/main/assets/banner.svg" alt="Codex App Manager" width="100%">
-  </a>
-</p>
+# AWAI Codex App Manager
 
-## 📦 安装与升级 · Install & Upgrade
+本版本没有单独的 release note，以下是安全的通用安装说明。版本、平台和签名状态以
+GitHub Release Assets 与 `SHA256SUMS` 为准。
 
-**已经安装?** 打开应用即可收到本次更新——macOS 只下载版本间的增量,校验失败自动回滚。
-**Already installed?** The app offers this update in-app — macOS pulls only the delta, with automatic rollback.
+## 下载
 
-| 平台 · Platform | 下载 · Download(国内直连 · China-reachable) |
+最新 Manager 工件位于 [codexapp.awai.cc](https://codexapp.awai.cc)：
+
+| 平台 | 下载 |
 | --- | --- |
-| macOS · Apple Silicon | [CodexAppManager_aarch64.dmg](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_aarch64.dmg) |
-| macOS · Intel | [CodexAppManager_x86_64.dmg](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows · x64 | [CodexAppManager_x64-setup.exe](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_x64-setup.exe) |
-| Windows · ARM64 | [CodexAppManager_arm64-setup.exe](https://codexapp.agentsmirror.com/manager/latest/CodexAppManager_arm64-setup.exe) |
+| Windows x64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe` |
+| Windows ARM64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe` |
+| macOS Apple Silicon | `https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg` |
+| macOS Intel | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg` |
 
-**Windows 签名状态:** `CodexAppManager_x64-setup.exe` / `CodexAppManager_arm64-setup.exe` 当前没有 Authenticode 代码签名,首次运行可能出现 SmartScreen 提示;`.sig` / `latest.json` 的 Tauri updater 签名只校验更新字节,不代表 Windows 发行者身份。SignPath Foundation 申请仍在审核。参见 [代码签名政策](https://github.com/Wangnov/Codex-App-Manager/blob/main/docs/code-signing-policy.md)与 [Windows signing and verification](https://github.com/Wangnov/Codex-App-Manager/blob/main/docs/windows-signing.md)。
-**Windows signing status:** `CodexAppManager_x64-setup.exe` / `CodexAppManager_arm64-setup.exe` are not Authenticode-signed, so SmartScreen may warn on first run. The Tauri updater signature in `.sig` / `latest.json` verifies update bytes only and is not Windows publisher identity. The SignPath Foundation application is pending. See the [code signing policy](https://github.com/Wangnov/Codex-App-Manager/blob/main/docs/code-signing-policy.md) and [Windows signing and verification](https://github.com/Wangnov/Codex-App-Manager/blob/main/docs/windows-signing.md).
+镜像直链始终指向最新版本；需要精确历史版本时请使用该版本的 GitHub Release Assets。
 
-**隐私 · Privacy:** [隐私政策 · Privacy policy](https://github.com/Wangnov/Codex-App-Manager/blob/main/docs/privacy.md)
+## 安装前核验
 
-**核验下载:** 本页 Assets 带有 `SHA256SUMS`;Windows 用 `Get-FileHash .\CodexAppManager_x64-setup.exe -Algorithm SHA256` 或替换为 ARM64 文件名,macOS 用 `shasum -a 256 CodexAppManager_aarch64.dmg`,再与 `SHA256SUMS` 比对。
-**Verify downloads:** This release includes `SHA256SUMS` in Assets; on Windows run `Get-FileHash .\CodexAppManager_x64-setup.exe -Algorithm SHA256` or swap in the ARM64 filename, and on macOS run `shasum -a 256 CodexAppManager_aarch64.dmg`, then compare with `SHA256SUMS`.
+下载同一版本的 `SHA256SUMS` 并核对：
 
-```bash
-# macOS · Homebrew
-brew install --cask wangnov/tap/codex-app-manager
+```powershell
+Get-FileHash .\CodexAppManager_x64-setup.exe -Algorithm SHA256
 ```
 
-> 镜像直链恒指向**最新**版本;如需本页对应的历史版本,请使用下方 Assets。`.app.tar.gz` / `.sig` / `latest.json` 是自动更新器的工件,手动安装请选 `.dmg` / `.exe`。
-> Mirror permalinks always resolve to the **latest** release — for this exact version use the assets below. `.app.tar.gz` / `.sig` / `latest.json` belong to the auto-updater; pick the `.dmg` / `.exe` for manual installs.
+macOS 使用 `shasum -a 256 <file>`。Windows 当前预览安装器可能没有 Authenticode，
+SmartScreen 警告并不表示 Tauri updater 签名失效；请先看
+[`windows-signing.md`](../windows-signing.md)。
+
+Manager 安装后负责后续 Codex 检查、配置和皮肤操作。API 配置默认使用
+`https://api.awai.cc/v1`，API Key 只保存在本机。
+
+隐私政策：[`privacy.md`](../privacy.md)。许可证：[`LICENSE`](../../LICENSE)。

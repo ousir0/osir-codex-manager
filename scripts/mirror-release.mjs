@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..");
-const DEFAULT_MIRROR_BASE = "https://codexapp.agentsmirror.com/manager";
+const DEFAULT_MIRROR_BASE = "https://codexapp.awai.cc/manager";
 const LATEST_KEY = "latest.json";
 const SUMMARY_SCHEMA_VERSION = 1;
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");

@@ -76,8 +76,8 @@ permissions:
   contents: read
 
 env:
-  AUTHORIZED_RELEASE_ACTOR_LOGIN: Wangnov
-  AUTHORIZED_RELEASE_ACTOR_ID: "48670012"
+  AUTHORIZED_RELEASE_ACTOR_LOGIN: qq501987847
+  AUTHORIZED_RELEASE_ACTOR_ID: "57623923"
   RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.target_tag }}
   RELEASE_SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
   TRUSTED_RELEASE_INVOCATION: ${{ github.event_name == 'workflow_run' && 'tag-signal' || 'manual-recovery' }}
@@ -1024,7 +1024,7 @@ jobs:
           subject-path: |
             dist/*
             latest.json
-          predicate-type: https://codexapp.agentsmirror.com/attestations/release-binding/v1
+          predicate-type: https://codexapp.awai.cc/attestations/release-binding/v1
           predicate-path: release-binding.json
 
       # Verify the just-created bundle before any draft upload. The standard
@@ -1049,7 +1049,7 @@ jobs:
             --signer-digest "$TRUSTED_WORKFLOW_SHA" \
             --source-ref "refs/heads/$DEFAULT_BRANCH" \
             --source-digest "$TRUSTED_WORKFLOW_SOURCE_SHA" \
-            --predicate-type "https://codexapp.agentsmirror.com/attestations/release-binding/v1" \
+            --predicate-type "https://codexapp.awai.cc/attestations/release-binding/v1" \
             --deny-self-hosted-runners \
             --format json > "$verification"
           node scripts/release-binding.mjs attestation "$verification" release-binding.json
@@ -1072,7 +1072,7 @@ jobs:
         run: |
           set -euo pipefail
           signer_workflow="$GITHUB_REPOSITORY/.github/workflows/release.yml"
-          predicate_type="https://codexapp.agentsmirror.com/attestations/release-binding/v1"
+          predicate_type="https://codexapp.awai.cc/attestations/release-binding/v1"
           gh release verify "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --format json > "$RUNNER_TEMP/immutable-release-attestation.json"

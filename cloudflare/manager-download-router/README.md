@@ -1,10 +1,10 @@
 # manager-download-router
 
 Cloudflare Worker that serves the **manager's own** self-update artifacts at
-`https://codexapp.agentsmirror.com/manager/*`, so the in-app updater doesn't
+`https://codexapp.awai.cc/manager/*`, so the in-app updater doesn't
 depend on GitHub (slow/blocked for the mainland-China audience).
 
-It mirrors the `codex-app-mirror` download-router's dual-backend design, but on
+It uses the AWAI download-router dual-backend design, but on
 the manager's **own** bucket so the two never mix:
 
 - **Global** → streamed directly from the bound R2 bucket `codex-app-manager`.
@@ -39,7 +39,7 @@ self-consistent; v0.1.9+ use the versioned layout.)
 
 ## Already provisioned (done)
 - R2 bucket `codex-app-manager` created.
-- This worker deployed with route `codexapp.agentsmirror.com/manager/*` + the R2
+- This worker deployed with route `codexapp.awai.cc/manager/*` + the R2
   binding.
 - v0.1.8 seeded (latest.json + installers) — the endpoint is live.
 

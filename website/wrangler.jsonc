@@ -1,8 +1,8 @@
 {
   // The official website, served as static assets at the root of
-  // https://codexapp.agentsmirror.com/. Path routing on the zone:
+  // https://codexapp.awai.cc/. Path routing on the zone:
   //   /manager/* -> codex-app-manager-download-router (this repo, cloudflare/)
-  //   /latest/*  -> codex-app-mirror download-router (mirror repo)
+  //   /latest/*  -> AWAI current-artifact routes
   //   /*         -> this worker (longest-match precedence keeps the two above)
   "name": "codex-app-manager-website",
   "compatibility_date": "2026-06-04",
@@ -13,7 +13,7 @@
   },
   "routes": [
     {
-      "pattern": "codexapp.agentsmirror.com/*",
+      "pattern": "codexapp.awai.cc/*",
       "zone_id": "a5bae9b722f3c5fe1a24aaebe7a8e663"
     }
   ]

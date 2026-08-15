@@ -8,15 +8,15 @@ const latestManifest = JSON.stringify({
   platforms: {
     "darwin-aarch64": {
       signature: "mac-sig",
-      url: "https://codexapp.agentsmirror.com/manager/0.1.18/CodexAppManager_aarch64.app.tar.gz",
+      url: "https://codexapp.awai.cc/manager/0.1.18/CodexAppManager_aarch64.app.tar.gz",
     },
     "windows-x86_64": {
       signature: "win-sig",
-      url: "https://codexapp.agentsmirror.com/manager/0.1.18/CodexAppManager_0.1.18_x64-setup.exe",
+      url: "https://codexapp.awai.cc/manager/0.1.18/CodexAppManager_0.1.18_x64-setup.exe",
     },
     "windows-aarch64": {
       signature: "win-arm64-sig",
-      url: "https://codexapp.agentsmirror.com/manager/0.1.18/CodexAppManager_0.1.18_arm64-setup.exe",
+      url: "https://codexapp.awai.cc/manager/0.1.18/CodexAppManager_0.1.18_arm64-setup.exe",
     },
   },
 });
@@ -45,7 +45,7 @@ function bucket(entries, calls = []) {
 }
 
 function request(path, init = {}, cf) {
-  const req = new Request(`https://codexapp.agentsmirror.com${path}`, init);
+    const req = new Request(`https://codexapp.awai.cc${path}`, init);
   if (cf) {
     Object.defineProperty(req, "cf", { value: cf });
   }

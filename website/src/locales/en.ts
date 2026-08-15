@@ -286,8 +286,8 @@ export default {
     github: {
       title: "On GitHub",
       note: "Source, issues, and the full pipeline — audit away.",
-      managerLabel: "Wangnov/Codex-App-Manager",
-      mirrorLabel: "Wangnov/codex-app-mirror",
+      managerLabel: "qq501987847/codex-app-manager",
+      mirrorLabel: "AWAI/codexapp.awai.cc",
     },
     signing: {
       status: "The SignPath Foundation application for Windows Authenticode is still under review; the current Windows installers are unsigned.",
