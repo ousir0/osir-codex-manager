@@ -3,6 +3,7 @@ dist/
 target/
 src-tauri/target/
 src-tauri/gen/schemas/
+__pycache__/
 .devserver/
 
 .DS_Store

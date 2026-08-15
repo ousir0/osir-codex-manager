@@ -60,9 +60,9 @@ const ZH_COPY = {
   authFile: "凭据文件",
   apiKey: "API Key",
   imageApiKey: "生图 API Key",
-  imageApiKeyPlaceholder: "输入当前供应商的生图 API Key",
-  imageApiKeyHint: "单独写入当前 provider 的 experimental_bearer_token，不会写入 auth.json。",
-  saveImageApiKey: "保存生图 API Key",
+  imageApiKeyPlaceholder: "输入独立图片 API Key",
+  imageApiKeyHint: "保存到 ~/.codex/imagegen-relay.json，并自动安装 imagegen-relay 技能；不会写入 config.toml。",
+  saveImageApiKey: "保存并安装技能",
   deleteImageApiKey: "删除生图 API Key",
   apiKeyPlaceholder: "输入新的 API Key",
   apiKeyConfigured: "已配置",
@@ -79,7 +79,7 @@ const ZH_COPY = {
   goalMode: "Goal Mode",
   disableResponseStorage: "禁用响应存储",
   imageGenerationCompatibility: "第三方中转生图兼容模式",
-  imageGenerationCompatibilityHint: "为当前供应商关闭官方认证校验并添加 Codex 生图请求头。需要另行配置生图 API Key，修改后请重启 Codex。",
+  imageGenerationCompatibilityHint: "开启后使用独立图片 API 技能；聊天继续使用普通 API Key。修改后重启 Codex。",
   executionAccess: "执行权限",
   approvalPolicy: "审批策略",
   sandboxMode: "沙箱模式",
@@ -146,9 +146,9 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   authFile: "Credential file",
   apiKey: "API Key",
   imageApiKey: "Image generation API Key",
-  imageApiKeyPlaceholder: "Enter the image API Key for this provider",
-  imageApiKeyHint: "Stored as this provider's experimental_bearer_token, separately from auth.json.",
-  saveImageApiKey: "Save image API Key",
+  imageApiKeyPlaceholder: "Enter the independent image API Key",
+  imageApiKeyHint: "Saved to ~/.codex/imagegen-relay.json and installs the imagegen-relay skill; config.toml is untouched.",
+  saveImageApiKey: "Save and install skill",
   deleteImageApiKey: "Delete image API Key",
   apiKeyPlaceholder: "Enter a new API Key",
   apiKeyConfigured: "Configured",
@@ -165,7 +165,7 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   goalMode: "Goal Mode",
   disableResponseStorage: "Disable response storage",
   imageGenerationCompatibility: "Third-party relay image mode",
-  imageGenerationCompatibilityHint: "Disables official auth validation and adds the Codex image request header. Configure the image API Key separately, then restart Codex.",
+  imageGenerationCompatibilityHint: "When enabled, image requests use the independent image API skill while chat keeps the regular API Key. Restart Codex afterward.",
   executionAccess: "Execution access",
   approvalPolicy: "Approval policy",
   sandboxMode: "Sandbox mode",
@@ -655,7 +655,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 </div>
                 <Toggle
                   checked={basic.imageGenerationCompatibility}
-                  disabled={locked || !basic.provider || !basic.baseUrl}
+                  disabled={locked || !basic.provider || !basic.baseUrl || !report.imageGenerationApiKeyConfigured}
                   ariaLabel={copy.imageGenerationCompatibility}
                   onChange={(imageGenerationCompatibility) => setBasic({ ...basic, imageGenerationCompatibility })}
                 />
@@ -799,7 +799,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 <div className="config-auth-copy">
                   <span className="config-eyebrow">{copy.imageApiKey}</span>
                   <strong>{basic.provider || copy.newProvider}</strong>
-                  <span className="config-path">experimental_bearer_token</span>
+                  <span className="config-path">~/.codex/imagegen-relay.json</span>
                 </div>
                 <span className={`config-auth-status${report.imageGenerationApiKeyConfigured ? " configured" : ""}`}>
                   <Icon name={report.imageGenerationApiKeyConfigured ? "check" : "alert"} />

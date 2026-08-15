@@ -367,11 +367,23 @@ fn provider_profiles(document: &DocumentMut) -> Vec<CodexProviderProfile> {
     result
 }
 
-fn image_generation_compatibility(document: &DocumentMut, provider: &str, base_url: &str) -> bool {
+fn image_generation_compatibility(document: &DocumentMut) -> bool {
+    let native_enabled = document
+        .get("features")
+        .and_then(Item::as_table)
+        .and_then(|features| features.get("image_generation"))
+        .and_then(Item::as_bool);
+    if let Some(native_enabled) = native_enabled {
+        return !native_enabled;
+    }
+
+    // Read the marker emitted by older manager versions so upgrading does not
+    // silently switch a user's selected image path back to the native tool.
+    let provider = string_at(document.as_table(), "model_provider");
     let Some(table) = document
         .get("model_providers")
         .and_then(Item::as_table)
-        .and_then(|providers| providers.get(provider))
+        .and_then(|providers| providers.get(&provider))
         .and_then(Item::as_table)
     else {
         return false;
@@ -386,18 +398,27 @@ fn image_generation_compatibility(document: &DocumentMut, provider: &str, base_u
         .and_then(|value| value.as_inline_table())
         .and_then(|headers| headers.get("x-openai-actor-authorization"))
         .and_then(|value| value.as_str());
-    !requires_auth && actor == Some(base_url)
+    !requires_auth && actor.is_some()
 }
 
-fn image_generation_api_key_configured(document: &DocumentMut, provider: &str) -> bool {
-    document
-        .get("model_providers")
-        .and_then(Item::as_table)
-        .and_then(|providers| providers.get(provider))
-        .and_then(Item::as_table)
-        .and_then(|table| table.get("experimental_bearer_token"))
-        .and_then(Item::as_str)
-        .is_some_and(|token| !token.trim().is_empty())
+fn image_generation_key_path(config_path: &Path) -> PathBuf {
+    config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("imagegen-relay.json")
+}
+
+fn separate_image_generation_api_key_configured(config_path: &Path) -> bool {
+    let path = image_generation_key_path(config_path);
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<JsonMap<String, JsonValue>>(&raw).ok())
+        .and_then(|map| {
+            map.get("api_key")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned)
+        })
+        .is_some_and(|key| !key.trim().is_empty())
 }
 
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
@@ -437,10 +458,8 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 .and_then(Item::as_table)
                 .map(|table| string_at(table, "base_url"))
                 .unwrap_or_default();
-            let image_compatibility =
-                image_generation_compatibility(&document, &provider, &base_url);
-            let image_api_key_configured =
-                image_generation_api_key_configured(&document, &provider);
+            let image_compatibility = image_generation_compatibility(&document);
+            let image_api_key_configured = separate_image_generation_api_key_configured(path);
             (
                 None,
                 string_at(document.as_table(), "model"),
@@ -511,7 +530,8 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
 }
 
 pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
-    report_for_path(&config_path()?, codex_running)
+    let path = config_path()?;
+    report_for_path(&path, codex_running)
 }
 
 pub fn validate(raw: &str) -> CodexConfigValidation {
@@ -630,54 +650,37 @@ pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError
     report_for_path(&config_path, codex_running)
 }
 
-fn set_image_generation_api_key_in_document(
-    document: &mut DocumentMut,
-    api_key: &str,
-) -> Result<(), AppError> {
-    let api_key = checked_value(api_key, "生图 API Key")?;
-    if api_key.is_empty() || api_key.chars().any(char::is_control) {
-        return Err(AppError::Engine("生图 API Key 不能为空".to_string()));
-    }
-    let provider = string_at(document.as_table(), "model_provider");
-    if provider.is_empty() {
-        return Err(AppError::Engine("请先选择供应商".to_string()));
-    }
-    let providers = document
-        .get_mut("model_providers")
-        .and_then(Item::as_table_mut)
-        .ok_or_else(|| AppError::Engine("尚未配置 model_providers".to_string()))?;
-    let selected = providers
-        .get_mut(&provider)
-        .and_then(Item::as_table_mut)
-        .ok_or_else(|| AppError::Engine(format!("未找到供应商 {provider}")))?;
-    selected["experimental_bearer_token"] = value(api_key);
-    Ok(())
-}
-
 pub fn set_image_generation_api_key(
     api_key: &str,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
+    let api_key = checked_value(api_key, "生图 API Key")?;
+    if api_key.is_empty() || api_key.chars().any(char::is_control) {
+        return Err(AppError::Engine("生图 API Key 不能为空".to_string()));
+    }
     let path = config_path()?;
-    let mut document = load_document(&path)?;
-    set_image_generation_api_key_in_document(&mut document, api_key)?;
-    write_verified(&path, &document.to_string())?;
+    let base_url = report_for_path(&path, codex_running)?.base_url;
+    if base_url.trim().is_empty() {
+        return Err(AppError::Engine("请先配置生图 API Base URL".to_string()));
+    }
+    let key_path = image_generation_key_path(&path);
+    if let Some(parent) = key_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| AppError::Internal(format!("创建 Codex 配置目录失败：{error}")))?;
+    }
+    let payload = serde_json::json!({ "base_url": base_url, "api_key": api_key });
+    write_verified_json(&key_path, &payload.to_string())?;
+    install_image_generation_skill(&path)?;
     report_for_path(&path, codex_running)
 }
 
 pub fn delete_image_generation_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
-    let mut document = load_document(&path)?;
-    let provider = string_at(document.as_table(), "model_provider");
-    if let Some(selected) = document
-        .get_mut("model_providers")
-        .and_then(Item::as_table_mut)
-        .and_then(|providers| providers.get_mut(&provider))
-        .and_then(Item::as_table_mut)
-    {
-        selected.remove("experimental_bearer_token");
+    let key_path = image_generation_key_path(&path);
+    if key_path.exists() {
+        fs::remove_file(&key_path)
+            .map_err(|error| AppError::Internal(format!("删除独立生图 API Key 失败：{error}")))?;
     }
-    write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
 
@@ -847,6 +850,62 @@ fn write_verified(path: &Path, raw: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+fn write_verified_json(path: &Path, raw: &str) -> Result<(), AppError> {
+    serde_json::from_str::<JsonValue>(raw)
+        .map_err(|error| AppError::Internal(format!("独立生图配置无效：{error}")))?;
+    atomic_file::write_atomic(path, raw.as_bytes())
+        .map_err(|error| AppError::Internal(format!("保存独立生图配置失败：{error}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|error| {
+            AppError::Internal(format!("收紧独立生图配置文件权限失败：{error}"))
+        })?;
+    }
+    Ok(())
+}
+
+fn sync_image_generation_base_url(config_path: &Path, base_url: &str) -> Result<(), AppError> {
+    let key_path = image_generation_key_path(config_path);
+    let Ok(raw) = fs::read_to_string(&key_path) else {
+        return Ok(());
+    };
+    let Ok(mut payload) = serde_json::from_str::<JsonMap<String, JsonValue>>(&raw) else {
+        return Ok(());
+    };
+    if payload
+        .get("api_key")
+        .and_then(JsonValue::as_str)
+        .map_or(true, |key| key.trim().is_empty())
+    {
+        return Ok(());
+    }
+    payload.insert(
+        "base_url".to_string(),
+        JsonValue::String(base_url.to_string()),
+    );
+    let rendered = serde_json::to_string(&payload)
+        .map_err(|error| AppError::Internal(format!("序列化独立生图配置失败：{error}")))?;
+    write_verified_json(&key_path, &rendered)
+}
+
+fn install_image_generation_skill(config_path: &Path) -> Result<(), AppError> {
+    let codex_home = config_path
+        .parent()
+        .ok_or_else(|| AppError::Internal("无法定位 Codex 配置目录".to_string()))?;
+    let skill_dir = codex_home.join("skills").join("imagegen-relay");
+    let scripts_dir = skill_dir.join("scripts");
+    fs::create_dir_all(&scripts_dir)
+        .map_err(|error| AppError::Internal(format!("创建生图技能目录失败：{error}")))?;
+    let skill = include_str!("../../resources/skills/imagegen-relay/SKILL.md");
+    let script = include_str!("../../resources/skills/imagegen-relay/scripts/imagegen_relay.py");
+    atomic_file::write_atomic(&skill_dir.join("SKILL.md"), skill.as_bytes())
+        .map_err(|error| AppError::Internal(format!("安装生图技能说明失败：{error}")))?;
+    atomic_file::write_atomic(&scripts_dir.join("imagegen_relay.py"), script.as_bytes())
+        .map_err(|error| AppError::Internal(format!("安装生图技能脚本失败：{error}")))?;
+    Ok(())
+}
+
 pub fn save_raw(raw: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
     write_verified(&path, raw)?;
@@ -946,6 +1005,9 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         .as_table_mut()
         .ok_or_else(|| AppError::Engine("features 必须是 TOML 表".to_string()))?;
     features["goals"] = value(input.goal_mode);
+    // Relay mode routes image requests through the separately installed skill;
+    // disable the native image extension so the two paths cannot compete.
+    features["image_generation"] = value(!input.image_generation_compatibility);
 
     let provider_table_exists = document
         .get("model_providers")
@@ -980,25 +1042,10 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         } else {
             selected["base_url"] = value(&base_url);
         }
-        selected["requires_openai_auth"] = value(!input.image_generation_compatibility);
-        if input.image_generation_compatibility {
-            let headers = selected
-                .entry("http_headers")
-                .or_insert_with(|| {
-                    Item::Value(toml_edit::Value::InlineTable(toml_edit::InlineTable::new()))
-                })
-                .as_value_mut()
-                .and_then(toml_edit::Value::as_inline_table_mut)
-                .ok_or_else(|| {
-                    AppError::Engine(format!(
-                        "model_providers.{provider}.http_headers 必须是内联表"
-                    ))
-                })?;
-            headers.insert(
-                "x-openai-actor-authorization",
-                toml_edit::Value::from(base_url.clone()),
-            );
-        } else if let Some(headers) = selected
+        // The relay skill authenticates independently. Keep the main provider
+        // on the normal chat auth path and remove legacy relay-only markers.
+        selected["requires_openai_auth"] = value(true);
+        if let Some(headers) = selected
             .get_mut("http_headers")
             .and_then(Item::as_value_mut)
             .and_then(toml_edit::Value::as_inline_table_mut)
@@ -1017,6 +1064,15 @@ pub fn save_basic(
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
     write_verified(&path, &document.to_string())?;
+    let provider = string_at(document.as_table(), "model_provider");
+    let base_url = document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(&provider))
+        .and_then(Item::as_table)
+        .map(|table| string_at(table, "base_url"))
+        .unwrap_or_default();
+    sync_image_generation_base_url(&path, &base_url)?;
     report_for_path(&path, codex_running)
 }
 
@@ -1265,6 +1321,82 @@ custom_capability = "keep"
         assert!(rendered.contains("sandbox_mode = \"danger-full-access\""));
         assert!(rendered.contains("disable_response_storage = true"));
         assert!(rendered.contains("goals = true"));
+    }
+
+    #[test]
+    fn relay_mode_disables_only_native_image_generation() {
+        let mut document = r#"model_provider = "awai"
+
+[model_providers.awai]
+base_url = "https://api.awai.cc/v1"
+requires_openai_auth = true
+"#
+        .parse::<DocumentMut>()
+        .unwrap();
+        let input = CodexBasicConfigInput {
+            model: "gpt-5.6-sol".to_string(),
+            provider: "awai".to_string(),
+            base_url: "https://api.awai.cc/v1".to_string(),
+            reasoning_effort: String::new(),
+            personality: String::new(),
+            approval_policy: String::new(),
+            sandbox_mode: String::new(),
+            disable_response_storage: false,
+            goal_mode: false,
+            image_generation_compatibility: true,
+        };
+        apply_basic(&mut document, input.clone()).unwrap();
+        assert!(image_generation_compatibility(&document));
+        assert_eq!(
+            document["features"]["image_generation"].as_bool(),
+            Some(false)
+        );
+        let provider = document["model_providers"]["awai"].as_table().unwrap();
+        assert_eq!(provider["requires_openai_auth"].as_bool(), Some(true));
+        assert!(provider.get("http_headers").is_none());
+
+        apply_basic(
+            &mut document,
+            CodexBasicConfigInput {
+                image_generation_compatibility: false,
+                ..input
+            },
+        )
+        .unwrap();
+        assert!(!image_generation_compatibility(&document));
+        assert_eq!(
+            document["features"]["image_generation"].as_bool(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn image_key_sync_updates_base_url_and_protects_permissions() {
+        let config_path = test_path("image-key-sync");
+        let key_path = image_generation_key_path(&config_path);
+        fs::write(
+            &key_path,
+            r#"{"base_url":"https://old.example/v1","api_key":"secret"}"#,
+        )
+        .unwrap();
+
+        sync_image_generation_base_url(&config_path, "https://new.example/v1").unwrap();
+        let payload: JsonValue = serde_json::from_slice(&fs::read(&key_path).unwrap()).unwrap();
+        assert_eq!(payload["base_url"], "https://new.example/v1");
+        assert_eq!(payload["api_key"], "secret");
+        assert_eq!(
+            separate_image_generation_api_key_configured(&config_path),
+            true
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&key_path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
     }
 
     #[test]

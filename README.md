@@ -68,7 +68,7 @@ Manager 不修改 Codex 应用包，不绕过 OpenAI 或 Microsoft 的授权与�
 | 🧭 **一站式管理** | 检测本机 Codex，生成安装 / 更新 / 卸载计划，确认后执行并展示结果 |
 | 🪟 **Windows 双路径** | 优先安装官方 MSIX；环境不满足时回退到经过校验的便携安装 |
 | 🍎 **macOS 增量更新** | 读取 Sparkle appcast，优先使用 delta；EdDSA 或替换失败时回退完整包 |
-| ⚙️ **CODEX 配置管理** | API Key、Base URL、模型获取、Goal Mode、响应存储、人格和安全策略 |
+| ⚙️ **CODEX 配置管理** | Base URL、模型、MCP、普通 API Key 与独立生图 API Key 分开管理 |
 | 🎨 **AWAI 皮肤库** | 导入、预览、试穿、应用和恢复 `.codexskin`，不改写 Codex 安装文件 |
 | 🔄 **Manager 自更新** | Tauri updater 读取 AWAI `latest.json`，签名校验通过后由用户确认安装 |
 | 🌐 **浏览器开发预览** | 不启动 Tauri 也能先验证界面、状态和配置流程 |
@@ -124,6 +124,13 @@ Manager 先检查 `https://codexapp.awai.cc/manager/latest.json`，再按配置�
 - 默认 Provider 为 `awai`，Base URL 为 `https://api.awai.cc/v1`；也可以改为其他兼容 API。
 - 默认模型为 `gpt-5.6-sol`，使用“获取模型”从当前 Base URL 的 `/models` 读取列表。
 - API Key 只显示“已配置/未配置”，写入本机凭据文件，不进入皮肤包、日志或 Git。
+- **独立生图技能**：开启第三方中转生图模式后，管理器把生图 Key 单独保存到
+  `~/.codex/imagegen-relay.json`，并默认安装 `imagegen-relay` 技能；聊天仍使用 `auth.json`。
+  管理器不会把第二把 Key 写入 `experimental_bearer_token`。
+- **第三方中转生图兼容模式**：开启后只关闭 Codex 内置的 `image_generation` 扩展，
+  并由独立技能调用图片 API；主 provider 的聊天鉴权保持不变。修改后需要彻底重启 Codex。
+- 官方内置 `image_gen` 当前仍使用主 provider，因此独立 Key 由 `imagegen-relay` 技能直接调用
+  图片 API；关闭该模式即可恢复官方内置生图工具。
 - 支持 `goal_mode`、`disable_response_storage`、`personality`、`approval_policy` 和
   `sandbox_mode` 等字段，并在写入后重新解析验证。
 - `approval_policy = "never"` 或 `sandbox_mode = "danger-full-access"` 会显示风险提示；
@@ -142,6 +149,22 @@ Manager 先检查 `https://codexapp.awai.cc/manager/latest.json`，再按配置�
 
 请只使用自己生成、自己拍摄或明确获得授权的图片。MIT 许可覆盖软件代码，不会自动覆盖
 第三方人物图、字体、音乐或其他素材。
+
+### 第三方 API 生图示例
+
+在 **CODEX 配置管理 → 基础** 中选择 provider 并保存普通 API Key，再输入独立图片 API Key。
+管理器会安装技能并写入独立配置文件。开启“第三方中转生图兼容模式”后，内置生图扩展会关闭，
+主 provider 仍按普通聊天方式认证：
+
+```toml
+[model_providers.custom]
+base_url = "https://your-relay.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+```
+
+`experimental_bearer_token` 不参与独立生图技能认证。保存后彻底重启 Codex，客户端才会重新
+读取技能和配置。
 
 ## 工作原理
 
@@ -222,7 +245,7 @@ installation, and keeps API credentials and user content on the local machine.
 | One-stop management | Detect, plan, confirm, execute, and report install / update / uninstall operations |
 | Windows paths | Prefer the official MSIX; fall back to a verified portable install when required |
 | macOS updates | Read the Sparkle appcast, prefer signed deltas, and fall back to the full archive |
-| CODEX configuration | AWAI Base URL, API key state, model discovery, Goal Mode, storage and safety fields |
+| CODEX configuration | Base URL, models, MCP, separate regular and image API key management, and safety fields |
 | AWAI skins | Import, preview, try on, apply, and restore `.codexskin` packages without editing Codex |
 | Manager self-update | Tauri updater with `https://codexapp.awai.cc/manager/latest.json` and a GitHub fallback |
 | Verification | HTTPS, SHA-256, package identity, native platform signatures, and post-install health checks |
@@ -248,8 +271,25 @@ not Windows publisher identity. See the [code signing policy](docs/code-signing-
 ## Configuration and skins
 
 The **CODEX configuration** page defaults to `https://api.awai.cc/v1` and `gpt-5.6-sol`. It can
-fetch models from `/models`, stores the API key in Codex's local credential store, and edits the
-supported TOML fields with validation. Risky settings are shown explicitly before saving.
+fetch models from `/models`, keeps the regular API key in `auth.json`, and installs the
+`imagegen-relay` skill with a separate key in `~/.codex/imagegen-relay.json`. Relay mode disables
+the native image extension while leaving the chat provider's authentication unchanged. Restart Codex after saving.
+
+Do not put a second image key into `experimental_bearer_token`: it is provider-wide and can break
+chat authentication. The independent skill configuration is stored separately:
+
+```json
+{"base_url":"https://your-relay.example/v1","api_key":"your-image-api-key"}
+```
+
+A representative provider block is:
+
+```toml
+[model_providers.custom]
+base_url = "https://your-relay.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+```
 
 The [AWAI skin repository](https://github.com/qq501987847/codex-app-manager-skins) provides
 `.codexskin` packages for visual styles and authorized artwork only. A skin never contains an
