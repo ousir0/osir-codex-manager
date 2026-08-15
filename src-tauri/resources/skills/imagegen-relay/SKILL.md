@@ -19,4 +19,4 @@ For edits, pass an existing image path:
 python scripts/imagegen_relay.py edit --prompt "..." --input /absolute/path/input.png
 ```
 
-The script reads the key from `~/.codex/imagegen-relay.json`, writes a real PNG under `~/.codex/generated_images/relay/`, and prints a Markdown preview path. Never print the key or response base64.
+The script reads the key and selected model from `~/.codex/imagegen-relay.json` (default model: `gpt-image-2`), writes a real PNG under `~/.codex/generated_images/relay/`, and prints a Markdown preview path. Never print the key or response base64.

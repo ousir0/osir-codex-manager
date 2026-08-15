@@ -55,6 +55,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       winAdopt: vi.fn(),
       winAdoptPath: vi.fn(),
       winLaunch: vi.fn(),
+      winRestart: vi.fn(),
       winPauseDownload: vi.fn(),
       winCancelDownload: vi.fn(),
       winDiscardDownload: vi.fn(),
@@ -209,6 +210,7 @@ describe("WinHome state machine", () => {
     api.winStatus.mockResolvedValue(STATUS_MANAGED);
     api.winPlanUpdate.mockResolvedValue(report());
     api.winPerformUpdate.mockResolvedValue(PERFORM_OK);
+    api.winRestart.mockResolvedValue(undefined);
     api.winPauseDownload.mockResolvedValue(true);
     api.winCancelDownload.mockResolvedValue(true);
     api.winDiscardDownload.mockResolvedValue(undefined);
@@ -628,6 +630,23 @@ describe("WinHome state machine", () => {
     expect(
       await screen.findByText("已是最新", { selector: ".headline" }),
     ).toBeInTheDocument();
+  });
+
+  it("restarts Codex when the status probe says it is already running", async () => {
+    api.winStatus.mockResolvedValue({ ...STATUS_MANAGED, running: true });
+    api.winPlanUpdate.mockResolvedValue(
+      report({
+        plan: { ...PLAN_UPDATE, upToDate: true, latestVersion: "1.0.0" },
+      }),
+    );
+    const user = userEvent.setup();
+    renderWinHome();
+
+    const restart = await screen.findByRole("button", { name: /重启 Codex/ });
+    await user.click(restart);
+
+    await waitFor(() => expect(api.winRestart).toHaveBeenCalledTimes(1));
+    expect(api.winLaunch).not.toHaveBeenCalled();
   });
 
   it("gates an external install behind adopt", async () => {

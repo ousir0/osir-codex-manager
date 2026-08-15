@@ -845,7 +845,12 @@ function guardMacStatus(status: MacInstallStatus): MacInstallStatus {
   ) {
     throw contractError("macOS install status");
   }
-  return status;
+  return {
+    ...status,
+    // Older Manager backends did not expose process state. Treat that as not
+    // running while the backend is upgraded, rather than breaking the home UI.
+    running: typeof s.running === "boolean" ? s.running : false,
+  };
 }
 
 function guardMacReport(report: MacUpdateReport): MacUpdateReport {
@@ -872,7 +877,10 @@ function guardWinStatus(status: WinInstallStatus): WinInstallStatus {
   ) {
     throw contractError("Windows install status");
   }
-  return status;
+  return {
+    ...status,
+    running: typeof s.running === "boolean" ? s.running : false,
+  };
 }
 
 function guardWinReport(report: WinUpdateReport): WinUpdateReport {
@@ -1145,7 +1153,11 @@ export const managerApi = {
   },
   macStatus(): Promise<MacInstallStatus> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve({ installed: null, status: "none" });
+      return Promise.resolve({
+        installed: null,
+        status: "none",
+        running: false,
+      });
     }
     return invoke<MacInstallStatus>("mac_status").then(guardMacStatus);
   },
@@ -1230,6 +1242,13 @@ export const managerApi = {
       return Promise.resolve();
     }
     return invoke<void>("mac_launch_codex");
+  },
+  // Restart the installed Codex when the home status probe says it is live.
+  macRestart(): Promise<void> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve();
+    }
+    return invoke<void>("mac_restart_codex");
   },
   // Open an external URL in the system browser (a webview <a target=_blank> is a
   // no-op under Tauri).
@@ -1443,11 +1462,11 @@ export const managerApi = {
     }
     return invoke<CodexConfigReport>("codex_config_delete_api_key");
   },
-  codexConfigSetImageGenerationApiKey(apiKey: string): Promise<CodexConfigReport> {
+  codexConfigSetImageGenerationApiKey(apiKey: string, model: string): Promise<CodexConfigReport> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: Boolean(apiKey.trim()) }));
+      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: Boolean(apiKey.trim()), imageGenerationModel: model }));
     }
-    return invoke<CodexConfigReport>("codex_config_set_image_generation_api_key", { apiKey });
+    return invoke<CodexConfigReport>("codex_config_set_image_generation_api_key", { apiKey, model });
   },
   codexConfigDeleteImageGenerationApiKey(): Promise<CodexConfigReport> {
     if (!hasTauriRuntime()) {
@@ -1825,6 +1844,7 @@ export const managerApi = {
       return Promise.resolve({
         installed: WIN_FALLBACK_INSTALLED,
         status: "managed",
+        running: false,
       });
     }
     return invoke<WinInstallStatus>("win_status").then(guardWinStatus);
@@ -1875,6 +1895,12 @@ export const managerApi = {
       return Promise.resolve();
     }
     return invoke<void>("win_launch_codex");
+  },
+  winRestart(): Promise<void> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve();
+    }
+    return invoke<void>("win_restart_codex");
   },
 };
 

@@ -56,6 +56,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       macAdopt: vi.fn(),
       macAdoptPath: vi.fn(),
       macLaunch: vi.fn(),
+      macRestart: vi.fn(),
       macPauseDownload: vi.fn(),
       macCancelDownload: vi.fn(),
       macDiscardDownload: vi.fn(),
@@ -162,6 +163,7 @@ describe("MacHome state machine", () => {
     api.macStatus.mockResolvedValue(STATUS_MANAGED);
     api.macPlanUpdate.mockResolvedValue(REPORT_UPDATE);
     api.macPerformUpdate.mockResolvedValue(PERFORM_OK);
+    api.macRestart.mockResolvedValue(undefined);
     api.macPauseDownload.mockResolvedValue(true);
     api.macCancelDownload.mockResolvedValue(true);
     api.macDiscardDownload.mockResolvedValue(undefined);
@@ -472,6 +474,19 @@ describe("MacHome state machine", () => {
       await screen.findByText("已是最新", { selector: ".headline" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /启动 Codex/ })).toBeEnabled();
+  });
+
+  it("restarts Codex when the status probe says it is already running", async () => {
+    api.macStatus.mockResolvedValue({ ...STATUS_MANAGED, running: true });
+    api.macPlanUpdate.mockResolvedValue(REPORT_UPTODATE);
+    const user = userEvent.setup();
+    renderHome();
+
+    const restart = await screen.findByRole("button", { name: /重启 Codex/ });
+    await user.click(restart);
+
+    await waitFor(() => expect(api.macRestart).toHaveBeenCalledTimes(1));
+    expect(api.macLaunch).not.toHaveBeenCalled();
   });
 
   it("gates an external install behind adopt instead of offering the update", async () => {

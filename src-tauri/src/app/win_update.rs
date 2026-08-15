@@ -185,6 +185,8 @@ pub struct WinInstallStatus {
     pub installed: Option<InstalledWindowsCodex>,
     /// "managed" | "external" | "none"
     pub status: String,
+    /// Whether the selected install currently has a live Codex process.
+    pub running: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2108,7 +2110,15 @@ pub fn win_install_status(settings: &AppSettings) -> WinInstallStatus {
         Some(_) => "external",
     }
     .to_string();
-    WinInstallStatus { installed, status }
+    let running = installed
+        .as_ref()
+        .and_then(|codex| codex_running_for_root(Path::new(&codex.path)).ok())
+        .unwrap_or(false);
+    WinInstallStatus {
+        installed,
+        status,
+        running,
+    }
 }
 
 pub fn win_adopt(settings: &AppSettings) -> Result<WinInstallStatus, AppError> {
@@ -2884,6 +2894,7 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  OpenAI.Codex_2
             || WinInstallStatus {
                 installed: None,
                 status: "none".to_string(),
+                running: false,
             },
         )
         .expect("a missing install is a retryable ancillary result");

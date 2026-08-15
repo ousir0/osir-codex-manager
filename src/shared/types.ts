@@ -272,6 +272,8 @@ export interface AncillaryRetryReport {
 export interface MacInstallStatus {
   installed: InstalledCodex | null;
   status: InstallClass;
+  /** Whether the selected Codex install currently has a live process. */
+  running?: boolean;
   /** Present when several Codex-lineage installs coexist (e.g. an old
    *  Codex.app plus a hand-dragged post-rebrand ChatGPT.app); the user should
    *  adopt one explicitly. Absent when unambiguous. */
@@ -665,6 +667,8 @@ export function outcomeIsPartial(
 export interface WinInstallStatus {
   installed: InstalledWindowsCodex | null;
   status: InstallClass;
+  /** Whether the selected Codex install currently has a live process. */
+  running?: boolean;
 }
 
 export type CodexMcpTransport = "stdio" | "http";
@@ -703,6 +707,7 @@ export interface CodexConfigReport {
   codexRunning: boolean;
   imageGenerationCompatibility?: boolean;
   imageGenerationApiKeyConfigured?: boolean;
+  imageGenerationModel?: string;
 }
 
 export interface CodexProviderProfile {

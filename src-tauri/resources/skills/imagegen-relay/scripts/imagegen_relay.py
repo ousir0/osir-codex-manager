@@ -14,22 +14,23 @@ def config_path() -> pathlib.Path:
     return pathlib.Path.home() / ".codex" / "imagegen-relay.json"
 
 
-def load_config() -> tuple[str, str]:
+def load_config() -> tuple[str, str, str]:
     path = config_path()
     try:
         config = json.loads(path.read_text(encoding="utf-8"))
         base_url = str(config["base_url"]).rstrip("/")
         api_key = str(config["api_key"])
+        model = str(config.get("model") or "gpt-image-2")
     except (OSError, ValueError, KeyError) as exc:
         raise RuntimeError(f"独立生图 API 尚未配置：{path}") from exc
     if not base_url or not api_key:
         raise RuntimeError("独立生图 API 配置不完整")
-    return base_url, api_key
+    return base_url, api_key, model
 
 
 def request_image(mode: str, prompt: str, input_path: str | None) -> pathlib.Path:
-    base_url, api_key = load_config()
-    payload: dict[str, object] = {"prompt": prompt, "model": "gpt-image-1"}
+    base_url, api_key, model = load_config()
+    payload: dict[str, object] = {"prompt": prompt, "model": model}
     endpoint = f"{base_url}/images/generations"
     if mode == "edit":
         if not input_path:

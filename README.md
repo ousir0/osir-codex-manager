@@ -127,6 +127,10 @@ Manager 先检查 `https://codexapp.awai.cc/manager/latest.json`，再按配置�
 - **独立生图技能**：开启第三方中转生图模式后，管理器把生图 Key 单独保存到
   `~/.codex/imagegen-relay.json`，并默认安装 `imagegen-relay` 技能；聊天仍使用 `auth.json`。
   管理器不会把第二把 Key 写入 `experimental_bearer_token`。
+- 生图模型默认使用 `gpt-image-2`；可以复用“获取模型”从当前 Base URL 的 `/models` 读取并选择，
+  中转站未提供模型列表时仍可保留默认值或手动填写兼容模型。
+- 管理器默认安装三套电商图片技能：`ecom-single-image`（单张）、`ecom-five-hero-images`
+  （5 张主图）和 `ecom-detail-set`（7–9 张详情图，默认 9 张）。
 - **第三方中转生图兼容模式**：开启后只关闭 Codex 内置的 `image_generation` 扩展，
   并由独立技能调用图片 API；主 provider 的聊天鉴权保持不变。修改后需要彻底重启 Codex。
 - 官方内置 `image_gen` 当前仍使用主 provider，因此独立 Key 由 `imagegen-relay` 技能直接调用

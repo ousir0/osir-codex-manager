@@ -1687,6 +1687,18 @@ fn launch_codex_plain() -> Result<(), AppError> {
     Err(AppError::UnsupportedPlatform)
 }
 
+/// Gracefully restart the managed Codex without changing its configuration.
+/// The caller has already surfaced the action as a restart, but we re-check
+/// the process here so a stale renderer cannot quit a newly closed session.
+pub fn restart_plain() -> Result<(), AppError> {
+    let installed = installed_codex_path()?;
+    if codex_running() {
+        quit_codex(&installed)?;
+        std::thread::sleep(CONFIG_SETTLE);
+    }
+    launch_codex_plain()
+}
+
 /// Launch hook for the ordinary 〔打开 Codex〕 action: when a theme is the
 /// persisted selection, launching through the manager transparently becomes
 /// "launch debuggable + keep themed".
@@ -1706,6 +1718,31 @@ pub async fn launch_with_active_theme(
             // A broken/missing theme must never brick the launch button:
             // surface in logs, launch plainly.
             log::warn!("themed launch failed, falling back to plain launch: {error}");
+            Ok(false)
+        }
+    }
+}
+
+/// Force a real restart while preserving the persisted theme. A missing or
+/// broken theme falls back to the plain restart in the command layer, just as
+/// ordinary launch falls back to a plain open.
+pub async fn restart_with_active_theme(
+    service: &ThemeService,
+    settings: &AppSettings,
+) -> Result<bool, AppError> {
+    let Some(theme_ref) = settings.codex_theme.clone() else {
+        return Ok(false);
+    };
+    if !theme_supported() {
+        return Ok(false);
+    }
+    match service
+        .restart_debuggable_and_inject(settings, &theme_ref, NativeSync::HotThenFile)
+        .await
+    {
+        Ok(()) => Ok(true),
+        Err(error) => {
+            log::warn!("themed restart failed, falling back to plain restart: {error}");
             Ok(false)
         }
     }

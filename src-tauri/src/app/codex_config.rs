@@ -55,6 +55,7 @@ pub struct CodexConfigReport {
     pub codex_running: bool,
     pub image_generation_compatibility: bool,
     pub image_generation_api_key_configured: bool,
+    pub image_generation_model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -421,6 +422,15 @@ fn separate_image_generation_api_key_configured(config_path: &Path) -> bool {
         .is_some_and(|key| !key.trim().is_empty())
 }
 
+fn separate_image_generation_model(config_path: &Path) -> String {
+    fs::read_to_string(image_generation_key_path(config_path))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<JsonMap<String, JsonValue>>(&raw).ok())
+        .and_then(|map| map.get("model").and_then(JsonValue::as_str).map(str::to_owned))
+        .filter(|model| !model.trim().is_empty())
+        .unwrap_or_else(|| "gpt-image-2".to_string())
+}
+
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let auth_path = auth_path_for_config(path);
     let (api_key_configured, auth_error) = auth_status(&auth_path);
@@ -448,6 +458,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         servers,
         image_compatibility,
         image_api_key_configured,
+        image_model,
     ) = match parsed {
         Ok(document) => {
             let provider = string_at(document.as_table(), "model_provider");
@@ -483,6 +494,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 mcp_servers(&document),
                 image_compatibility,
                 image_api_key_configured,
+                separate_image_generation_model(path),
             )
         }
         Err(error) => (
@@ -500,6 +512,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
             Vec::new(),
             false,
             false,
+            "gpt-image-2".to_string(),
         ),
     };
     Ok(CodexConfigReport {
@@ -526,6 +539,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         codex_running,
         image_generation_compatibility: image_compatibility,
         image_generation_api_key_configured: image_api_key_configured,
+        image_generation_model: image_model,
     })
 }
 
@@ -652,12 +666,15 @@ pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError
 
 pub fn set_image_generation_api_key(
     api_key: &str,
+    model: &str,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
     let api_key = checked_value(api_key, "生图 API Key")?;
     if api_key.is_empty() || api_key.chars().any(char::is_control) {
         return Err(AppError::Engine("生图 API Key 不能为空".to_string()));
     }
+    let model = checked_value(model, "生图模型")?;
+    let model = if model.is_empty() { "gpt-image-2" } else { model.as_str() };
     let path = config_path()?;
     let base_url = report_for_path(&path, codex_running)?.base_url;
     if base_url.trim().is_empty() {
@@ -668,7 +685,7 @@ pub fn set_image_generation_api_key(
         fs::create_dir_all(parent)
             .map_err(|error| AppError::Internal(format!("创建 Codex 配置目录失败：{error}")))?;
     }
-    let payload = serde_json::json!({ "base_url": base_url, "api_key": api_key });
+    let payload = serde_json::json!({ "base_url": base_url, "api_key": api_key, "model": model });
     write_verified_json(&key_path, &payload.to_string())?;
     install_image_generation_skill(&path)?;
     report_for_path(&path, codex_running)
@@ -903,6 +920,68 @@ fn install_image_generation_skill(config_path: &Path) -> Result<(), AppError> {
         .map_err(|error| AppError::Internal(format!("安装生图技能说明失败：{error}")))?;
     atomic_file::write_atomic(&scripts_dir.join("imagegen_relay.py"), script.as_bytes())
         .map_err(|error| AppError::Internal(format!("安装生图技能脚本失败：{error}")))?;
+    install_ecommerce_skills(codex_home)?;
+    Ok(())
+}
+
+fn install_ecommerce_skills(codex_home: &Path) -> Result<(), AppError> {
+    let skills = [
+        ("ecom-single-image", include_str!("../../resources/skills/ecom-single-image/SKILL.md")),
+        ("ecom-five-hero-images", include_str!("../../resources/skills/ecom-five-hero-images/SKILL.md")),
+        ("ecom-detail-set", include_str!("../../resources/skills/ecom-detail-set/SKILL.md")),
+    ];
+    for (name, body) in skills {
+        let dir = codex_home.join("skills").join(name);
+        fs::create_dir_all(&dir)
+            .map_err(|error| AppError::Internal(format!("创建电商技能目录失败：{error}")))?;
+        atomic_file::write_atomic(&dir.join("SKILL.md"), body.as_bytes())
+            .map_err(|error| AppError::Internal(format!("安装电商技能 {name} 失败：{error}")))?;
+    }
+    let single_scripts = codex_home.join("skills").join("ecom-single-image").join("scripts");
+    fs::create_dir_all(&single_scripts)
+        .map_err(|error| AppError::Internal(format!("创建电商生成脚本目录失败：{error}")))?;
+    let generator = include_str!("../../resources/skills/ecom-single-image/scripts/generate_image.py");
+    atomic_file::write_atomic(&single_scripts.join("generate_image.py"), generator.as_bytes())
+        .map_err(|error| AppError::Internal(format!("安装电商生成脚本失败：{error}")))?;
+
+    let template_dir = codex_home
+        .join("skills")
+        .join("ecom-detail-set")
+        .join("references")
+        .join("templates");
+    fs::create_dir_all(&template_dir)
+        .map_err(|error| AppError::Internal(format!("创建电商模板目录失败：{error}")))?;
+    let templates = [
+        ("01-hero-image.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/01-hero-image.json")),
+        ("02-lifestyle-scene.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/02-lifestyle-scene.json")),
+        ("03-flat-lay.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/03-flat-lay.json")),
+        ("04-detail-macro.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/04-detail-macro.json")),
+        ("05-poster-banner.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/05-poster-banner.json")),
+        ("06-social-media.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/06-social-media.json")),
+        ("07-ugc-style.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/07-ugc-style.json")),
+        ("08-model-showcase.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/08-model-showcase.json")),
+        ("09-before-after.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/09-before-after.json")),
+        ("10-packaging.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/10-packaging.json")),
+        ("11-infographic.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/11-infographic.json")),
+        ("12-creative-concept.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/12-creative-concept.json")),
+        ("13-size-spec.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/13-size-spec.json")),
+        ("14-multi-product.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/14-multi-product.json")),
+        ("15-livestream.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/15-livestream.json")),
+        ("16-try-on-virtual.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/16-try-on-virtual.json")),
+        ("17-exploded-view.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/17-exploded-view.json")),
+        ("18-ghost-mannequin.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/18-ghost-mannequin.json")),
+        ("19-multi-angle-grid.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/19-multi-angle-grid.json")),
+        ("20-magazine-editorial.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/20-magazine-editorial.json")),
+        ("21-seasonal-campaign.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/21-seasonal-campaign.json")),
+        ("22-luxury-atmospherics.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/22-luxury-atmospherics.json")),
+        ("23-device-mockup.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/23-device-mockup.json")),
+        ("24-storefront.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/24-storefront.json")),
+        ("25-sports-campaign.json", include_str!("../../resources/skills/ecom-detail-set/references/templates/25-sports-campaign.json")),
+    ];
+    for (name, body) in templates {
+        atomic_file::write_atomic(&template_dir.join(name), body.as_bytes())
+            .map_err(|error| AppError::Internal(format!("安装电商模板 {name} 失败：{error}")))?;
+    }
     Ok(())
 }
 

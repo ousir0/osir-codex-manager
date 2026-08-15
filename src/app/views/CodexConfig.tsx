@@ -62,6 +62,8 @@ const ZH_COPY = {
   imageApiKey: "生图 API Key",
   imageApiKeyPlaceholder: "输入独立图片 API Key",
   imageApiKeyHint: "保存到 ~/.codex/imagegen-relay.json，并自动安装 imagegen-relay 技能；不会写入 config.toml。",
+  imageModel: "生图模型",
+  imageModelPlaceholder: "默认 gpt-image-2；可点击获取模型后选择",
   saveImageApiKey: "保存并安装技能",
   deleteImageApiKey: "删除生图 API Key",
   apiKeyPlaceholder: "输入新的 API Key",
@@ -148,6 +150,8 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   imageApiKey: "Image generation API Key",
   imageApiKeyPlaceholder: "Enter the independent image API Key",
   imageApiKeyHint: "Saved to ~/.codex/imagegen-relay.json and installs the imagegen-relay skill; config.toml is untouched.",
+  imageModel: "Image model",
+  imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose",
   saveImageApiKey: "Save and install skill",
   deleteImageApiKey: "Delete image API Key",
   apiKeyPlaceholder: "Enter a new API Key",
@@ -244,6 +248,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const [showSecrets, setShowSecrets] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
+  const [imageModel, setImageModel] = useState("gpt-image-2");
   const [showApiKey, setShowApiKey] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [modelsBaseUrl, setModelsBaseUrl] = useState<string | null>(null);
@@ -256,6 +261,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
 
   const applyReport = useCallback((next: CodexConfigReport) => {
     setReport(next);
+    setImageModel(next.imageGenerationModel || "gpt-image-2");
     setBasic({
       model: next.model || "gpt-5.6-sol",
       provider: next.provider,
@@ -347,7 +353,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const saveImageApiKey = async () => {
     const saved = await run(
       "image-api-key",
-      () => managerApi.codexConfigSetImageGenerationApiKey(imageApiKey),
+      () => managerApi.codexConfigSetImageGenerationApiKey(imageApiKey, imageModel),
       report?.codexRunning ? copy.savedRunning : copy.apiKeySaved,
     );
     if (saved) setImageApiKey("");
@@ -806,6 +812,21 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                   {report.imageGenerationApiKeyConfigured ? copy.apiKeyConfigured : copy.apiKeyMissing}
                 </span>
               </div>
+              <label className="config-field">
+                <span>{copy.imageModel}</span>
+                <input
+                  className="input mono"
+                  value={imageModel}
+                  disabled={locked || !basic.provider}
+                  list="image-model-options"
+                  placeholder={copy.imageModelPlaceholder}
+                  onChange={(event) => setImageModel(event.target.value)}
+                />
+                <datalist id="image-model-options">
+                  {models.map((model) => <option key={model} value={model} />)}
+                </datalist>
+                <small>{copy.imageModelPlaceholder}</small>
+              </label>
               <label className="config-field">
                 <span>{copy.imageApiKey}</span>
                 <input

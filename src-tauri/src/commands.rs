@@ -1278,6 +1278,27 @@ pub async fn mac_launch_codex(state: State<'_, ManagerState>) -> Result<(), Comm
     crate::app::mac_update::launch_codex().map_err(Into::into)
 }
 
+/// macOS-only: gracefully quit and relaunch the managed Codex.
+#[tauri::command]
+pub async fn mac_restart_codex(state: State<'_, ManagerState>) -> Result<(), CommandError> {
+    if !cfg!(target_os = "macos") {
+        return Err(AppError::UnsupportedPlatform.into());
+    }
+    let settings = PersistedAppSettings::load();
+    if settings.codex_theme.is_some() && state.operations.snapshot().is_none() {
+        let themed =
+            crate::app::codex_theme::restart_with_active_theme(&state.codex_theme, &settings)
+                .await?;
+        if themed {
+            return Ok(());
+        }
+    }
+    tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
+        .await
+        .map_err(|e| AppError::Internal(format!("join: {e}")))?
+        .map_err(Into::into)
+}
+
 /// macOS-only: fresh-install the latest Codex (full package) into /Applications.
 /// Runs the blocking download/verify/install off the main thread.
 #[tauri::command]
@@ -2314,10 +2335,12 @@ pub fn codex_config_delete_api_key(
 pub fn codex_config_set_image_generation_api_key(
     state: State<'_, ManagerState>,
     api_key: String,
+    model: String,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
     crate::app::codex_config::set_image_generation_api_key(
         &api_key,
+        &model,
         crate::app::codex_theme::codex_running(),
     )
     .map_err(Into::into)
@@ -2938,6 +2961,27 @@ pub async fn win_launch_codex(state: State<'_, ManagerState>) -> Result<(), Comm
     }
     let settings = windows_domain_settings_for_persisted(&state);
     tauri::async_runtime::spawn_blocking(move || crate::app::win_update::launch_codex(&settings))
+        .await
+        .map_err(|e| AppError::Internal(format!("join: {e}")))?
+        .map_err(Into::into)
+}
+
+/// Windows-only: gracefully quit and relaunch the managed Codex.
+#[tauri::command]
+pub async fn win_restart_codex(state: State<'_, ManagerState>) -> Result<(), CommandError> {
+    if !matches!(state.target.os, OperatingSystem::Windows) {
+        return Err(AppError::UnsupportedPlatform.into());
+    }
+    let persisted = PersistedAppSettings::load();
+    if persisted.codex_theme.is_some() && state.operations.snapshot().is_none() {
+        let themed =
+            crate::app::codex_theme::restart_with_active_theme(&state.codex_theme, &persisted)
+                .await?;
+        if themed {
+            return Ok(());
+        }
+    }
+    tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
         .await
         .map_err(|e| AppError::Internal(format!("join: {e}")))?
         .map_err(Into::into)

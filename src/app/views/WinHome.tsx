@@ -1287,8 +1287,12 @@ export function WinHome({
     launchInFlightRef.current = true;
     setActionError(null);
     const generation = beginOperation("launch");
-    void managerApi
-      .winLaunch()
+    void (status?.running ? managerApi.winRestart() : managerApi.winLaunch())
+      .then(() => {
+        setStatus((current) =>
+          current ? { ...current, running: true } : current,
+        );
+      })
       .catch((cause) => {
         if (ownsOperation(generation)) setActionError(resolveFailure(cause, t));
       })
@@ -1298,6 +1302,7 @@ export function WinHome({
       });
   };
   const launching = busy === "launch";
+  const codexRunning = status?.running === true;
   const launchButton = (variant: "primary" | "ghost") => (
     <button
       className={variant === "primary" ? "btn primary big" : "btn ghost"}
@@ -1305,8 +1310,18 @@ export function WinHome({
       disabled={busy !== null}
       aria-busy={launching}
     >
-      {launching ? <Icon name="loader" className="spinicon" /> : <CodexGlyph />}
-      {launching ? t("home.launching") : t("home.launch")}
+      {launching ? (
+        <Icon name="loader" className="spinicon" />
+      ) : codexRunning ? (
+        <Icon name="refresh" />
+      ) : (
+        <CodexGlyph />
+      )}
+      {launching
+        ? t("home.launching")
+        : codexRunning
+          ? t("home.restart")
+          : t("home.launch")}
     </button>
   );
 

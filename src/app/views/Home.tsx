@@ -120,6 +120,8 @@ function MacHome({
   } | null>(null);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [busy, setBusy] = useState<MacBusy>(null);
+  const [launching, setLaunching] = useState(false);
+  const launchInFlightRef = useRef(false);
   // Async checks and installs can overlap while the version sheet is open.
   // Track ownership synchronously so an older check cannot clear the progress
   // state belonging to a newly-started historical install.
@@ -876,13 +878,45 @@ function MacHome({
     }
   }, [settings, skippedCandidate, t]);
   const onLaunch = () => {
+    if (
+      busyRef.current !== null ||
+      launchInFlightRef.current ||
+      launching
+    )
+      return;
     // Surface a failed open (stale path / backend error) via the error banner
     // like every other action, instead of an unhandled rejection with no feedback.
+    launchInFlightRef.current = true;
     setActionError(null);
-    void managerApi
-      .macLaunch()
-      .catch((cause) => setActionError(resolveFailure(cause, t)));
+    setLaunching(true);
+    void (codexRunning ? managerApi.macRestart() : managerApi.macLaunch())
+      .then(() => {
+        // Launchers return after handing off to the OS. Mark the action as live
+        // immediately; focus/status probes correct this if the process exits.
+        setStatus((current) =>
+          current ? { ...current, running: true } : current,
+        );
+      })
+      .catch((cause) => setActionError(resolveFailure(cause, t)))
+      .finally(() => {
+        launchInFlightRef.current = false;
+        setLaunching(false);
+      });
   };
+
+  const codexRunning = status?.running === true;
+  const launchLabel = launching
+    ? t("home.launching")
+    : codexRunning
+      ? t("home.restart")
+      : t("home.launch");
+  const launchIcon = launching ? (
+    <Icon name="loader" className="spinicon" />
+  ) : codexRunning ? (
+    <Icon name="refresh" />
+  ) : (
+    <CodexGlyph />
+  );
 
   // One string identifying the visible "scene"; when it changes the hero
   // remounts and GSAP replays the choreographed entrance (see useHomeMotion).
@@ -992,9 +1026,13 @@ function MacHome({
                 {t("install.partial.record")}
               </button>
             ) : null}
-            <button className="btn primary big" onClick={onLaunch}>
-              <CodexGlyph />
-              {t("install.done.open")}
+            <button
+              className="btn primary big"
+              onClick={onLaunch}
+              disabled={launching}
+            >
+              {launchIcon}
+              {launching ? t("home.launching") : t("install.done.open")}
             </button>
             <button
               className="btn ghost"
@@ -1195,8 +1233,8 @@ function MacHome({
           {rechecking ? (
             <>
               <button className="btn primary big" onClick={onLaunch} disabled>
-                <CodexGlyph />
-                {t("home.launch")}
+                {launchIcon}
+                {launchLabel}
               </button>
               <button className="btn ghost" disabled>
                 <Icon name="loader" className="spinicon" />
@@ -1231,10 +1269,10 @@ function MacHome({
               <button
                 className="btn primary big"
                 onClick={onLaunch}
-                disabled={busy !== null}
+                disabled={busy !== null || launching}
               >
-                <CodexGlyph />
-                {t("home.launch")}
+                {launchIcon}
+                {launchLabel}
               </button>
               <button
                 className="btn ghost"
@@ -1273,10 +1311,10 @@ function MacHome({
               <button
                 className="btn ghost"
                 onClick={onLaunch}
-                disabled={busy !== null}
+                disabled={busy !== null || launching}
               >
-                <CodexGlyph />
-                {t("home.launch")}
+                {launchIcon}
+                {launchLabel}
               </button>
             </>
           ) : null}
@@ -1295,10 +1333,10 @@ function MacHome({
               <button
                 className="btn primary big"
                 onClick={onLaunch}
-                disabled={busy !== null}
+                disabled={busy !== null || launching}
               >
-                <CodexGlyph />
-                {t("home.launch")}
+                {launchIcon}
+                {launchLabel}
               </button>
               <button
                 className="btn ghost"
@@ -1318,10 +1356,10 @@ function MacHome({
                 <button
                   className="btn primary big"
                   onClick={onLaunch}
-                  disabled={busy !== null}
+                  disabled={busy !== null || launching}
                 >
-                  <CodexGlyph />
-                  {t("home.launch")}
+                  {launchIcon}
+                  {launchLabel}
                 </button>
                 <button
                   className="btn ghost"

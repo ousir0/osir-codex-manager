@@ -1672,6 +1672,8 @@ pub struct MacInstallStatus {
     pub installed: Option<InstalledCodex>,
     /// "managed" | "external" | "none"
     pub status: String,
+    /// Whether the selected install currently has a live Codex process.
+    pub running: bool,
     /// All Codex-lineage installs when more than one exists (e.g. an old
     /// `Codex.app` plus a hand-dragged post-rebrand `ChatGPT.app`). The UI
     /// should surface this and have the user adopt one explicitly; destructive
@@ -1687,6 +1689,10 @@ pub struct MacInstallStatus {
 /// Classify the installed Codex against our provenance store.
 pub fn mac_install_status() -> MacInstallStatus {
     let installed = detect_managed_installed();
+    let running = installed
+        .as_ref()
+        .map(|codex| codex_running_at(Path::new(&codex.path)))
+        .unwrap_or(false);
     let store = ProvenanceStore::load();
     let status = match &installed {
         None => "none",
@@ -1708,6 +1714,7 @@ pub fn mac_install_status() -> MacInstallStatus {
     MacInstallStatus {
         installed,
         status,
+        running,
         ambiguous_paths,
         outcome: None,
     }
