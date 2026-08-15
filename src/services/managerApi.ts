@@ -311,9 +311,9 @@ const WIN_FALLBACK_INSTALLED = {
 };
 
 const WIN_FALLBACK_PLAN: WinUpdateReport = {
-  manifestUrl: "https://codexapp.agentsmirror.com/latest/manifest",
-  checksumsUrl: "https://codexapp.agentsmirror.com/latest/checksums",
-  packageUrl: "https://codexapp.agentsmirror.com/latest/win",
+  manifestUrl: "https://codexapp.awai.cc/latest/manifest",
+  checksumsUrl: "https://codexapp.awai.cc/latest/checksums",
+  packageUrl: "https://codexapp.awai.cc/latest/win",
   release: {
     version: "26.623.42026",
     packageVersion: "26.623.5546.0",
@@ -341,7 +341,7 @@ const WIN_FALLBACK_PLAN: WinUpdateReport = {
     currentVersion: "26.623.42026",
     latestVersion: "26.623.42026",
     packageMoniker: "OpenAI.Codex_26.623.5546.0_x64__2p2nqsd0c76g0",
-    packageUrl: "https://codexapp.agentsmirror.com/latest/win",
+    packageUrl: "https://codexapp.awai.cc/latest/win",
     downloadSize: 671037642,
     sha256: "6dc2e05ac2b760bbc77ce3f8a992efdb327363512c9c4744b9a146c41bc4d55a",
     route: "msix-sideload",

@@ -157,8 +157,8 @@ mod tests {
     #[test]
     fn accepts_https_domain_sources() {
         assert_eq!(
-            validate_custom_source("https://codexapp.agentsmirror.com/latest/appcast.xml").unwrap(),
-            "https://codexapp.agentsmirror.com/latest/appcast.xml"
+            validate_custom_source("https://codexapp.awai.cc/latest/appcast.xml").unwrap(),
+            "https://codexapp.awai.cc/latest/appcast.xml"
         );
         assert_eq!(
             validate_custom_source("https://mirror.example.com:8443/feed").unwrap(),

@@ -61,7 +61,7 @@ fn webview_startup_gate(safe_to_show: bool, failed: bool) -> WebviewStartupGate 
 impl ManagerState {
     pub fn new() -> Self {
         let target = Target::current();
-        let mirror_base_url = "https://codexapp.agentsmirror.com".to_string();
+        let mirror_base_url = "https://codexapp.awai.cc".to_string();
         let (saved, settings_health) = PersistedAppSettings::load_with_health();
         let (_, provenance_health) = ProvenanceStore::load_with_health();
         let config_health = Mutex::new(

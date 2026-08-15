@@ -192,7 +192,7 @@ pub struct WinInstallStatus {
 pub struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
-    /// Host the bytes are coming from, e.g. `codexapp.agentsmirror.com`.
+    /// Host the bytes are coming from, e.g. `codexapp.awai.cc`.
     pub source: String,
 }
 
@@ -2719,7 +2719,7 @@ mod tests {
             "adopted-external",
         );
         let settings = AppSettings::new(
-            "https://codexapp.agentsmirror.com".to_string(),
+            "https://codexapp.awai.cc".to_string(),
             temp_test_dir("managed-missing-root")
                 .join("missing")
                 .to_string_lossy()
