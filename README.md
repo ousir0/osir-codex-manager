@@ -85,7 +85,7 @@ Manager 不修改 Codex 应用包，不绕过 OpenAI 或 Microsoft 的授权与�
 |---|---|---|
 | Apple Silicon Mac | `CodexAppManager_aarch64.dmg` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg) |
 | Intel Mac | `CodexAppManager_x86_64.dmg` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | `CodexAppManager_x64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe) |
+| Windows x64 | `CodexAppManager_x64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=20260815-logo) |
 | Windows ARM64 | `CodexAppManager_arm64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe) |
 
 镜像的 `/manager/latest/` 始终指向当前版本；需要精确历史版本时，请使用对应 GitHub
@@ -236,7 +236,7 @@ for the public release record, or the fixed AWAI mirror links:
 |---|---|
 | Apple Silicon Mac | [CodexAppManager_aarch64.dmg](https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg) |
 | Intel Mac | [CodexAppManager_x86_64.dmg](https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | [CodexAppManager_x64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe) |
+| Windows x64 | [CodexAppManager_x64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=20260815-logo) |
 | Windows ARM64 | [CodexAppManager_arm64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe) |
 
 `/manager/latest/` always means the newest release. Use the matching GitHub Release Assets for

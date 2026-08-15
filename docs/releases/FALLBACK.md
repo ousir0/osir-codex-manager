@@ -9,7 +9,7 @@ GitHub Release Assets 与 `SHA256SUMS` 为准。
 
 | 平台 | 下载 |
 | --- | --- |
-| Windows x64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe` |
+| Windows x64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=20260815-logo` |
 | Windows ARM64 | `https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe` |
 | macOS Apple Silicon | `https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg` |
 | macOS Intel | `https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg` |
