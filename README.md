@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/logo.png" width="160" alt="AWAI Codex App Manager logo">
+  <img src="./assets/awai-mark.svg" width="160" alt="AWAI Codex App Manager logo">
 </p>
 
 <h1 align="center">AWAI Codex App Manager</h1>
