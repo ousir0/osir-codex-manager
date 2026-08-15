@@ -702,6 +702,7 @@ export interface CodexConfigReport {
   authError: string | null;
   codexRunning: boolean;
   imageGenerationCompatibility?: boolean;
+  imageGenerationApiKeyConfigured?: boolean;
 }
 
 export interface CodexProviderProfile {

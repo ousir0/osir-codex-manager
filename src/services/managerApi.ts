@@ -741,6 +741,7 @@ enabled = false
   authError: null,
   codexRunning: false,
   imageGenerationCompatibility: false,
+  imageGenerationApiKeyConfigured: false,
 };
 
 function browserConfigReport(
@@ -1441,6 +1442,18 @@ export const managerApi = {
       return Promise.resolve(browserConfigReport({ apiKeyConfigured: false, authError: null }));
     }
     return invoke<CodexConfigReport>("codex_config_delete_api_key");
+  },
+  codexConfigSetImageGenerationApiKey(apiKey: string): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: Boolean(apiKey.trim()) }));
+    }
+    return invoke<CodexConfigReport>("codex_config_set_image_generation_api_key", { apiKey });
+  },
+  codexConfigDeleteImageGenerationApiKey(): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: false }));
+    }
+    return invoke<CodexConfigReport>("codex_config_delete_image_generation_api_key");
   },
   codexConfigUpsertMcp(input: CodexMcpServerInput): Promise<CodexConfigReport> {
     if (!hasTauriRuntime()) {

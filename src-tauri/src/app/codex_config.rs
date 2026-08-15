@@ -54,6 +54,7 @@ pub struct CodexConfigReport {
     pub auth_error: Option<String>,
     pub codex_running: bool,
     pub image_generation_compatibility: bool,
+    pub image_generation_api_key_configured: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -388,6 +389,17 @@ fn image_generation_compatibility(document: &DocumentMut, provider: &str, base_u
     !requires_auth && actor == Some(base_url)
 }
 
+fn image_generation_api_key_configured(document: &DocumentMut, provider: &str) -> bool {
+    document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(provider))
+        .and_then(Item::as_table)
+        .and_then(|table| table.get("experimental_bearer_token"))
+        .and_then(Item::as_str)
+        .is_some_and(|token| !token.trim().is_empty())
+}
+
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let auth_path = auth_path_for_config(path);
     let (api_key_configured, auth_error) = auth_status(&auth_path);
@@ -414,6 +426,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         providers,
         servers,
         image_compatibility,
+        image_api_key_configured,
     ) = match parsed {
         Ok(document) => {
             let provider = string_at(document.as_table(), "model_provider");
@@ -424,7 +437,10 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 .and_then(Item::as_table)
                 .map(|table| string_at(table, "base_url"))
                 .unwrap_or_default();
-            let image_compatibility = image_generation_compatibility(&document, &provider, &base_url);
+            let image_compatibility =
+                image_generation_compatibility(&document, &provider, &base_url);
+            let image_api_key_configured =
+                image_generation_api_key_configured(&document, &provider);
             (
                 None,
                 string_at(document.as_table(), "model"),
@@ -447,6 +463,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 provider_profiles(&document),
                 mcp_servers(&document),
                 image_compatibility,
+                image_api_key_configured,
             )
         }
         Err(error) => (
@@ -462,6 +479,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
             false,
             Vec::new(),
             Vec::new(),
+            false,
             false,
         ),
     };
@@ -488,6 +506,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         auth_error,
         codex_running,
         image_generation_compatibility: image_compatibility,
+        image_generation_api_key_configured: image_api_key_configured,
     })
 }
 
@@ -528,10 +547,7 @@ fn tighten_auth_permissions(_path: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
-fn write_auth_verified(
-    path: &Path,
-    auth: &JsonMap<String, JsonValue>,
-) -> Result<(), AppError> {
+fn write_auth_verified(path: &Path, auth: &JsonMap<String, JsonValue>) -> Result<(), AppError> {
     if path.is_symlink() {
         return Err(AppError::Engine(
             "auth.json 是符号链接，为避免改写错误目标，管理器拒绝保存".to_string(),
@@ -612,6 +628,57 @@ pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError
     let config_path = config_path()?;
     delete_api_key_at(&auth_path_for_config(&config_path))?;
     report_for_path(&config_path, codex_running)
+}
+
+fn set_image_generation_api_key_in_document(
+    document: &mut DocumentMut,
+    api_key: &str,
+) -> Result<(), AppError> {
+    let api_key = checked_value(api_key, "生图 API Key")?;
+    if api_key.is_empty() || api_key.chars().any(char::is_control) {
+        return Err(AppError::Engine("生图 API Key 不能为空".to_string()));
+    }
+    let provider = string_at(document.as_table(), "model_provider");
+    if provider.is_empty() {
+        return Err(AppError::Engine("请先选择供应商".to_string()));
+    }
+    let providers = document
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+        .ok_or_else(|| AppError::Engine("尚未配置 model_providers".to_string()))?;
+    let selected = providers
+        .get_mut(&provider)
+        .and_then(Item::as_table_mut)
+        .ok_or_else(|| AppError::Engine(format!("未找到供应商 {provider}")))?;
+    selected["experimental_bearer_token"] = value(api_key);
+    Ok(())
+}
+
+pub fn set_image_generation_api_key(
+    api_key: &str,
+    codex_running: bool,
+) -> Result<CodexConfigReport, AppError> {
+    let path = config_path()?;
+    let mut document = load_document(&path)?;
+    set_image_generation_api_key_in_document(&mut document, api_key)?;
+    write_verified(&path, &document.to_string())?;
+    report_for_path(&path, codex_running)
+}
+
+pub fn delete_image_generation_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError> {
+    let path = config_path()?;
+    let mut document = load_document(&path)?;
+    let provider = string_at(document.as_table(), "model_provider");
+    if let Some(selected) = document
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(&provider))
+        .and_then(Item::as_table_mut)
+    {
+        selected.remove("experimental_bearer_token");
+    }
+    write_verified(&path, &document.to_string())?;
+    report_for_path(&path, codex_running)
 }
 
 fn models_endpoint(base_url: &str) -> Result<url::Url, AppError> {
@@ -917,10 +984,16 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         if input.image_generation_compatibility {
             let headers = selected
                 .entry("http_headers")
-                .or_insert_with(|| Item::Value(toml_edit::Value::InlineTable(toml_edit::InlineTable::new())))
+                .or_insert_with(|| {
+                    Item::Value(toml_edit::Value::InlineTable(toml_edit::InlineTable::new()))
+                })
                 .as_value_mut()
                 .and_then(toml_edit::Value::as_inline_table_mut)
-                .ok_or_else(|| AppError::Engine(format!("model_providers.{provider}.http_headers 必须是内联表")))?;
+                .ok_or_else(|| {
+                    AppError::Engine(format!(
+                        "model_providers.{provider}.http_headers 必须是内联表"
+                    ))
+                })?;
             headers.insert(
                 "x-openai-actor-authorization",
                 toml_edit::Value::from(base_url.clone()),

@@ -59,6 +59,11 @@ const ZH_COPY = {
   credentials: "API 凭据",
   authFile: "凭据文件",
   apiKey: "API Key",
+  imageApiKey: "生图 API Key",
+  imageApiKeyPlaceholder: "输入当前供应商的生图 API Key",
+  imageApiKeyHint: "单独写入当前 provider 的 experimental_bearer_token，不会写入 auth.json。",
+  saveImageApiKey: "保存生图 API Key",
+  deleteImageApiKey: "删除生图 API Key",
   apiKeyPlaceholder: "输入新的 API Key",
   apiKeyConfigured: "已配置",
   apiKeyMissing: "未配置",
@@ -73,8 +78,8 @@ const ZH_COPY = {
   personality: "Personality",
   goalMode: "Goal Mode",
   disableResponseStorage: "禁用响应存储",
-  imageGenerationCompatibility: "第三方图像生成兼容",
-  imageGenerationCompatibilityHint: "为当前供应商关闭官方认证校验，并添加 Codex 图像输出所需请求头。API Key 仍保存在 auth.json。",
+  imageGenerationCompatibility: "第三方中转生图兼容模式",
+  imageGenerationCompatibilityHint: "为当前供应商关闭官方认证校验并添加 Codex 生图请求头。需要另行配置生图 API Key，修改后请重启 Codex。",
   executionAccess: "执行权限",
   approvalPolicy: "审批策略",
   sandboxMode: "沙箱模式",
@@ -140,6 +145,11 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   credentials: "API credentials",
   authFile: "Credential file",
   apiKey: "API Key",
+  imageApiKey: "Image generation API Key",
+  imageApiKeyPlaceholder: "Enter the image API Key for this provider",
+  imageApiKeyHint: "Stored as this provider's experimental_bearer_token, separately from auth.json.",
+  saveImageApiKey: "Save image API Key",
+  deleteImageApiKey: "Delete image API Key",
   apiKeyPlaceholder: "Enter a new API Key",
   apiKeyConfigured: "Configured",
   apiKeyMissing: "Not configured",
@@ -154,8 +164,8 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   personality: "Personality",
   goalMode: "Goal Mode",
   disableResponseStorage: "Disable response storage",
-  imageGenerationCompatibility: "Third-party image generation compatibility",
-  imageGenerationCompatibilityHint: "Disables official auth validation for this provider and adds the request header used by Codex image output. The API Key remains in auth.json.",
+  imageGenerationCompatibility: "Third-party relay image mode",
+  imageGenerationCompatibilityHint: "Disables official auth validation and adds the Codex image request header. Configure the image API Key separately, then restart Codex.",
   executionAccess: "Execution access",
   approvalPolicy: "Approval policy",
   sandboxMode: "Sandbox mode",
@@ -233,6 +243,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const [rawDraft, setRawDraft] = useState("");
   const [showSecrets, setShowSecrets] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [imageApiKey, setImageApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [modelsBaseUrl, setModelsBaseUrl] = useState<string | null>(null);
@@ -331,6 +342,15 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
       setApiKey("");
       setShowApiKey(false);
     }
+  };
+
+  const saveImageApiKey = async () => {
+    const saved = await run(
+      "image-api-key",
+      () => managerApi.codexConfigSetImageGenerationApiKey(imageApiKey),
+      report?.codexRunning ? copy.savedRunning : copy.apiKeySaved,
+    );
+    if (saved) setImageApiKey("");
   };
 
   const toggleMcp = (server: CodexMcpServer, enabled: boolean) => {
@@ -771,6 +791,43 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 >
                   <Icon name={busy === "api-key" ? "loader" : "shield"} />
                   {copy.saveApiKey}
+                </button>
+              </div>
+            </section>
+            <section className="config-auth" aria-label={copy.imageApiKey}>
+              <div className="config-auth-head">
+                <div className="config-auth-copy">
+                  <span className="config-eyebrow">{copy.imageApiKey}</span>
+                  <strong>{basic.provider || copy.newProvider}</strong>
+                  <span className="config-path">experimental_bearer_token</span>
+                </div>
+                <span className={`config-auth-status${report.imageGenerationApiKeyConfigured ? " configured" : ""}`}>
+                  <Icon name={report.imageGenerationApiKeyConfigured ? "check" : "alert"} />
+                  {report.imageGenerationApiKeyConfigured ? copy.apiKeyConfigured : copy.apiKeyMissing}
+                </span>
+              </div>
+              <label className="config-field">
+                <span>{copy.imageApiKey}</span>
+                <input
+                  className="input mono"
+                  type="password"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  value={imageApiKey}
+                  disabled={locked || !basic.provider}
+                  placeholder={copy.imageApiKeyPlaceholder}
+                  onChange={(event) => setImageApiKey(event.target.value)}
+                />
+              </label>
+              <div className="config-auth-meta"><span>{copy.imageApiKeyHint}</span></div>
+              <div className="config-actions config-actions-wrap">
+                {report.imageGenerationApiKeyConfigured ? (
+                  <button className="btn ghost danger" type="button" disabled={locked} onClick={() => void run("delete-image-api-key", () => managerApi.codexConfigDeleteImageGenerationApiKey(), copy.saved)}>
+                    <Icon name="trash" />{copy.deleteImageApiKey}
+                  </button>
+                ) : null}
+                <button className="btn primary" type="button" disabled={locked || !imageApiKey.trim() || !basic.provider} onClick={() => void saveImageApiKey()}>
+                  <Icon name={busy === "image-api-key" ? "loader" : "shield"} />{copy.saveImageApiKey}
                 </button>
               </div>
             </section>

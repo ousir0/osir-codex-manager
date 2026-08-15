@@ -2311,6 +2311,30 @@ pub fn codex_config_delete_api_key(
 }
 
 #[tauri::command]
+pub fn codex_config_set_image_generation_api_key(
+    state: State<'_, ManagerState>,
+    api_key: String,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::set_image_generation_api_key(
+        &api_key,
+        crate::app::codex_theme::codex_running(),
+    )
+    .map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn codex_config_delete_image_generation_api_key(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::delete_image_generation_api_key(
+        crate::app::codex_theme::codex_running(),
+    )
+    .map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn codex_config_upsert_mcp(
     state: State<'_, ManagerState>,
     input: crate::app::codex_config::CodexMcpServerInput,

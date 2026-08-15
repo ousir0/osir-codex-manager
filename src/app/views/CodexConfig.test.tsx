@@ -150,6 +150,7 @@ describe("Codex configuration manager", () => {
         sandboxMode: "danger-full-access",
         disableResponseStorage: true,
         goalMode: true,
+        imageGenerationCompatibility: false,
       }),
     );
   });

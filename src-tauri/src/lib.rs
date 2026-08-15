@@ -780,6 +780,8 @@ pub fn run() {
             commands::codex_config_save_basic,
             commands::codex_config_set_api_key,
             commands::codex_config_delete_api_key,
+            commands::codex_config_set_image_generation_api_key,
+            commands::codex_config_delete_image_generation_api_key,
             commands::codex_config_upsert_mcp,
             commands::codex_config_delete_mcp,
             commands::codex_config_restore_backup,
