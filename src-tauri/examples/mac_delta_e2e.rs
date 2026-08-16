@@ -49,7 +49,9 @@ fn main() -> ExitCode {
     // The vendored helper exactly as the release bundle ships it.
     let tool = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/BinaryDelta");
     if !tool.is_file() {
-        return fail("missing src-tauri/resources/BinaryDelta — run scripts/vendor-binary-delta.sh");
+        return fail(
+            "missing src-tauri/resources/BinaryDelta — run scripts/vendor-binary-delta.sh",
+        );
     }
 
     let report = match plan_macos_update(None) {
@@ -68,7 +70,11 @@ fn main() -> ExitCode {
     );
     println!(
         "plan: latest build {} ({}) | download {} B | full {} B | saves {:.1}%",
-        plan.latest_build, plan.latest_short_version, plan.download_size, plan.full_size, plan.savings_pct
+        plan.latest_build,
+        plan.latest_short_version,
+        plan.download_size,
+        plan.full_size,
+        plan.savings_pct
     );
 
     if plan.up_to_date {

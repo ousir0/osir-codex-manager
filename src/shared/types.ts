@@ -708,6 +708,7 @@ export interface CodexConfigReport {
   imageGenerationCompatibility?: boolean;
   imageGenerationApiKeyConfigured?: boolean;
   imageGenerationModel?: string;
+  imageGenerationBaseUrl?: string;
 }
 
 export interface CodexProviderProfile {

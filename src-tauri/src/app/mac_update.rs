@@ -2563,8 +2563,13 @@ pub fn launch_codex() -> Result<(), AppError> {
         &mut command,
         settings.disable_codex_self_updates,
     );
+    let pac_url = codex_win_engine::awai_i18n_proxy_pac_url();
     command
+        .args(["-n", "-a"])
         .arg(&installed.path)
+        .arg("--args")
+        .arg("--lang=zh-CN")
+        .arg(format!("--proxy-pac-url={pac_url}"))
         .spawn()
         .map(|_| ())
         .map_err(|e| {

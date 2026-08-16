@@ -85,13 +85,12 @@ Manager 不修改 Codex 应用包，不绕过 OpenAI 或 Microsoft 的授权与�
 |---|---|---|
 | Apple Silicon Mac | `CodexAppManager_aarch64.dmg` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg) |
 | Intel Mac | `CodexAppManager_x86_64.dmg` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | `CodexAppManager_x64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=20260815-logo) |
+| Windows x64 | `CodexAppManager_x64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=v0.5.3) |
 | Windows ARM64 | `CodexAppManager_arm64-setup.exe` | [下载](https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe) |
 
 镜像的 `/manager/latest/` 始终指向当前版本；需要精确历史版本时，请使用对应 GitHub
 Release 的 Assets。安装 Manager 后，Codex 本体由 Manager 负责安装与更新，不需要另找
-单独的 Codex 安装包。Windows 安装器内置 WebView2 Evergreen 离线运行时，首次安装不
-需要再从微软地址下载运行时。
+单独的 Codex 安装包。
 
 ### 安装前核验
 
@@ -264,15 +263,14 @@ for the public release record, or the fixed AWAI mirror links:
 |---|---|
 | Apple Silicon Mac | [CodexAppManager_aarch64.dmg](https://codexapp.awai.cc/manager/latest/CodexAppManager_aarch64.dmg) |
 | Intel Mac | [CodexAppManager_x86_64.dmg](https://codexapp.awai.cc/manager/latest/CodexAppManager_x86_64.dmg) |
-| Windows x64 | [CodexAppManager_x64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=20260815-logo) |
+| Windows x64 | [CodexAppManager_x64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_x64-setup.exe?build=v0.5.3) |
 | Windows ARM64 | [CodexAppManager_arm64-setup.exe](https://codexapp.awai.cc/manager/latest/CodexAppManager_arm64-setup.exe) |
 
 `/manager/latest/` always means the newest release. Use the matching GitHub Release Assets for
 an exact historical version. Verify `SHA256SUMS` before running an installer. Preview Windows
-installers include the WebView2 Evergreen offline runtime so first install does not need a
-Microsoft bootstrapper download. They may be unsigned by Authenticode; a Tauri updater signature
-authenticates update bytes, not Windows publisher identity. See the [code signing policy](docs/code-signing-policy.md)
-and [Windows signing guide](docs/windows-signing.md).
+installers may be unsigned by Authenticode; a Tauri updater signature authenticates update bytes,
+not Windows publisher identity. See the [code signing policy](docs/code-signing-policy.md) and
+[Windows signing guide](docs/windows-signing.md).
 
 ## Configuration and skins
 

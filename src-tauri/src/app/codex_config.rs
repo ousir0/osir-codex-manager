@@ -56,6 +56,7 @@ pub struct CodexConfigReport {
     pub image_generation_compatibility: bool,
     pub image_generation_api_key_configured: bool,
     pub image_generation_model: String,
+    pub image_generation_base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -426,9 +427,25 @@ fn separate_image_generation_model(config_path: &Path) -> String {
     fs::read_to_string(image_generation_key_path(config_path))
         .ok()
         .and_then(|raw| serde_json::from_str::<JsonMap<String, JsonValue>>(&raw).ok())
-        .and_then(|map| map.get("model").and_then(JsonValue::as_str).map(str::to_owned))
+        .and_then(|map| {
+            map.get("model")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned)
+        })
         .filter(|model| !model.trim().is_empty())
         .unwrap_or_else(|| "gpt-image-2".to_string())
+}
+
+fn separate_image_generation_base_url(config_path: &Path) -> String {
+    fs::read_to_string(image_generation_key_path(config_path))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<JsonMap<String, JsonValue>>(&raw).ok())
+        .and_then(|map| {
+            map.get("base_url")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned)
+        })
+        .unwrap_or_default()
 }
 
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
@@ -459,6 +476,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         image_compatibility,
         image_api_key_configured,
         image_model,
+        image_base_url,
     ) = match parsed {
         Ok(document) => {
             let provider = string_at(document.as_table(), "model_provider");
@@ -495,6 +513,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 image_compatibility,
                 image_api_key_configured,
                 separate_image_generation_model(path),
+                separate_image_generation_base_url(path),
             )
         }
         Err(error) => (
@@ -513,6 +532,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
             false,
             false,
             "gpt-image-2".to_string(),
+            String::new(),
         ),
     };
     Ok(CodexConfigReport {
@@ -540,11 +560,13 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         image_generation_compatibility: image_compatibility,
         image_generation_api_key_configured: image_api_key_configured,
         image_generation_model: image_model,
+        image_generation_base_url: image_base_url,
     })
 }
 
 pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
+    sync_image_generation_skills_if_configured(&path)?;
     report_for_path(&path, codex_running)
 }
 
@@ -667,6 +689,7 @@ pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError
 pub fn set_image_generation_api_key(
     api_key: &str,
     model: &str,
+    base_url: &str,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
     let api_key = checked_value(api_key, "生图 API Key")?;
@@ -674,11 +697,15 @@ pub fn set_image_generation_api_key(
         return Err(AppError::Engine("生图 API Key 不能为空".to_string()));
     }
     let model = checked_value(model, "生图模型")?;
-    let model = if model.is_empty() { "gpt-image-2" } else { model.as_str() };
+    let model = if model.is_empty() {
+        "gpt-image-2"
+    } else {
+        model.as_str()
+    };
     let path = config_path()?;
-    let base_url = report_for_path(&path, codex_running)?.base_url;
+    let base_url = checked_value(base_url, "生图 API Base URL")?;
     if base_url.trim().is_empty() {
-        return Err(AppError::Engine("请先配置生图 API Base URL".to_string()));
+        return Err(AppError::Engine("请填写生图 API Base URL".to_string()));
     }
     let key_path = image_generation_key_path(&path);
     if let Some(parent) = key_path.parent() {
@@ -781,19 +808,13 @@ fn curl_command() -> std::process::Command {
     }
 }
 
-pub fn fetch_models(base_url: &str) -> Result<Vec<String>, AppError> {
-    let config_path = config_path()?;
-    let auth = load_auth_object(&auth_path_for_config(&config_path))?;
-    let api_key = auth
-        .get("OPENAI_API_KEY")
-        .and_then(JsonValue::as_str)
-        .map(str::trim)
-        .filter(|key| !key.is_empty())
-        .ok_or_else(|| AppError::Engine("请先保存 API Key，再获取模型".to_string()))?;
+fn fetch_models_with_key(base_url: &str, api_key: &str) -> Result<Vec<String>, AppError> {
+    let api_key = api_key.trim();
+    if api_key.is_empty() {
+        return Err(AppError::Engine("请先保存 API Key，再获取模型".to_string()));
+    }
     if api_key.len() > MAX_API_KEY_LEN || api_key.chars().any(char::is_control) {
-        return Err(AppError::Engine(
-            "auth.json 中的 API Key 格式无效".to_string(),
-        ));
+        return Err(AppError::Engine("API Key 格式无效".to_string()));
     }
     let endpoint = models_endpoint(base_url)?;
     let mut command = curl_command();
@@ -836,6 +857,40 @@ pub fn fetch_models(base_url: &str) -> Result<Vec<String>, AppError> {
         )));
     }
     parse_models_response(&output.stdout)
+}
+
+pub fn fetch_models(base_url: &str) -> Result<Vec<String>, AppError> {
+    let config_path = config_path()?;
+    let auth = load_auth_object(&auth_path_for_config(&config_path))?;
+    let api_key = auth
+        .get("OPENAI_API_KEY")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .ok_or_else(|| AppError::Engine("请先保存 API Key，再获取模型".to_string()))?;
+    if api_key.len() > MAX_API_KEY_LEN || api_key.chars().any(char::is_control) {
+        return Err(AppError::Engine(
+            "auth.json 中的 API Key 格式无效".to_string(),
+        ));
+    }
+    fetch_models_with_key(base_url, api_key)
+}
+
+pub fn fetch_image_models() -> Result<Vec<String>, AppError> {
+    let path = config_path()?;
+    let raw = fs::read_to_string(image_generation_key_path(&path))
+        .map_err(|_| AppError::Engine("请先保存生图 API Key，再获取模型".to_string()))?;
+    let payload: JsonMap<String, JsonValue> =
+        serde_json::from_str(&raw).map_err(|_| AppError::Engine("独立生图配置无效".to_string()))?;
+    let base_url = payload
+        .get("base_url")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("");
+    let api_key = payload
+        .get("api_key")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("");
+    fetch_models_with_key(base_url, api_key)
 }
 
 /// Atomically write a validated config. Running Codex is allowed; the UI
@@ -916,19 +971,42 @@ fn install_image_generation_skill(config_path: &Path) -> Result<(), AppError> {
         .map_err(|error| AppError::Internal(format!("创建生图技能目录失败：{error}")))?;
     let skill = include_str!("../../resources/skills/imagegen-relay/SKILL.md");
     let script = include_str!("../../resources/skills/imagegen-relay/scripts/imagegen_relay.py");
+    let powershell =
+        include_str!("../../resources/skills/imagegen-relay/scripts/imagegen_relay.ps1");
     atomic_file::write_atomic(&skill_dir.join("SKILL.md"), skill.as_bytes())
         .map_err(|error| AppError::Internal(format!("安装生图技能说明失败：{error}")))?;
     atomic_file::write_atomic(&scripts_dir.join("imagegen_relay.py"), script.as_bytes())
         .map_err(|error| AppError::Internal(format!("安装生图技能脚本失败：{error}")))?;
+    atomic_file::write_atomic(
+        &scripts_dir.join("imagegen_relay.ps1"),
+        powershell.as_bytes(),
+    )
+    .map_err(|error| AppError::Internal(format!("安装 Windows 生图技能脚本失败：{error}")))?;
     install_ecommerce_skills(codex_home)?;
+    Ok(())
+}
+
+fn sync_image_generation_skills_if_configured(config_path: &Path) -> Result<(), AppError> {
+    if separate_image_generation_api_key_configured(config_path) {
+        install_image_generation_skill(config_path)?;
+    }
     Ok(())
 }
 
 fn install_ecommerce_skills(codex_home: &Path) -> Result<(), AppError> {
     let skills = [
-        ("ecom-single-image", include_str!("../../resources/skills/ecom-single-image/SKILL.md")),
-        ("ecom-five-hero-images", include_str!("../../resources/skills/ecom-five-hero-images/SKILL.md")),
-        ("ecom-detail-set", include_str!("../../resources/skills/ecom-detail-set/SKILL.md")),
+        (
+            "ecom-single-image",
+            include_str!("../../resources/skills/ecom-single-image/SKILL.md"),
+        ),
+        (
+            "ecom-five-hero-images",
+            include_str!("../../resources/skills/ecom-five-hero-images/SKILL.md"),
+        ),
+        (
+            "ecom-detail-set",
+            include_str!("../../resources/skills/ecom-detail-set/SKILL.md"),
+        ),
     ];
     for (name, body) in skills {
         let dir = codex_home.join("skills").join(name);
@@ -937,12 +1015,19 @@ fn install_ecommerce_skills(codex_home: &Path) -> Result<(), AppError> {
         atomic_file::write_atomic(&dir.join("SKILL.md"), body.as_bytes())
             .map_err(|error| AppError::Internal(format!("安装电商技能 {name} 失败：{error}")))?;
     }
-    let single_scripts = codex_home.join("skills").join("ecom-single-image").join("scripts");
+    let single_scripts = codex_home
+        .join("skills")
+        .join("ecom-single-image")
+        .join("scripts");
     fs::create_dir_all(&single_scripts)
         .map_err(|error| AppError::Internal(format!("创建电商生成脚本目录失败：{error}")))?;
-    let generator = include_str!("../../resources/skills/ecom-single-image/scripts/generate_image.py");
-    atomic_file::write_atomic(&single_scripts.join("generate_image.py"), generator.as_bytes())
-        .map_err(|error| AppError::Internal(format!("安装电商生成脚本失败：{error}")))?;
+    let generator =
+        include_str!("../../resources/skills/ecom-single-image/scripts/generate_image.py");
+    atomic_file::write_atomic(
+        &single_scripts.join("generate_image.py"),
+        generator.as_bytes(),
+    )
+    .map_err(|error| AppError::Internal(format!("安装电商生成脚本失败：{error}")))?;
 
     let template_dir = codex_home
         .join("skills")
@@ -1143,15 +1228,6 @@ pub fn save_basic(
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
     write_verified(&path, &document.to_string())?;
-    let provider = string_at(document.as_table(), "model_provider");
-    let base_url = document
-        .get("model_providers")
-        .and_then(Item::as_table)
-        .and_then(|providers| providers.get(&provider))
-        .and_then(Item::as_table)
-        .map(|table| string_at(table, "base_url"))
-        .unwrap_or_default();
-    sync_image_generation_base_url(&path, &base_url)?;
     report_for_path(&path, codex_running)
 }
 
@@ -1476,6 +1552,34 @@ requires_openai_auth = true
                 0o600
             );
         }
+    }
+
+    #[test]
+    fn configured_image_skills_are_refreshed_from_bundled_resources() {
+        let config_path = test_path("image-skill-refresh");
+        let key_path = image_generation_key_path(&config_path);
+        fs::write(
+            &key_path,
+            r#"{"base_url":"https://api.awai.cc/v1","api_key":"secret"}"#,
+        )
+        .unwrap();
+        let scripts_dir = config_path
+            .parent()
+            .unwrap()
+            .join("skills")
+            .join("imagegen-relay")
+            .join("scripts");
+        fs::create_dir_all(&scripts_dir).unwrap();
+        fs::write(scripts_dir.join("imagegen_relay.ps1"), "old script").unwrap();
+
+        sync_image_generation_skills_if_configured(&config_path).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(scripts_dir.join("imagegen_relay.ps1")).unwrap(),
+            include_str!("../../resources/skills/imagegen-relay/scripts/imagegen_relay.ps1")
+        );
+        let payload: JsonValue = serde_json::from_slice(&fs::read(key_path).unwrap()).unwrap();
+        assert_eq!(payload["api_key"], "secret");
     }
 
     #[test]

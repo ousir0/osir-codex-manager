@@ -35,22 +35,64 @@ pub struct InstalledWindowsCodex {
     pub installed_at: Option<u64>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LaunchOptions {
     pub disable_codex_self_updates: bool,
     /// Start Electron's loopback DevTools endpoint for renderer theme injection.
     /// `None` preserves the ordinary launch path.
     pub remote_debugging_port: Option<u16>,
+    /// Optional Chromium PAC URL. The manager uses this to route the one
+    /// i18n bootstrap host through AWAI while leaving every other host direct.
+    pub proxy_pac_url: Option<String>,
 }
 
 const CODEX_SELF_UPDATE_ENV_KEY: &str = "CODEX_SPARKLE_ENABLED";
 const CODEX_SELF_UPDATE_ENV_DISABLED: &str = "false";
+/// The Codex desktop shell negotiates its UI locale from Chromium's launch
+/// language. Windows can report Chinese spellcheck preferences while the
+/// renderer still starts as English, so pass the locale explicitly for every
+/// manager-owned launch.
+const CODEX_UI_LANGUAGE: &str = "zh-CN";
 
-fn remote_debugging_arguments(port: u16) -> [String; 2] {
-    [
+/// Keep the relay window bounded. PAC cannot observe the encrypted Statsig
+/// response, so this is a time limit rather than a false "success" signal.
+const AWAI_I18N_RELAY_WINDOW_SECONDS: u64 = 10 * 60;
+
+pub fn awai_i18n_proxy_pac_url() -> String {
+    let port = super::i18n_proxy::ensure_started().unwrap_or(0);
+    if port == 0 {
+        return String::new();
+    }
+    super::i18n_proxy::pac_url(port)
+}
+
+fn awai_i18n_proxy_pac_url_for_port(port: u16) -> String {
+    let deadline_ms = std::time::SystemTime::now()
+        .checked_add(std::time::Duration::from_secs(
+            AWAI_I18N_RELAY_WINDOW_SECONDS,
+        ))
+        .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|value| value.as_millis())
+        .unwrap_or_default();
+    format!(
+        "data:application/x-javascript-config,var%20awaiRelayUntil%3D{deadline_ms}%3Bfunction%20FindProxyForURL(url%2Chost)%7Bif(Date.now()%3CawaiRelayUntil%20%26%26%20host.toLowerCase()%3D%3D%3D%22ab.chatgpt.com%22)return%20%22PROXY%20127.0.0.1%3A{port}%3BDIRECT%22%3Breturn%20%22DIRECT%22%3B%7D"
+    )
+}
+
+fn codex_language_argument() -> String {
+    format!("--lang={CODEX_UI_LANGUAGE}")
+}
+
+fn remote_debugging_arguments(port: u16, proxy_pac_url: Option<&str>) -> Vec<String> {
+    let mut arguments = vec![
         "--remote-debugging-address=127.0.0.1".to_string(),
         format!("--remote-debugging-port={port}"),
-    ]
+        codex_language_argument(),
+    ];
+    if let Some(proxy_pac_url) = proxy_pac_url {
+        arguments.push(format!("--proxy-pac-url={proxy_pac_url}"));
+    }
+    arguments
 }
 
 #[derive(Debug, Deserialize)]
@@ -1994,7 +2036,15 @@ pub fn launch_codex_with_options(
             command.env(CODEX_SELF_UPDATE_ENV_KEY, CODEX_SELF_UPDATE_ENV_DISABLED);
         }
         if let Some(port) = options.remote_debugging_port {
-            command.args(remote_debugging_arguments(port));
+            command.args(remote_debugging_arguments(
+                port,
+                options.proxy_pac_url.as_deref(),
+            ));
+        } else {
+            command.arg(codex_language_argument());
+            if let Some(proxy_pac_url) = options.proxy_pac_url.as_deref() {
+                command.arg(format!("--proxy-pac-url={proxy_pac_url}"));
+            }
         }
         match spawn_and_require_liveness(command, PORTABLE_LIVENESS_WINDOW) {
             Ok(LivenessResult::Survived { child }) => {
@@ -2015,10 +2065,16 @@ pub fn launch_codex_with_options(
             );
         }
         if let Some(port) = options.remote_debugging_port {
-            let arguments = remote_debugging_arguments(port).join(" ");
+            let arguments =
+                remote_debugging_arguments(port, options.proxy_pac_url.as_deref()).join(" ");
             launch_msix_app_with_arguments(installed, &arguments)
         } else {
-            launch_msix_app()
+            let mut arguments = vec![codex_language_argument()];
+            if let Some(proxy_pac_url) = options.proxy_pac_url.as_deref() {
+                arguments.push(format!("--proxy-pac-url={proxy_pac_url}"));
+            }
+            let arguments = arguments.join(" ");
+            launch_msix_app_with_arguments(installed, &arguments)
         }
     }
 }
@@ -2382,18 +2438,37 @@ mod tests {
     #[cfg(windows)]
     use super::*;
     use super::{
-        parse_registered_msix_package_full_name, registered_msix_aumid, remote_debugging_arguments,
+        codex_language_argument, parse_registered_msix_package_full_name, registered_msix_aumid,
+        remote_debugging_arguments,
     };
 
     #[test]
+    fn manager_launches_codex_with_simplified_chinese_locale() {
+        assert_eq!(codex_language_argument(), "--lang=zh-CN");
+    }
+
+    #[test]
     fn builds_loopback_remote_debugging_arguments() {
+        let pac = super::awai_i18n_proxy_pac_url_for_port(19443);
         assert_eq!(
-            remote_debugging_arguments(9345),
-            [
+            remote_debugging_arguments(9345, Some(&pac)),
+            vec![
                 "--remote-debugging-address=127.0.0.1".to_string(),
                 "--remote-debugging-port=9345".to_string(),
+                "--lang=zh-CN".to_string(),
+                format!("--proxy-pac-url={pac}"),
             ]
         );
+    }
+
+    #[test]
+    fn i18n_pac_routes_only_the_statsig_host_and_falls_back_direct() {
+        let pac = super::awai_i18n_proxy_pac_url_for_port(19443);
+        assert!(pac.contains("ab.chatgpt.com"));
+        assert!(pac.contains("127.0.0.1%3A19443%3BDIRECT"));
+        assert!(pac.contains("return%20%22DIRECT%22"));
+        assert!(pac.contains("Date.now()%3CawaiRelayUntil"));
+        assert!(!pac.contains("%3D%3D%3D%22chatgpt.com%22"));
     }
 
     #[test]

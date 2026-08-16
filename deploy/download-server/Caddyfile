@@ -1,0 +1,33 @@
+# Static origin for codexapp.awai.cc.
+# The site lives under /srv/awai/site; release artifacts live under
+# /srv/awai/latest and /srv/awai/manager.
+
+codexapp.awai.cc {
+    encode gzip
+
+    handle /i18n-tunnel {
+        reverse_proxy 127.0.0.1:3130
+    }
+
+    @metadata path /latest/manifest /latest/checksums /latest/appcast.xml /latest/appcast-x64.xml /manager/latest.json
+    header @metadata Cache-Control "no-store"
+
+    @artifacts path /latest/win /latest/win-* /latest/mac-* /manager/*
+    header @artifacts Cache-Control "public, max-age=3600"
+
+    handle /latest/* {
+        root * /srv/awai
+        file_server
+    }
+
+    handle /manager/* {
+        root * /srv/awai
+        file_server
+    }
+
+    handle {
+        root * /srv/awai/site
+        try_files {path} /index.html
+        file_server
+    }
+}

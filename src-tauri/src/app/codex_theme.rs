@@ -556,7 +556,7 @@ pub fn resolve_theme_for_keep(settings: &AppSettings, theme_ref: &str) -> Result
 
 const SKINS_BASES: &[&str] = &[
     "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main",
-    "https://gitee.com/qq501987849/codex-app-manager-skins/raw/master",
+    "https://gitee.com/qq501987849/codex-app-manager-skins/raw/main",
 ];
 const CATALOG_MAX_BYTES: &str = "1048576"; // 1 MB index.json cap
 const PACK_MAX_BYTES: &str = "52428800"; // 50 MB archive cap (importer re-checks)
@@ -1576,6 +1576,11 @@ fn launch_codex_with_cdp(
         .arg("--args")
         .arg("--remote-debugging-address=127.0.0.1")
         .arg(format!("--remote-debugging-port={port}"))
+        .arg("--lang=zh-CN")
+        .arg(format!(
+            "--proxy-pac-url={}",
+            codex_win_engine::awai_i18n_proxy_pac_url()
+        ))
         .spawn()
         .map(|_| ())
         .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
@@ -1648,6 +1653,7 @@ fn launch_codex_with_cdp(
         codex_win_engine::LaunchOptions {
             disable_codex_self_updates: disable_self_updates,
             remote_debugging_port: Some(port),
+            proxy_pac_url: Some(codex_win_engine::awai_i18n_proxy_pac_url()),
         },
     )
     .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))

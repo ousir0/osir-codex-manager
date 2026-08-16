@@ -56,10 +56,6 @@ import { ProgressScreen, type PausedDownload } from "./ProgressScreen";
 import { useDownloadProgress } from "./useDownloadProgress";
 import { useFocusRecheck, installIdentity } from "./useFocusRecheck";
 import { useOperationReattach } from "./useOperationReattach";
-import {
-  InstallOtherVersionEntry,
-  InstallOtherVersionSheet,
-} from "./InstallOtherVersion";
 
 type Kind =
   "loading" | "error" | "none" | "idle" | "update" | "external" | "uptodate";
@@ -151,7 +147,6 @@ export function WinHome({
     useState<ProvenanceRecovery | null>(readStoredProvenanceRecovery);
   const provenanceRecoveryPending = provenanceRecovery !== null;
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [otherVersionOpen, setOtherVersionOpen] = useState(false);
   const [installDirOpen, setInstallDirOpen] = useState(false);
   const [installDirBusy, setInstallDirBusy] = useState(false);
   const [pendingHistoricalInstall, setPendingHistoricalInstall] =
@@ -284,7 +279,6 @@ export function WinHome({
         const next = await managerApi.winStatus();
         if (canApply()) {
           setStatus(next);
-          if (next.status === "external") setOtherVersionOpen(false);
           setStatusFailed(false);
         }
         return next;
@@ -492,7 +486,6 @@ export function WinHome({
       setStatus(st);
       setStatusLoaded(true);
       setStatusFailed(false);
-      if (st.status === "external") setOtherVersionOpen(false);
     },
     hasChecked: () => reportRef.current != null,
     checkedIdentity: () =>
@@ -500,9 +493,9 @@ export function WinHome({
     identityOf: (st) => installIdentity(st.installed ?? null, normalizePath),
     isBusy: () => busyRef.current != null,
     onIdentityChanged: () => {
-      // Drop EVERY sheet built for the OLD target before re-checking: the
-      // confirm sheet, version picker, fresh-install location sheet, and manual
-      // existing-install picker. Any of them could otherwise let a click run
+      // Drop every sheet built for the old target before re-checking: the
+      // confirm sheet, fresh-install location sheet, and manual existing-install
+      // picker. Any of them could otherwise let a click run
       // install/perform against a snapshot the user never saw — bypassing the
       // freshly-refreshed external→adopt boundary. The user re-confirms against
       // the re-checked card.
@@ -510,7 +503,6 @@ export function WinHome({
       setInstallDirOpen(false);
       setPendingHistoricalInstall(null);
       setManualExistingOpen(false);
-      setOtherVersionOpen(false);
       setManualExistingCandidate(null);
       void check();
     },
@@ -809,7 +801,6 @@ export function WinHome({
         // Always collect the fallback destination up front. A successful MSIX
         // sideload simply ignores it; an offline or dynamically-rerouted portable
         // install already has the user's explicit destination.
-        setOtherVersionOpen(false);
         setPendingHistoricalInstall({ selection, blockUpdates, expectation });
         setInstallDirOpen(true);
         return;
@@ -818,7 +809,6 @@ export function WinHome({
       const generation = beginOperation(mode);
       const fromVersion = expectation.currentVersion ?? "";
       resetStop();
-      setOtherVersionOpen(false);
       setInstallDirOpen(false);
       setPendingHistoricalInstall(null);
       setActionError(null);
@@ -1406,8 +1396,7 @@ export function WinHome({
         inert={
           confirmOpen ||
           installDirOpen ||
-          manualExistingOpen ||
-          otherVersionOpen
+          manualExistingOpen
             ? true
             : undefined
         }
@@ -1722,18 +1711,6 @@ export function WinHome({
           ) : null}
         </div>
 
-        {!rechecking &&
-        !provenanceRecoveryPending &&
-        !statusFailed &&
-        (kind === "none" ||
-          kind === "error" ||
-          (installed && kind !== "external")) ? (
-          <InstallOtherVersionEntry
-            disabled={busy !== null}
-            onOpen={() => setOtherVersionOpen(true)}
-          />
-        ) : null}
-
         {!rechecking && kind === "none" ? (
           <div className="manual-existing-entry">
             <button
@@ -1800,20 +1777,6 @@ export function WinHome({
           </button>
         </div>
       </Sheet>
-
-      <InstallOtherVersionSheet
-        open={otherVersionOpen}
-        platform="windows"
-        currentVersion={installed?.version ?? null}
-        architecture={
-          hostArchitecture ??
-          installed?.arch ??
-          report?.release.architecture ??
-          null
-        }
-        onDismiss={() => setOtherVersionOpen(false)}
-        onInstall={runHistoricalInstall}
-      />
 
       <Sheet
         open={installDirOpen}

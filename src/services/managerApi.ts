@@ -1405,6 +1405,10 @@ export const managerApi = {
     }
     return invoke<string[]>("codex_config_fetch_models", { baseUrl });
   },
+  codexConfigFetchImageModels(): Promise<string[]> {
+    if (!hasTauriRuntime()) return Promise.resolve(["gpt-image-2"]);
+    return invoke<string[]>("codex_config_fetch_image_models");
+  },
   codexConfigValidate(raw: string): Promise<CodexConfigValidation> {
     if (!hasTauriRuntime()) {
       const invalid = raw.includes("model = [") || raw.includes("[broken");
@@ -1462,11 +1466,11 @@ export const managerApi = {
     }
     return invoke<CodexConfigReport>("codex_config_delete_api_key");
   },
-  codexConfigSetImageGenerationApiKey(apiKey: string, model: string): Promise<CodexConfigReport> {
+  codexConfigSetImageGenerationApiKey(apiKey: string, model: string, baseUrl: string): Promise<CodexConfigReport> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: Boolean(apiKey.trim()), imageGenerationModel: model }));
+      return Promise.resolve(browserConfigReport({ imageGenerationApiKeyConfigured: Boolean(apiKey.trim()), imageGenerationModel: model, imageGenerationBaseUrl: baseUrl }));
     }
-    return invoke<CodexConfigReport>("codex_config_set_image_generation_api_key", { apiKey, model });
+    return invoke<CodexConfigReport>("codex_config_set_image_generation_api_key", { apiKey, model, baseUrl });
   },
   codexConfigDeleteImageGenerationApiKey(): Promise<CodexConfigReport> {
     if (!hasTauriRuntime()) {

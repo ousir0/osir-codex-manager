@@ -2197,6 +2197,7 @@ pub fn launch_codex(settings: &AppSettings) -> Result<(), AppError> {
         codex_win_engine::LaunchOptions {
             disable_codex_self_updates: settings.disable_codex_self_updates,
             remote_debugging_port: None,
+            proxy_pac_url: Some(codex_win_engine::awai_i18n_proxy_pac_url()),
         },
     )
     .map_err(|e| AppError::Engine(e.to_string()))

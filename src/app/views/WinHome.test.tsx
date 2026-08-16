@@ -235,8 +235,8 @@ describe("WinHome state machine", () => {
       await screen.findByRole("button", { name: /安装 Codex/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /选择安装版本/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /选择安装版本/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("signs the perform expectation from the SAME report snapshot it shows", async () => {
@@ -305,122 +305,6 @@ describe("WinHome state machine", () => {
         "resumed-ordinary-win",
         "install",
       ),
-    );
-  });
-
-  it("routes a selected GitHub MSIX through the tracked downgrade installer", async () => {
-    api.historicalReleaseCatalog.mockResolvedValue({
-      repository: "Wangnov/codex-app-mirror",
-      platform: "windows",
-      architecture: "x64",
-      releases: [
-        {
-          tag: "codex-app-0.9.0",
-          version: "0.9.0",
-          publishedAt: "2026-01-01T00:00:00Z",
-          assets: [
-            {
-              name: "OpenAI.Codex_0.9.0.0_x64__2p2nqsd0c76g0.Msix",
-              size: 2048,
-              architecture: "x64",
-              format: "msix",
-              packageVersion: "0.9.0.0",
-            },
-          ],
-        },
-      ],
-    });
-    api.winInstallHistoricalRelease.mockResolvedValue({
-      ...PERFORM_OK,
-      installed: { ...INSTALLED, version: "0.9.0" },
-      stage: {
-        ...PERFORM_OK.stage,
-        latestVersion: "0.9.0",
-        packageMoniker: "OpenAI.Codex_0.9.0.0_x64__2p2nqsd0c76g0",
-      },
-    });
-    const user = userEvent.setup();
-    renderWinHome();
-
-    await user.click(
-      await screen.findByRole("button", { name: /选择安装版本/ }),
-    );
-    await user.click(await screen.findByRole("button", { name: /0\.9\.0/ }));
-    await user.click(screen.getByRole("button", { name: /下载并安装/ }));
-
-    await waitFor(() =>
-      expect(api.winInstallHistoricalRelease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          releaseTag: "codex-app-0.9.0",
-          assetName: "OpenAI.Codex_0.9.0.0_x64__2p2nqsd0c76g0.Msix",
-          format: "msix",
-          packageVersion: "0.9.0.0",
-        }),
-        true,
-        {
-          currentPath: INSTALLED.path,
-          currentVersion: INSTALLED.version,
-          currentSource: INSTALLED.source,
-        },
-        "win-op-1",
-        undefined,
-      ),
-    );
-    expect(api.armDestructive).toHaveBeenCalledWith("update");
-  });
-
-  it("collects a fallback destination and uses an install token for a fresh historical MSIX", async () => {
-    api.getSettings.mockResolvedValue(settings({ checkOnStartup: false }));
-    api.winStatus.mockResolvedValue({ installed: null, status: "none" });
-    api.historicalReleaseCatalog.mockResolvedValue({
-      repository: "Wangnov/codex-app-mirror",
-      platform: "windows",
-      architecture: "x64",
-      releases: [
-        {
-          tag: "codex-app-0.9.0",
-          version: "0.9.0",
-          publishedAt: "2026-01-01T00:00:00Z",
-          assets: [
-            {
-              name: "OpenAI.Codex_0.9.0.0_x64__2p2nqsd0c76g0.Msix",
-              size: 2048,
-              architecture: "x64",
-              format: "msix",
-              packageVersion: "0.9.0.0",
-            },
-          ],
-        },
-      ],
-    });
-    api.winInstallHistoricalRelease.mockResolvedValue({
-      ...PERFORM_OK,
-      installed: { ...INSTALLED, version: "0.9.0" },
-    });
-    const user = userEvent.setup();
-    renderWinHome();
-
-    await user.click(
-      await screen.findByRole("button", { name: /选择安装版本/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "x64" }));
-    await user.click(await screen.findByRole("button", { name: /0\.9\.0/ }));
-    await user.click(screen.getByRole("button", { name: /下载并安装/ }));
-
-    expect(await screen.findByText("选择安装位置")).toBeInTheDocument();
-    expect(api.winInstallHistoricalRelease).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: /安装到默认位置/ }));
-
-    await waitFor(() =>
-      expect(api.beginTrackedOperation).toHaveBeenCalledWith("install"),
-    );
-    expect(api.armDestructive).not.toHaveBeenCalledWith("install");
-    expect(api.winInstallHistoricalRelease).toHaveBeenCalledWith(
-      expect.objectContaining({ releaseTag: "codex-app-0.9.0" }),
-      true,
-      { currentPath: null, currentVersion: null, currentSource: null },
-      "win-install-op-1",
-      DEFAULT_SETTINGS.installRoot,
     );
   });
 
@@ -506,116 +390,6 @@ describe("WinHome state machine", () => {
         },
         "resumed-historical-win",
         "D:\\Fallback\\Codex",
-      ),
-    );
-  });
-
-  it("asks for a destination before a fresh portable historical install", async () => {
-    api.getSettings.mockResolvedValue(
-      settings({ checkOnStartup: false, windowsInstallMode: "portable" }),
-    );
-    api.winStatus.mockResolvedValue({ installed: null, status: "none" });
-    api.historicalReleaseCatalog.mockResolvedValue({
-      repository: "Wangnov/codex-app-mirror",
-      platform: "windows",
-      architecture: "x64",
-      releases: [
-        {
-          tag: "codex-app-0.9.0",
-          version: "0.9.0",
-          publishedAt: "2026-01-01T00:00:00Z",
-          assets: [
-            {
-              name: "OpenAI.Codex_0.9.0.0_x64__2p2nqsd0c76g0.Msix",
-              size: 2048,
-              architecture: "x64",
-              format: "msix",
-              packageVersion: "0.9.0.0",
-            },
-          ],
-        },
-      ],
-    });
-    api.winInstallHistoricalRelease.mockResolvedValue({
-      ...PERFORM_OK,
-      installed: { ...INSTALLED, version: "0.9.0" },
-    });
-    const user = userEvent.setup();
-    renderWinHome();
-
-    await user.click(
-      await screen.findByRole("button", { name: /选择安装版本/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "x64" }));
-    await user.click(await screen.findByRole("button", { name: /0\.9\.0/ }));
-    await user.click(screen.getByRole("button", { name: /下载并安装/ }));
-
-    expect(await screen.findByText("选择安装位置")).toBeInTheDocument();
-    expect(api.winInstallHistoricalRelease).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: /安装到默认位置/ }));
-    await waitFor(() =>
-      expect(api.winInstallHistoricalRelease).toHaveBeenCalledWith(
-        expect.objectContaining({ releaseTag: "codex-app-0.9.0" }),
-        true,
-        { currentPath: null, currentVersion: null, currentSource: null },
-        "win-install-op-1",
-        DEFAULT_SETTINGS.installRoot,
-      ),
-    );
-  });
-
-  it("installs a local MSIX without consulting the failed online plan again", async () => {
-    api.winStatus.mockResolvedValue({ installed: null, status: "none" });
-    api.winPlanUpdate.mockRejectedValue(new Error("manifest unreachable"));
-    api.historicalReleaseCatalog.mockRejectedValue(
-      new Error("github unreachable"),
-    );
-    const assetName = "OpenAI.Codex_26.727.6591.0_x64__2p2nqsd0c76g0.Msix";
-    api.historicalPickLocalPackage.mockResolvedValue({
-      path: `C:\\Downloads\\${assetName}`,
-      fileName: assetName,
-      size: 755_000_000,
-      releaseTag: "local-signed-26.727.51351",
-      version: "26.727.51351",
-      assetName,
-      architecture: "x64",
-      format: "msix",
-      packageVersion: "26.727.6591.0",
-    });
-    api.winInstallHistoricalRelease.mockResolvedValue({
-      ...PERFORM_OK,
-      installed: { ...INSTALLED, version: "26.727.51351" },
-    });
-    const user = userEvent.setup();
-    renderWinHome();
-
-    expect(await screen.findByText("检查失败")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /选择安装版本/ }));
-    await user.click(screen.getByRole("button", { name: "x64" }));
-    expect(
-      await screen.findByRole("button", { name: /从本地安装包安装/ }),
-    ).toBeEnabled();
-    expect(api.winPlanUpdate).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByRole("button", { name: /从本地安装包安装/ }));
-    await user.click(await screen.findByRole("button", { name: /验证并安装/ }));
-
-    expect(await screen.findByText("选择安装位置")).toBeInTheDocument();
-    expect(api.winPlanUpdate).toHaveBeenCalledTimes(1);
-    expect(api.winInstallHistoricalRelease).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: /安装到默认位置/ }));
-    await waitFor(() =>
-      expect(api.winInstallHistoricalRelease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          releaseTag: "local-signed-26.727.51351",
-          localPath: `C:\\Downloads\\${assetName}`,
-        }),
-        true,
-        { currentPath: null, currentVersion: null, currentSource: null },
-        "win-install-op-1",
-        DEFAULT_SETTINGS.installRoot,
       ),
     );
   });
@@ -1249,39 +1023,6 @@ describe("WinHome state machine", () => {
     // bypassing the external→adopt boundary.
     await waitFor(() =>
       expect(screen.queryByText("选择安装位置")).not.toBeInTheDocument(),
-    );
-  });
-
-  it("closes the version picker when a focus re-check finds the install drifted", async () => {
-    const user = userEvent.setup();
-    let onFocus: (() => void) | undefined;
-    vi.mocked(listen).mockImplementation((event: string, cb: unknown) => {
-      if (event === "tauri://focus") onFocus = cb as () => void;
-      return Promise.resolve(() => {});
-    });
-    renderWinHome();
-
-    await user.click(
-      await screen.findByRole("button", { name: /选择安装版本/ }),
-    );
-    expect(
-      await screen.findByRole("dialog", { name: "选择安装版本" }),
-    ).toBeInTheDocument();
-
-    api.winStatus.mockResolvedValue({
-      installed: INSTALLED,
-      status: "external",
-    });
-    await waitFor(() => expect(onFocus).toBeDefined());
-    await act(async () => {
-      onFocus?.();
-      await Promise.resolve();
-    });
-
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "选择安装版本" }),
-      ).not.toBeInTheDocument(),
     );
   });
 

@@ -5,6 +5,12 @@ src-tauri/target/
 src-tauri/gen/schemas/
 __pycache__/
 .devserver/
+.tmp-pkgconfig/
+graphify-out/
+preview-builds/
+previews/
+*.Zone.Identifier
+*:Zone.Identifier
 
 .DS_Store
 *.log

@@ -26,8 +26,14 @@
 请求可能经过系统代理、用户配置的代理或直连。网络服务通常会看到 IP、时间、路径、
 User-Agent、状态码和安全日志；这些是服务端正常运行所需的元数据，不是项目应用层遥测。
 
-Windows 安装器包含 WebView2 Evergreen 离线安装器。系统已有可用 WebView2 Runtime 时不会
-重复安装；没有 Runtime 时也不需要临时访问 Microsoft 的 bootstrapper 地址。
+Windows 由 Manager 启动 Codex 时，实验性中文本地化分流会给 Chromium 注入 PAC：只有
+`ab.chatgpt.com:443` 会尝试经过 `codexapp.awai.cc:443` 的 AWAI 受限 CONNECT 中继，
+其他主机仍然直连；中继只转发加密字节，不解密、不读取 JSON，且目标不是该主机时拒绝。
+中继不可用时 PAC 会回退直连。这不是通用代理，也不能保证 ChatGPT 登录路径中
+`chatgpt.com` 的首次云控请求被覆盖；用户可在 Manager 日志中核对实际网络错误。
+
+Windows 安装器在系统没有可用 WebView2 Runtime 时，可能访问 Microsoft 的 bootstrapper
+地址；已有 Runtime 的系统不会重复下载。
 
 ## 本地保存的数据
 

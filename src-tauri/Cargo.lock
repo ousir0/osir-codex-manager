@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "codex-app-manager"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "base64 0.23.0",
  "codex-mac-engine",
@@ -605,12 +605,16 @@ dependencies = [
 name = "codex-win-engine"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "log",
  "roxmltree",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite",
  "uuid",
  "windows 0.62.2",
  "windows-sys 0.61.2",
@@ -4506,7 +4510,11 @@ checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
 ]
 
@@ -4760,6 +4768,8 @@ dependencies = [
  "httparse",
  "log",
  "rand",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.19",
 ]

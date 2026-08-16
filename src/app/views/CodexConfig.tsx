@@ -63,6 +63,8 @@ const ZH_COPY = {
   imageApiKeyPlaceholder: "输入独立图片 API Key",
   imageApiKeyHint: "保存到 ~/.codex/imagegen-relay.json，并自动安装 imagegen-relay 技能；不会写入 config.toml。",
   imageModel: "生图模型",
+  imageBaseUrl: "生图 API Base URL",
+  fetchImageModels: "获取生图模型",
   imageModelPlaceholder: "默认 gpt-image-2；可点击获取模型后选择",
   saveImageApiKey: "保存并安装技能",
   deleteImageApiKey: "删除生图 API Key",
@@ -151,6 +153,8 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   imageApiKeyPlaceholder: "Enter the independent image API Key",
   imageApiKeyHint: "Saved to ~/.codex/imagegen-relay.json and installs the imagegen-relay skill; config.toml is untouched.",
   imageModel: "Image model",
+  imageBaseUrl: "Image API Base URL",
+  fetchImageModels: "Fetch image models",
   imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose",
   saveImageApiKey: "Save and install skill",
   deleteImageApiKey: "Delete image API Key",
@@ -249,6 +253,8 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [imageApiKey, setImageApiKey] = useState("");
   const [imageModel, setImageModel] = useState("gpt-image-2");
+  const [imageBaseUrl, setImageBaseUrl] = useState("");
+  const [imageModels, setImageModels] = useState<string[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [modelsBaseUrl, setModelsBaseUrl] = useState<string | null>(null);
@@ -262,6 +268,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const applyReport = useCallback((next: CodexConfigReport) => {
     setReport(next);
     setImageModel(next.imageGenerationModel || "gpt-image-2");
+    setImageBaseUrl(next.imageGenerationBaseUrl || "");
     setBasic({
       model: next.model || "gpt-5.6-sol",
       provider: next.provider,
@@ -335,6 +342,21 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const fetchImageModels = async () => {
+    setBusy("image-models");
+    setError(null);
+    setNotice(null);
+    try {
+      const fetched = await managerApi.codexConfigFetchImageModels();
+      setImageModels(fetched);
+      setNotice(copy.modelsFetched.replace("{count}", String(fetched.length)));
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const saveMcp = (input: CodexMcpServerInput) =>
     run("mcp", () => managerApi.codexConfigUpsertMcp(input), report?.codexRunning ? copy.savedRunning : copy.saved);
 
@@ -353,7 +375,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const saveImageApiKey = async () => {
     const saved = await run(
       "image-api-key",
-      () => managerApi.codexConfigSetImageGenerationApiKey(imageApiKey, imageModel),
+      () => managerApi.codexConfigSetImageGenerationApiKey(imageApiKey, imageModel, imageBaseUrl),
       report?.codexRunning ? copy.savedRunning : copy.apiKeySaved,
     );
     if (saved) setImageApiKey("");
@@ -804,7 +826,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
               <div className="config-auth-head">
                 <div className="config-auth-copy">
                   <span className="config-eyebrow">{copy.imageApiKey}</span>
-                  <strong>{basic.provider || copy.newProvider}</strong>
+                  <strong>{imageBaseUrl || copy.imageApiKey}</strong>
                   <span className="config-path">~/.codex/imagegen-relay.json</span>
                 </div>
                 <span className={`config-auth-status${report.imageGenerationApiKeyConfigured ? " configured" : ""}`}>
@@ -813,20 +835,36 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 </span>
               </div>
               <label className="config-field">
-                <span>{copy.imageModel}</span>
+                <span>{copy.imageBaseUrl}</span>
                 <input
                   className="input mono"
-                  value={imageModel}
-                  disabled={locked || !basic.provider}
-                  list="image-model-options"
-                  placeholder={copy.imageModelPlaceholder}
-                  onChange={(event) => setImageModel(event.target.value)}
+                  inputMode="url"
+                  value={imageBaseUrl}
+                  disabled={locked}
+                  placeholder="https://api.example.com/v1"
+                  onChange={(event) => setImageBaseUrl(event.target.value)}
                 />
+              </label>
+              <div className="config-field">
+                <span>{copy.imageModel}</span>
+                <div className="config-model-control">
+                  {imageModels.length ? (
+                    <select className="input config-select mono" value={imageModel} disabled={locked} onChange={(event) => setImageModel(event.target.value)}>
+                      {!imageModels.includes(imageModel) ? <option value={imageModel}>{imageModel}（当前）</option> : null}
+                      {imageModels.map((model) => <option key={model} value={model}>{model}</option>)}
+                    </select>
+                  ) : (
+                    <input className="input mono" value={imageModel} disabled={locked} placeholder={copy.imageModelPlaceholder} onChange={(event) => setImageModel(event.target.value)} />
+                  )}
+                  <button className="btn ghost config-fetch-models" type="button" title={copy.fetchImageModels} aria-label={copy.fetchImageModels} disabled={locked || !report.imageGenerationApiKeyConfigured} onClick={() => void fetchImageModels()}>
+                    <Icon name={busy === "image-models" ? "loader" : "refresh"} /><span>{copy.fetchImageModels}</span>
+                  </button>
+                </div>
                 <datalist id="image-model-options">
-                  {models.map((model) => <option key={model} value={model} />)}
+                  {imageModels.map((model) => <option key={model} value={model} />)}
                 </datalist>
                 <small>{copy.imageModelPlaceholder}</small>
-              </label>
+              </div>
               <label className="config-field">
                 <span>{copy.imageApiKey}</span>
                 <input
@@ -835,7 +873,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                   autoComplete="new-password"
                   spellCheck={false}
                   value={imageApiKey}
-                  disabled={locked || !basic.provider}
+                  disabled={locked}
                   placeholder={copy.imageApiKeyPlaceholder}
                   onChange={(event) => setImageApiKey(event.target.value)}
                 />
@@ -847,7 +885,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                     <Icon name="trash" />{copy.deleteImageApiKey}
                   </button>
                 ) : null}
-                <button className="btn primary" type="button" disabled={locked || !imageApiKey.trim() || !basic.provider} onClick={() => void saveImageApiKey()}>
+                <button className="btn primary" type="button" disabled={locked || !imageApiKey.trim() || !imageBaseUrl.trim()} onClick={() => void saveImageApiKey()}>
                   <Icon name={busy === "image-api-key" ? "loader" : "shield"} />{copy.saveImageApiKey}
                 </button>
               </div>

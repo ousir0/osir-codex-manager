@@ -258,7 +258,7 @@ def build_sync_payload(args: argparse.Namespace, prompt: str, model: str) -> dic
     if args.quality:
         payload["quality"] = args.quality
     if args.image:
-        payload["image_urls"] = [encode_image_data_uri(args.image)]
+        payload["images"] = [{"image_url": encode_image_data_uri(args.image)}]
     return payload
 
 
@@ -314,7 +314,7 @@ def build_async_payload(args: argparse.Namespace, prompt: str, model: str) -> di
     ratio = size_to_ratio(args.size)
     payload: dict[str, Any] = {"model": model, "prompt": prompt, "n": 1, "size": ratio, "resolution": args.resolution}
     if args.image:
-        payload["image_urls"] = [encode_image_data_uri(args.image)]
+        payload["images"] = [{"image_url": encode_image_data_uri(args.image)}]
     return payload
 
 

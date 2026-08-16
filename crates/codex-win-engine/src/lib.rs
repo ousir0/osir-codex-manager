@@ -21,6 +21,7 @@ pub mod limits;
 pub mod manifest;
 pub mod msix;
 pub mod network;
+mod i18n_proxy;
 pub mod plan;
 pub mod portable;
 mod process;
@@ -60,10 +61,10 @@ pub use portable::{
     PortableInstallReport, PortableUninstallReport,
 };
 pub use sys::{
-    close_msix_codex_processes, detect_installed_codex, detect_portable_install, fetch_text,
-    fetch_text_with_network, launch_codex, launch_codex_with_options, probe_capabilities,
-    registered_msix_package_full_name, remove_msix_package, InstalledWindowsCodex, LaunchOptions,
-    MsixRemoveReport,
+    awai_i18n_proxy_pac_url, close_msix_codex_processes, detect_installed_codex,
+    detect_portable_install, fetch_text, fetch_text_with_network, launch_codex,
+    launch_codex_with_options, probe_capabilities, registered_msix_package_full_name,
+    remove_msix_package, InstalledWindowsCodex, LaunchOptions, MsixRemoveReport,
 };
 pub use sys::{
     install_msix_sideload, install_msix_sideload_with_observer, precheck_msix_dependencies,

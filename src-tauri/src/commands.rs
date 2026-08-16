@@ -2288,6 +2288,14 @@ pub async fn codex_config_fetch_models(base_url: String) -> Result<Vec<String>, 
 }
 
 #[tauri::command]
+pub async fn codex_config_fetch_image_models() -> Result<Vec<String>, CommandError> {
+    tauri::async_runtime::spawn_blocking(crate::app::codex_config::fetch_image_models)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn codex_config_validate(raw: String) -> crate::app::codex_config::CodexConfigValidation {
     crate::app::codex_config::validate(&raw)
 }
@@ -2336,11 +2344,13 @@ pub fn codex_config_set_image_generation_api_key(
     state: State<'_, ManagerState>,
     api_key: String,
     model: String,
+    base_url: String,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
     crate::app::codex_config::set_image_generation_api_key(
         &api_key,
         &model,
+        &base_url,
         crate::app::codex_theme::codex_running(),
     )
     .map_err(Into::into)
@@ -2972,15 +2982,11 @@ pub async fn win_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
     if !matches!(state.target.os, OperatingSystem::Windows) {
         return Err(AppError::UnsupportedPlatform.into());
     }
-    let persisted = PersistedAppSettings::load();
-    if persisted.codex_theme.is_some() && state.operations.snapshot().is_none() {
-        let themed =
-            crate::app::codex_theme::restart_with_active_theme(&state.codex_theme, &persisted)
-                .await?;
-        if themed {
-            return Ok(());
-        }
-    }
+    // The explicit restart button must perform exactly one stop/start cycle.
+    // Re-entering the CDP theme-injection workflow here can visibly launch
+    // Codex, wait for a debug port, roll it back, and launch it a second time
+    // when the installed MSIX ignores Chromium debug arguments. Theme apply
+    // and try-on own that workflow; restart only restarts the current client.
     tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
         .await
         .map_err(|e| AppError::Internal(format!("join: {e}")))?

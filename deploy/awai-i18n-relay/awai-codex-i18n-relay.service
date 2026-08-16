@@ -1,0 +1,22 @@
+[Unit]
+Description=AWAI restricted Codex i18n HTTPS CONNECT relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wei
+Group=wei
+WorkingDirectory=/srv/awai/relay
+ExecStart=/usr/bin/python3 /srv/awai/relay/awai_connect_relay.py --bind 127.0.0.1 --port 3128
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/awai/relay
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

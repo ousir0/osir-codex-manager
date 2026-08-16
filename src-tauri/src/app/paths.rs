@@ -135,6 +135,18 @@ pub fn provenance_path() -> Option<PathBuf> {
 }
 
 pub fn codex_home_dir() -> Option<PathBuf> {
+    // Codex itself gives CODEX_HOME precedence over the conventional
+    // ~/.codex directory. The manager must use the same location or it can
+    // appear to save a provider successfully while the launched Desktop app
+    // continues reading a different config.toml (a common Windows setup when
+    // CLI and Desktop are configured separately).
+    if let Some(value) = std::env::var_os("CODEX_HOME") {
+        let path = PathBuf::from(value);
+        if path.is_absolute() {
+            return Some(path);
+        }
+        log::warn!("ignoring relative CODEX_HOME; expected an absolute path");
+    }
     directories::UserDirs::new().map(|dirs| dirs.home_dir().join(".codex"))
 }
 

@@ -776,6 +776,7 @@ pub fn run() {
             commands::set_window_mode,
             commands::codex_config_get,
             commands::codex_config_fetch_models,
+            commands::codex_config_fetch_image_models,
             commands::codex_config_validate,
             commands::codex_config_save_raw,
             commands::codex_config_save_basic,
