@@ -1,0 +1,22 @@
+[Unit]
+Description=OSIR Codex Manager restricted i18n WebSocket tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/opt/osir-codex-manager/relay
+ExecStart=/opt/osir-codex-manager/relay/venv/bin/python /opt/osir-codex-manager/relay/osir_i18n_ws.py
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/osir-codex-manager/relay
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
