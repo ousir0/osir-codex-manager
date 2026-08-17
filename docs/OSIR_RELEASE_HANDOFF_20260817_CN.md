@@ -25,8 +25,8 @@
 
 | 文件 | SHA-256 |
 |---|---|
-| `OSIRCodexManager_aarch64.dmg` | `e339d641e04767a72cc257aa341b70253824f315b633ee172c0898ed661ba0a5` |
-| `OSIRCodexManager_aarch64.app.tar.gz` | `179da730c2369f828f6a309a396b9d97040a03402348c57c7890c2e7ee3560bc` |
+| `OSIRCodexManager_aarch64.dmg` | `77f609d397cbaf2aa3ed7b29a33005d02caa9ba58e8764708175764ff9f40a1c` |
+| `OSIRCodexManager_aarch64.app.tar.gz` | `4e32124145bb332c16d9dce09a40c7deeffc28f1848a0c341f3435a2e6735694` |
 
 包内已验证：
 
@@ -55,6 +55,7 @@
 4. Windows Authenticode 证书尚未配置；Windows x64 需要 GitHub Actions 构建并下载验收。
 5. 当前服务器候选 `latest.json` 仅包含 macOS arm64，Windows 与 macOS Intel 工件补齐后才能取消 `partial`。
 6. 腾讯云 COS 已在 OSIRAPI 生产环境配置，但 Manager 工件的独立前缀、生命周期和 GitHub Secret 尚未启用；当前由服务器 + GitHub Releases 承载。
+7. 正确图标版本的 Windows Run `32064417228`、重试 Run `32065194564` 都在 Runner 分配阶段瞬时失败，未执行任何构建步骤；两次均不产生可用工件。
 
 ## 验证命令
 
