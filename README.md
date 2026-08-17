@@ -37,7 +37,7 @@
 <table>
   <tr>
     <td align="center" width="170">
-      <a href="https://api.osirclaw.com"><img src="./assets/osir-avatar-blue-1024.png" alt="OSIR API" width="96"></a>
+      <a href="https://api.osirclaw.com"><img src="./assets/logo.png" alt="OSIR API" width="96"></a>
     </td>
     <td width="560">
       <b>本项目由 <a href="https://api.osirclaw.com">OSIR API 中转站</a> 提供服务支持</b><br>

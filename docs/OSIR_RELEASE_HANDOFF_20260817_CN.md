@@ -16,7 +16,7 @@
 - GitHub `release` Environment 已配置 updater Key、密码和发布校验 Secret。
 - 旧 Manager 数据目录可自动迁移到 OSIR 目录。
 - 旧 `awai` Provider 可迁移为 `osir`，保留用户 API Key。
-- 全套 OSIR 图标已生成，包括 macOS、Windows、移动端、README 和 NSIS 图片。
+- 全套原始 Codex 演化图标已复用并生成，包括 macOS、Windows、移动端、README 和 NSIS 图片；应用界面不展示独立 OSIRAPI Logo。
 - OSIR 网站和 macOS 候选包已上传至服务器独立目录：
   `/var/www/osir-codex-manager/releases/20260817-osir-codex-manager-0.5.3`。
 - Nginx HTTP 候选入口已启用，不影响现有主站和 API。

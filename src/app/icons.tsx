@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 
-import logoOsir from "./assets/logo-osir.svg";
+import codexEvolutionLogo from "./assets/logo-dark.png";
 
 export type IconName =
   | "check"
@@ -240,12 +240,12 @@ export function Icon({ name, className }: { name: IconName; className?: string }
   );
 }
 
-/** OSIR-blue cloud mark. Sized by its container (`.mark`). */
+/** Original Codex evolution mark. Sized by its container (`.mark`). */
 export function CodexMark({ className }: { className?: string }) {
   return (
     <img
       className={className}
-      src={logoOsir}
+      src={codexEvolutionLogo}
       alt=""
       aria-hidden="true"
       draggable={false}

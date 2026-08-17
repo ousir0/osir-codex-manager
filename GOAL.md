@@ -25,7 +25,7 @@ Read SPEC.md, docs/CODEX_MANAGER_SESSIONS_HANDOFF_CN.md, docs/OSIR_API_MANAGER_B
 3. Old manager data and the legacy awai provider migrate automatically, idempotently, and without deleting a newer OSIR destination or API key.
 4. The updater public key in tauri.conf.json belongs to the locally secured OSIR private key, and GitHub Actions receives the matching private key/password through secrets only.
 5. Runtime defaults use app.osirclaw.com, api.osirclaw.com/v1, and OSIR-owned repositories/resources; npm run audit:ownership:strict reports zero unapproved findings.
-6. OSIR logo artwork is used for the app icon, macOS/Windows bundle icons, README assets, favicon, and NSIS header/sidebar images.
+6. The original Codex evolution artwork is used for the app icon, macOS/Windows bundle icons, README assets, favicon, and NSIS header/sidebar images; no separate OSIRAPI logo is shown as the application mark.
 7. https://app.osirclaw.com serves the OSIR website, /manager/latest.json, versioned manager artifacts, /skins, current Codex metadata/packages, and /i18n-tunnel with valid TLS.
 8. The source is committed and pushed to an ousir0-owned GitHub repository; release secrets and protected release environment are configured without exposing secret values.
 9. npm run check, npm run lint, npm test, npm run test:release, cargo test --manifest-path src-tauri/Cargo.toml --lib, npm run build, and git diff --check pass.
