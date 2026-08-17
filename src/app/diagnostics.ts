@@ -6,7 +6,7 @@ export function formatDiagnostics(diagnostics: Diagnostics, jsError?: Error | nu
     ? diagnostics.recentErrors.map((line) => `- ${line}`).join("\n")
     : "- none";
   const lines = [
-    "# Codex App Manager diagnostics",
+    "# OSIR Codex Manager diagnostics",
     "",
     `Generated: ${new Date(diagnostics.generatedAtUnix * 1000).toISOString()}`,
     `Version: ${diagnostics.appVersion}`,

@@ -47,7 +47,7 @@ const ZH_COPY = {
   fetchModels: "获取模型",
   modelsFetched: "已获取 {count} 个模型",
   provider: "供应商标识",
-  providerPlaceholder: "例如 awai",
+  providerPlaceholder: "例如 osir",
   providers: "已配置供应商",
   providerCount: "{count} 个",
   newProvider: "新建供应商",
@@ -137,7 +137,7 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   fetchModels: "Fetch models",
   modelsFetched: "Fetched {count} models",
   provider: "Provider key",
-  providerPlaceholder: "For example, awai",
+  providerPlaceholder: "For example, osir",
   providers: "Configured providers",
   providerCount: "{count}",
   newProvider: "New provider",
@@ -411,12 +411,12 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
     if (!report) return [];
     return [
       {
-        id: "awai",
-        name: "AWAI",
-        baseUrl: "https://api.awai.cc/v1",
+        id: "osir",
+        name: "OSIR",
+        baseUrl: "https://api.osirclaw.com/v1",
         wireApi: "responses",
       },
-      ...report.providers.filter((profile) => profile.id !== "awai"),
+      ...report.providers.filter((profile) => profile.id !== "osir"),
     ];
   }, [report]);
   const selectedProvider = providerProfiles.find((profile) => profile.id === basic.provider);
@@ -512,7 +512,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
                 <div className="config-provider-cards">
                   {providerProfiles.map((profile) => {
                     const active = basic.provider === profile.id;
-                    const recommended = profile.id === "awai";
+                    const recommended = profile.id === "osir";
                     return (
                       <button
                         className={`config-provider-card${active ? " active" : ""}${recommended ? " recommended" : ""}`}

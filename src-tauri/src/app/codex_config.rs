@@ -24,6 +24,10 @@ const MAX_VALUE_LEN: usize = 8192;
 const MAX_MODELS_BYTES: usize = 2 * 1024 * 1024;
 const MAX_MODEL_COUNT: usize = 2_000;
 const MAX_MODEL_ID_LEN: usize = 256;
+const LEGACY_PROVIDER_ID: &str = "awai"; // ownership-audit: allow-legacy
+const LEGACY_API_BASE_URL: &str = "https://api.awai.cc/v1"; // ownership-audit: allow-legacy
+const OSIR_PROVIDER_ID: &str = "osir";
+const OSIR_API_BASE_URL: &str = "https://api.osirclaw.com/v1";
 const REASONING_EFFORTS: [&str; 5] = ["minimal", "low", "medium", "high", "xhigh"];
 const PERSONALITIES: [&str; 3] = ["none", "friendly", "pragmatic"];
 const APPROVAL_POLICIES: [&str; 3] = ["untrusted", "on-request", "never"];
@@ -449,6 +453,7 @@ fn separate_image_generation_base_url(config_path: &Path) -> String {
 }
 
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
+    migrate_legacy_provider_config(path)?;
     let auth_path = auth_path_for_config(path);
     let (api_key_configured, auth_error) = auth_status(&auth_path);
     let exists = path.is_file();
@@ -1116,9 +1121,62 @@ fn load_document(path: &Path) -> Result<DocumentMut, AppError> {
     if !path.exists() {
         return Ok(DocumentMut::new());
     }
+    migrate_legacy_provider_config(path)?;
     let raw = fs::read_to_string(path)
         .map_err(|error| AppError::Internal(format!("读取 config.toml 失败：{error}")))?;
     parse_document(&raw)
+}
+
+fn migrate_legacy_provider_config(path: &Path) -> Result<(), AppError> {
+    if !path.is_file() {
+        return Ok(());
+    }
+    let raw = fs::read_to_string(path)
+        .map_err(|error| AppError::Internal(format!("读取 config.toml 失败：{error}")))?;
+    let mut document = match parse_document(&raw) {
+        Ok(document) => document,
+        Err(_) => return Ok(()),
+    };
+    let mut changed = false;
+
+    if document
+        .get("model_provider")
+        .and_then(Item::as_str)
+        == Some(LEGACY_PROVIDER_ID)
+    {
+        document["model_provider"] = value(OSIR_PROVIDER_ID);
+        changed = true;
+    }
+
+    if let Some(providers) = document
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+    {
+        if !providers.contains_key(OSIR_PROVIDER_ID) {
+            if let Some(legacy) = providers.remove(LEGACY_PROVIDER_ID) {
+                providers.insert(OSIR_PROVIDER_ID, legacy);
+                changed = true;
+            }
+        }
+        if let Some(osir) = providers
+            .get_mut(OSIR_PROVIDER_ID)
+            .and_then(Item::as_table_mut)
+        {
+            if osir.get("name").and_then(Item::as_str) == Some("AWAI") { // ownership-audit: allow-legacy
+                osir["name"] = value("OSIR");
+                changed = true;
+            }
+            if osir.get("base_url").and_then(Item::as_str) == Some(LEGACY_API_BASE_URL) {
+                osir["base_url"] = value(OSIR_API_BASE_URL);
+                changed = true;
+            }
+        }
+    }
+
+    if changed {
+        write_verified(path, &document.to_string())?;
+    }
+    Ok(())
 }
 
 fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Result<(), AppError> {
@@ -1186,8 +1244,8 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
             .ok_or_else(|| AppError::Engine("model_providers 必须是 TOML 表".to_string()))?;
         if !providers.contains_key(&provider) {
             let mut created = Table::new();
-            created["name"] = value(if provider == "awai" {
-                "AWAI"
+            created["name"] = value(if provider == "osir" {
+                "OSIR"
             } else {
                 &provider
             });
@@ -1354,7 +1412,7 @@ mod tests {
         fs::write(
             &path,
             r#"model = "gpt-5"
-model_provider = "awai"
+model_provider = "osir"
 model_reasoning_effort = "high"
 disable_response_storage = true
 personality = "pragmatic"
@@ -1364,8 +1422,8 @@ sandbox_mode = "danger-full-access"
 [features]
 goals = true
 
-[model_providers.awai]
-base_url = "https://api.awai.cc/v1"
+[model_providers.osir]
+base_url = "https://api.osirclaw.com/v1"
 
 [model_providers.backup]
 name = "Backup"
@@ -1385,11 +1443,11 @@ second-secret"""
         .unwrap();
         let report = report_for_path(&path, false).unwrap();
         assert_eq!(report.model, "gpt-5");
-        assert_eq!(report.provider, "awai");
-        assert_eq!(report.base_url, "https://api.awai.cc/v1");
+        assert_eq!(report.provider, "osir");
+        assert_eq!(report.base_url, "https://api.osirclaw.com/v1");
         assert_eq!(report.providers.len(), 2);
-        assert_eq!(report.providers[0].id, "awai");
-        assert_eq!(report.providers[1].id, "backup");
+        assert_eq!(report.providers[0].id, "backup");
+        assert_eq!(report.providers[1].id, "osir");
         assert_eq!(report.personality, "pragmatic");
         assert_eq!(report.approval_policy, "never");
         assert_eq!(report.sandbox_mode, "danger-full-access");
@@ -1401,6 +1459,30 @@ second-secret"""
         assert!(!report.redacted_raw.contains("secret-value"));
         assert!(!report.redacted_raw.contains("second-secret"));
         assert!(report.redacted_raw.contains("********"));
+    }
+
+    #[test]
+    fn legacy_awai_provider_is_migrated_to_osir_without_touching_auth() { // ownership-audit: allow-legacy
+        let path = test_path("legacy-provider");
+        fs::write(
+            &path,
+            r#"model = "gpt-5"
+model_provider = "awai" # ownership-audit: allow-legacy
+
+[model_providers.awai] # ownership-audit: allow-legacy
+name = "AWAI" # ownership-audit: allow-legacy
+base_url = "https://api.awai.cc/v1" # ownership-audit: allow-legacy
+"#,
+        )
+        .unwrap();
+        let report = report_for_path(&path, false).unwrap();
+        assert_eq!(report.provider, "osir");
+        assert_eq!(report.base_url, "https://api.osirclaw.com/v1");
+        let migrated = fs::read_to_string(&path).unwrap();
+        assert!(migrated.contains("model_provider = \"osir\""));
+        assert!(migrated.contains("[model_providers.osir]"));
+        assert!(!migrated.contains("[model_providers.awai]")); // ownership-audit: allow-legacy
+        assert!(migrated.contains("https://api.osirclaw.com/v1"));
     }
 
     #[test]
@@ -1440,9 +1522,9 @@ second-secret"""
         let mut document = r#"# keep this comment
 unknown_flag = true
 model = "old"
-model_provider = "awai"
+model_provider = "osir"
 
-[model_providers.awai]
+[model_providers.osir]
 name = "Original name"
 base_url = "https://old.example/v1"
 custom_capability = "keep"
@@ -1453,8 +1535,8 @@ custom_capability = "keep"
             &mut document,
             CodexBasicConfigInput {
                 model: "gpt-5.4".to_string(),
-                provider: "awai".to_string(),
-                base_url: "https://api.awai.cc/v1".to_string(),
+                provider: "osir".to_string(),
+                base_url: "https://api.osirclaw.com/v1".to_string(),
                 reasoning_effort: "xhigh".to_string(),
                 personality: "pragmatic".to_string(),
                 approval_policy: "never".to_string(),
@@ -1470,7 +1552,7 @@ custom_capability = "keep"
         assert!(rendered.contains("unknown_flag = true"));
         assert!(rendered.contains("custom_capability = \"keep\""));
         assert!(rendered.contains("model = \"gpt-5.4\""));
-        assert!(rendered.contains("base_url = \"https://api.awai.cc/v1\""));
+        assert!(rendered.contains("base_url = \"https://api.osirclaw.com/v1\""));
         assert!(rendered.contains("personality = \"pragmatic\""));
         assert!(rendered.contains("approval_policy = \"never\""));
         assert!(rendered.contains("sandbox_mode = \"danger-full-access\""));
@@ -1480,18 +1562,18 @@ custom_capability = "keep"
 
     #[test]
     fn relay_mode_disables_only_native_image_generation() {
-        let mut document = r#"model_provider = "awai"
+        let mut document = r#"model_provider = "osir"
 
-[model_providers.awai]
-base_url = "https://api.awai.cc/v1"
+[model_providers.osir]
+base_url = "https://api.osirclaw.com/v1"
 requires_openai_auth = true
 "#
         .parse::<DocumentMut>()
         .unwrap();
         let input = CodexBasicConfigInput {
             model: "gpt-5.6-sol".to_string(),
-            provider: "awai".to_string(),
-            base_url: "https://api.awai.cc/v1".to_string(),
+            provider: "osir".to_string(),
+            base_url: "https://api.osirclaw.com/v1".to_string(),
             reasoning_effort: String::new(),
             personality: String::new(),
             approval_policy: String::new(),
@@ -1506,7 +1588,7 @@ requires_openai_auth = true
             document["features"]["image_generation"].as_bool(),
             Some(false)
         );
-        let provider = document["model_providers"]["awai"].as_table().unwrap();
+        let provider = document["model_providers"]["osir"].as_table().unwrap();
         assert_eq!(provider["requires_openai_auth"].as_bool(), Some(true));
         assert!(provider.get("http_headers").is_none());
 
@@ -1560,7 +1642,7 @@ requires_openai_auth = true
         let key_path = image_generation_key_path(&config_path);
         fs::write(
             &key_path,
-            r#"{"base_url":"https://api.awai.cc/v1","api_key":"secret"}"#,
+            r#"{"base_url":"https://api.osirclaw.com/v1","api_key":"secret"}"#,
         )
         .unwrap();
         let scripts_dir = config_path
@@ -1585,10 +1667,10 @@ requires_openai_auth = true
     #[test]
     fn model_endpoint_requires_https_except_for_loopback() {
         assert_eq!(
-            models_endpoint("https://api.awai.cc/v1").unwrap().as_str(),
-            "https://api.awai.cc/v1/models"
+            models_endpoint("https://api.osirclaw.com/v1").unwrap().as_str(),
+            "https://api.osirclaw.com/v1/models"
         );
-        assert!(models_endpoint("http://api.awai.cc/v1").is_err());
+        assert!(models_endpoint("http://api.osirclaw.com/v1").is_err());
         assert_eq!(
             models_endpoint("http://127.0.0.1:11434/v1")
                 .unwrap()

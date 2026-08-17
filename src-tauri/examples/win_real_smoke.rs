@@ -1,15 +1,15 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use codex_app_manager_lib::adapters::host;
-use codex_app_manager_lib::app::provenance::ProvenanceStore;
-use codex_app_manager_lib::app::win_update::{
+use osir_codex_manager_lib::adapters::host;
+use osir_codex_manager_lib::app::provenance::ProvenanceStore;
+use osir_codex_manager_lib::app::win_update::{
     perform_windows_update, plan_windows_update, uninstall_windows_codex, win_adopt,
     win_install_status, WinInstallStatus, WinPerformAction,
 };
-use codex_app_manager_lib::domain::manifest::MirrorEndpoints;
-use codex_app_manager_lib::domain::settings::AppSettings;
-use codex_app_manager_lib::domain::target::Target;
+use osir_codex_manager_lib::domain::manifest::MirrorEndpoints;
+use osir_codex_manager_lib::domain::settings::AppSettings;
+use osir_codex_manager_lib::domain::target::Target;
 use codex_win_engine::{
     download_to, fetch_text, find_msix_sha256, install_msix_sideload, install_portable_from_msix,
     parse_manifest, purge_codex_user_data, read_msix_identity, remove_msix_package, sha256_file,
@@ -19,7 +19,7 @@ use serde::Serialize;
 
 const OLD_MSIX_VERSION: &str = "26.601.2237.0";
 const OLD_MSIX_MONIKER: &str = "OpenAI.Codex_26.601.2237.0_x64__2p2nqsd0c76g0";
-const OLD_MSIX_URL: &str = "https://github.com/Wangnov/codex-app-mirror/releases/download/codex-app-win-26.601.2237.0-mac-26.601.21317-b3511/OpenAI.Codex_26.601.2237.0_x64__2p2nqsd0c76g0.Msix";
+const OLD_MSIX_URL: &str = "https://github.com/ousir0/osir-codex-mirror/releases/download/codex-app-win-26.601.2237.0-mac-26.601.21317-b3511/OpenAI.Codex_26.601.2237.0_x64__2p2nqsd0c76g0.Msix";
 const OLD_MSIX_SHA256: &str = "432d5e75ee973bf8172db58435a86823ccd51272ea0a82395c70a6d485015caa";
 const OLD_MSIX_SIZE: u64 = 564_451_929;
 
@@ -75,7 +75,7 @@ fn user_data_path() -> Option<PathBuf> {
 
 fn staged_msix_path(release: &WindowsRelease) -> PathBuf {
     std::env::temp_dir()
-        .join("codex-app-manager")
+        .join("osir-codex-manager")
         .join("windows-staging")
         .join(format!("{}.msix", release.package_moniker))
 }

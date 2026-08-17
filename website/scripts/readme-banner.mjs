@@ -54,14 +54,14 @@ function outlines(font, text, x, y, size, attrs = "") {
   return { svg: `<g ${attrs}>${parts.join("")}</g>`, width: cx - x };
 }
 
-const wordmark = outlines(heavy, "Codex App Manager", 196, 152, 64, 'fill="#f5f4fb"');
+const wordmark = outlines(heavy, "OSIR Codex Manager", 196, 152, 64, 'fill="#f5f4fb"');
 const tagline = outlines(bold, "一键装好官方 Codex,持续最新", 112, 226, 31, 'fill="url(#tagGrad)"');
 
 /* ---- journey path (orb travels it) --------------------------------------- */
 const ROUTE = "M 70,386 C 240,366 360,344 490,352 C 640,361 700,376 810,368 C 950,358 1060,338 1148,322";
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif">
-  <title id="title">Codex App Manager</title>
+  <title id="title">OSIR Codex Manager</title>
   <desc id="desc">官方 Codex 桌面应用,一键装好,持续最新 — install, update and uninstall the official Codex desktop app, with mirrors reachable from mainland China.</desc>
 
   <defs>
@@ -173,7 +173,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role
       <text x="572" y="304" text-anchor="middle" fill="#ecbf7a">国内直连</text>
     </g>
 
-    <text x="1336" y="402" text-anchor="end" font-size="13" fill="#8e8da1">codexapp.awai.cc</text>
+    <text x="1336" y="402" text-anchor="end" font-size="13" fill="#8e8da1">app.osirclaw.com</text>
 
     <rect width="1400" height="420" rx="24" fill="none" stroke="#f0eff7" stroke-opacity="0.1"/>
   </g>

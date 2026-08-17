@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn curl_write_error_is_disk_write_not_proxy() {
         // The exact failure from the v0.2.2 Windows bug report.
-        let msg = "io error: curl failed for host=codexapp.awai.cc exit=23: \
+        let msg = "io error: curl failed for host=app.osirclaw.com exit=23: \
                    stderr='curl: (23) Failure writing output to destination, passed 16384 returned 640'";
         assert_eq!(classify(msg), ErrorKind::DiskWrite);
         assert_eq!(code_of(msg), "disk_write");

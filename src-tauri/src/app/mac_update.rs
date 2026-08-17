@@ -107,8 +107,8 @@ pub struct MacStageReport {
 /// arm64 / x64 Sparkle appcasts, served by the mirror (CN-reachable; enclosure
 /// URLs rewritten to R2/S3). EdDSA signatures are preserved (they sign bytes,
 /// not URLs), so the pinned-key verification still passes against mirrored files.
-pub const PROD_ARM64_APPCAST: &str = "https://codexapp.awai.cc/latest/appcast.xml";
-pub const PROD_X64_APPCAST: &str = "https://codexapp.awai.cc/latest/appcast-x64.xml";
+pub const PROD_ARM64_APPCAST: &str = "https://app.osirclaw.com/latest/appcast.xml";
+pub const PROD_X64_APPCAST: &str = "https://app.osirclaw.com/latest/appcast-x64.xml";
 
 /// OpenAI's own Sparkle appcast (for users who can reach OpenAI directly — e.g.
 /// overseas users whose only blocker is that Windows can't use the Store).
@@ -471,7 +471,7 @@ where
 pub struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
-    /// Host the bytes are coming from, e.g. `codexapp.awai.cc`.
+    /// Host the bytes are coming from, e.g. `app.osirclaw.com`.
     pub source: String,
 }
 
@@ -2563,7 +2563,7 @@ pub fn launch_codex() -> Result<(), AppError> {
         &mut command,
         settings.disable_codex_self_updates,
     );
-    let pac_url = codex_win_engine::awai_i18n_proxy_pac_url();
+    let pac_url = codex_win_engine::osir_i18n_proxy_pac_url();
     command
         .args(["-n", "-a"])
         .arg(&installed.path)

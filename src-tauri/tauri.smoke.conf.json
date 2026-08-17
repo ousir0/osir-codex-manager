@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "identifier": "cc.awai.codexappmanager.smoke",
+  "identifier": "com.osir.codexmanager.smoke",
   "bundle": {
     "active": true,
     "targets": ["app"]

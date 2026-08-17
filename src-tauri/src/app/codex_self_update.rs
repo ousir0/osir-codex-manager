@@ -7,7 +7,7 @@ pub const DISABLE_ENV_KEY: &str = "CODEX_SPARKLE_ENABLED";
 pub const DISABLE_ENV_VALUE: &str = "false";
 
 #[cfg(target_os = "macos")]
-const LAUNCH_AGENT_LABEL: &str = "cc.awai.codexappmanager.codex-self-update-env";
+const LAUNCH_AGENT_LABEL: &str = "com.osir.codexmanager.codex-self-update-env";
 
 pub fn apply_to_command(command: &mut Command, disabled: bool) {
     if disabled {

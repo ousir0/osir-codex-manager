@@ -77,7 +77,7 @@ export function assertReleaseTagCreationRuleset(rulesets) {
     );
     // GitHub intentionally omits bypass_actors from read-only responses. When
     // visible (local/admin verification), require exactly the configured
-    // AWAI release publisher identity and reject a broad role/team bypass.
+    // OSIR release publisher identity and reject a broad role/team bypass.
     const bypassActors = ruleset?.bypass_actors;
     const visibleBypassIsAuthorized =
       !Array.isArray(bypassActors) ||

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use codex_mac_engine::{download, parse_appcast, plan_update, sys, verify, UpdateStrategy};
 
-const PROD_ARM64_APPCAST: &str = "https://codexapp.awai.cc/latest/appcast.xml";
+const PROD_ARM64_APPCAST: &str = "https://app.osirclaw.com/latest/appcast.xml";
 const STAGING_DIR: &str = "/tmp/codex-mac-staging";
 
 fn mib(bytes: u64) -> f64 {

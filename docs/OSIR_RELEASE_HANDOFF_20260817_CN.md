@@ -1,0 +1,70 @@
+# OSIR Codex Manager 独立化发布交接
+
+## 当前结论
+
+客户端源码、产品名、二进制名、Bundle ID、Logo、安装器图片、API、下载、更新、皮肤、历史镜像、国际化 relay、GitHub 工作流和 updater 公钥已经迁移到 OSIR 体系。旧 AWAI 标识只保留在带审计豁免的自动迁移兼容代码中。
+
+## 已完成
+
+- 产品名：`OSIR Codex Manager`。
+- 二进制：`osir-codex-manager`。
+- Bundle ID：`com.osir.codexmanager`。
+- GitHub：`ousir0/osir-codex-manager`，私有仓库。
+- API：`https://api.osirclaw.com/v1`。
+- 应用、下载、更新、皮肤和 relay 主域：`https://app.osirclaw.com`。
+- 新 updater 密钥对已生成；私钥不在仓库，公钥已写入客户端。
+- GitHub `release` Environment 已配置 updater Key、密码和发布校验 Secret。
+- 旧 Manager 数据目录可自动迁移到 OSIR 目录。
+- 旧 `awai` Provider 可迁移为 `osir`，保留用户 API Key。
+- 全套 OSIR 图标已生成，包括 macOS、Windows、移动端、README 和 NSIS 图片。
+- OSIR 网站和 macOS 候选包已上传至服务器独立目录：
+  `/var/www/osir-codex-manager/releases/20260817-osir-codex-manager-0.5.3`。
+- Nginx HTTP 候选入口已启用，不影响现有主站和 API。
+
+## macOS 候选工件
+
+| 文件 | SHA-256 |
+|---|---|
+| `OSIRCodexManager_aarch64.dmg` | `e339d641e04767a72cc257aa341b70253824f315b633ee172c0898ed661ba0a5` |
+| `OSIRCodexManager_aarch64.app.tar.gz` | `179da730c2369f828f6a309a396b9d97040a03402348c57c7890c2e7ee3560bc` |
+
+包内已验证：
+
+- `CFBundleName=OSIR Codex Manager`。
+- `CFBundleIdentifier=com.osir.codexmanager`。
+- `CFBundleExecutable=osir-codex-manager`。
+- 主二进制为 Apple Silicon arm64。
+- updater tarball 使用 OSIR updater 私钥签名。
+- 包内没有旧品牌、旧域名或旧 Bundle ID。
+
+## 服务器验证
+
+在 DNS 生效前，通过服务器 IP + `Host: app.osirclaw.com` 已验证：
+
+- `/health` 返回 `200`。
+- 官网首页返回 OSIR 标题。
+- `/manager/latest.json` 返回 OSIR `0.5.3` 部分发布清单。
+- DMG Range 请求返回 `206`。
+- 远端工件 SHA-256 与本地一致。
+
+## 尚未完成的发布级门槛
+
+1. 阿里云 DNS 控制台当前未登录，`app.osirclaw.com` 尚无 DNS 记录。
+2. DNS 生效后需要签发 `app.osirclaw.com` Let's Encrypt 证书并启用 HTTPS 配置。
+3. 本机没有 Apple Developer ID，当前 macOS 包是可验证的 ad-hoc 测试签名，尚未公证。
+4. Windows Authenticode 证书尚未配置；Windows x64 需要 GitHub Actions 构建并下载验收。
+5. 当前服务器候选 `latest.json` 仅包含 macOS arm64，Windows 与 macOS Intel 工件补齐后才能取消 `partial`。
+6. 腾讯云 COS 已在 OSIRAPI 生产环境配置，但 Manager 工件的独立前缀、生命周期和 GitHub Secret 尚未启用；当前由服务器 + GitHub Releases 承载。
+
+## 验证命令
+
+```bash
+npm run audit:ownership:strict
+npm run check
+npm run lint
+npm test
+npm run test:release
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+git diff --check
+```

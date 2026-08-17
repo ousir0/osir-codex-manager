@@ -1,14 +1,14 @@
 {
   // Serves the manager's own update artifacts at
-  // https://codexapp.awai.cc/manager/* — global traffic from the
+  // https://app.osirclaw.com/manager/* — global traffic from the
   // dedicated R2 bucket (bound directly), mainland-China traffic from a
-  // presigned IHEP S3 URL (parallel to the AWAI current-artifact router,
+  // presigned IHEP S3 URL (parallel to the OSIR current-artifact router,
   // but on the manager's OWN bucket so the two never mix).
-  "name": "codex-app-manager-download-router",
+  "name": "osir-codex-manager-download-router",
   "main": "src/index.js",
   "compatibility_date": "2026-06-04",
   "workers_dev": false,
-  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "codex-app-manager" }],
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "osir-codex-manager" }],
   "vars": {
     "SECONDARY_COUNTRY_CODES": "CN",
     "SECONDARY_S3_SIGNED_URL_TTL_SECONDS": "3600"
@@ -22,7 +22,7 @@
   // Until they exist the worker serves everyone from R2 (CN included).
   "routes": [
     {
-      "pattern": "codexapp.awai.cc/manager/*",
+      "pattern": "app.osirclaw.com/manager/*",
       "zone_id": "a5bae9b722f3c5fe1a24aaebe7a8e663"
     }
   ]

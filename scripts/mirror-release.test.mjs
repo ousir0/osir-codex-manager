@@ -426,7 +426,7 @@ describe("existing GitHub Release reuse", () => {
     );
 
     const unpinnedExtra = completeRelease(releaseTag);
-    unpinnedExtra.assets.push({ name: "CodexAppManager_extra.zip", size: 10 });
+    unpinnedExtra.assets.push({ name: "OSIRCodexManager_extra.zip", size: 10 });
     expect(() => inspectReleaseForReuse(unpinnedExtra, releaseTag)).toThrow(
       "has no canonical SHA-256 digest",
     );
@@ -685,7 +685,7 @@ describe("backend candidate verification", () => {
     const fixture = updaterFixture(artifact);
     const candidate = manifest("1.2.3", fixture.signature);
     const artifactName = "manager-1.2.3.exe";
-    const dmgName = "CodexAppManager_aarch64.dmg";
+    const dmgName = "OSIRCodexManager_aarch64.dmg";
     const signatureName = `${artifactName}.sig`;
     const dmg = Buffer.from("macOS installer bytes");
     const signatureSidecar = Buffer.from(`${fixture.signature}\n`);

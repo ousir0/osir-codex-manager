@@ -110,7 +110,7 @@ fn newest_log_file(dir: &Path) -> Option<PathBuf> {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("codex-app-manager") && name.contains(".log"))
+                .is_some_and(|name| name.starts_with("osir-codex-manager") && name.contains(".log"))
         })
         .filter_map(|path| {
             let modified = std::fs::metadata(&path).ok()?.modified().ok()?;

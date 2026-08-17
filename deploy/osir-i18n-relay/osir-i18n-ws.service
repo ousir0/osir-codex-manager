@@ -1,5 +1,5 @@
 [Unit]
-Description=AWAI Codex i18n WebSocket tunnel
+Description=OSIR Codex i18n WebSocket tunnel
 After=network-online.target
 Wants=network-online.target
 
@@ -7,15 +7,15 @@ Wants=network-online.target
 Type=simple
 User=wei
 Group=wei
-WorkingDirectory=/srv/awai/relay
-ExecStart=/usr/bin/python3 /srv/awai/relay/awai_i18n_ws.py
+WorkingDirectory=/srv/osir/relay
+ExecStart=/usr/bin/python3 /srv/osir/relay/osir_i18n_ws.py
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/srv/awai/relay
+ReadWritePaths=/srv/osir/relay
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]

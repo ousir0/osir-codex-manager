@@ -9,8 +9,8 @@ import { formatDiagnostics } from "../diagnostics";
 import { Sheet } from "../Sheet";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? "0.0.0";
-const REPO_URL = "https://github.com/qq501987847/codex-app-manager";
-const AWAI_URL = "https://api.awai.cc";
+const REPO_URL = "https://github.com/ousir0/osir-codex-manager";
+const OSIR_URL = "https://api.osirclaw.com";
 
 export function About({ onBack }: { onBack: () => void }) {
   const { t } = useI18n();
@@ -121,11 +121,11 @@ export function About({ onBack }: { onBack: () => void }) {
             </span>
             <Icon name="external" className="chev" />
           </button>
-          <button className="row" onClick={() => void managerApi.openUrl(AWAI_URL)}>
+          <button className="row" onClick={() => void managerApi.openUrl(OSIR_URL)}>
             <Icon name="external" className="ricon" />
             <span className="rtext">
-              <span className="rtitle">{t("about.awaiTitle")}</span>
-              <span className="rsub">{t("about.awaiSub")}</span>
+              <span className="rtitle">{t("about.osirTitle")}</span>
+              <span className="rsub">{t("about.osirSub")}</span>
             </span>
             <Icon name="external" className="chev" />
           </button>

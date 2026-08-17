@@ -7,7 +7,7 @@
 
 use codex_mac_engine::{parse_appcast, plan_update, sys, UpdateStrategy};
 
-const PROD_ARM64_APPCAST: &str = "https://codexapp.awai.cc/latest/appcast.xml";
+const PROD_ARM64_APPCAST: &str = "https://app.osirclaw.com/latest/appcast.xml";
 
 fn mib(bytes: u64) -> f64 {
     bytes as f64 / 1_048_576.0

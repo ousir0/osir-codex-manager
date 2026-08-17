@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # Run this script as root on the new Debian 12 server after DNS is pointed at
-# the server. Caddy will obtain and renew the certificate for codexapp.awai.cc.
+# the server. Caddy will obtain and renew the certificate for app.osirclaw.com.
 
-DOMAIN="${1:-codexapp.awai.cc}"
-ROOT="/srv/awai"
+DOMAIN="${1:-app.osirclaw.com}"
+ROOT="/srv/osir"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "Run as root: sudo bash bootstrap.sh"
@@ -20,7 +20,7 @@ install -d -m 0755 "${ROOT}/site" "${ROOT}/latest" "${ROOT}/manager"
 install -d -m 0755 /etc/caddy
 
 cat > /etc/caddy/Caddyfile <<EOF
-$(sed "s/codexapp\.awai\.cc/${DOMAIN}/g" "$(dirname "$0")/Caddyfile")
+$(sed "s/codexapp\.osir\.cc/${DOMAIN}/g" "$(dirname "$0")/Caddyfile")
 EOF
 
 caddy validate --config /etc/caddy/Caddyfile

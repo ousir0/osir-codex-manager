@@ -1,9 +1,9 @@
 export default {
   meta: {
-    title: "Codex App Manager — 官方 Codex 桌面应用的安装、更新与卸载管家",
+    title: "OSIR Codex Manager — 官方 Codex 桌面应用的安装、更新与卸载管家",
     description:
       "一键安装、增量更新、干净卸载官方 OpenAI Codex 桌面应用。macOS Sparkle 增量更新、EdDSA 逐字节校验、R2 + IHEP 双镜像,国内免代理直连。Tauri v2 构建,MIT 开源。",
-    ogTitle: "Codex App Manager — 一键装好官方 Codex,自动保持最新",
+    ogTitle: "OSIR Codex Manager — 一键装好官方 Codex,自动保持最新",
     ogDescription:
       "原样镜像官方安装包,送达你的 Mac 与 PC,每一步都可校验。macOS 增量更新、失败自动回滚、国内直连可达。macOS 版本已通过 Developer ID 签名和 Apple 公证,项目开源可审计。",
   },
@@ -62,7 +62,7 @@ export default {
     ],
   },
   demo: {
-    window: "Codex App Manager",
+    window: "OSIR Codex Manager",
     updTitle: "有新版本",
     updVer: "26.602.71036",
     updFlow: "当前 26.602.40724 → 新版 26.602.71036 · 约 12.6 MiB",
@@ -110,7 +110,7 @@ export default {
     },
   },
   manager: {
-    kicker: "Codex App Manager",
+    kicker: "OSIR Codex Manager",
     title: "安装、更新、卸载,三步完成",
     lead: "Manager 不急着改动你的系统。它先检测本地的 Codex 安装状态,再生成一份计划,最后才谨慎执行——破坏性操作之前,逐项核验。",
     steps: [
@@ -159,7 +159,7 @@ export default {
       },
     ],
     mock: {
-      window: "Codex App Manager",
+      window: "OSIR Codex Manager",
       detect: {
         scan: "正在检测本机环境…",
         found: "发现 Codex 桌面应用",
@@ -258,7 +258,7 @@ export default {
   },
   download: {
     kicker: "下载",
-    title: "下载 Codex App Manager",
+    title: "下载 OSIR Codex Manager",
     lead: "选择适合你的方式。所有直链都是镜像永久链接,始终指向最新版本,国内直连可达。",
     recommended: "为你推荐",
     brew: {
@@ -290,8 +290,8 @@ export default {
     github: {
       title: "GitHub",
       note: "代码、Issue 与每一次发布记录,都公开在这里。",
-      managerLabel: "qq501987847/codex-app-manager",
-      mirrorLabel: "AWAI/codexapp.awai.cc",
+      managerLabel: "ousir0/osir-codex-manager",
+      mirrorLabel: "OSIR/app.osirclaw.com",
     },
     signing: {
       status: "Windows Authenticode 的 SignPath Foundation 申请仍在审核;当前 Windows 安装器未签名。",
@@ -325,7 +325,7 @@ export default {
     made: "用 Tauri,和一点耐心做成。",
     backTop: "回到顶部",
     links: {
-      manager: "Codex App Manager",
+      manager: "OSIR Codex Manager",
       mirror: "Codex App Mirror",
       signingPolicy: "Code signing policy · 代码签名政策",
       privacyPolicy: "隐私政策",

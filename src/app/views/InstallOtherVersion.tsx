@@ -331,7 +331,7 @@ export function InstallOtherVersionSheet({
             <div className="version-source">
               <span>
                 <Icon name="download" />
-                Wangnov/codex-app-mirror
+                ousir0/osir-codex-mirror
               </span>
               <small>
                 {resolvedArchitecture

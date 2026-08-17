@@ -5,8 +5,7 @@ import { configDefaults, defineConfig } from "vitest/config";
 import pkg from "./package.json";
 
 const SKIN_CATALOG_BASES = [
-  "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main",
-  "https://gitee.com/qq501987849/codex-app-manager-skins/raw/master",
+  "https://app.osirclaw.com/skins",
 ];
 
 const skinCatalogProxy: Plugin = {

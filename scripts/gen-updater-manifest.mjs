@@ -16,7 +16,7 @@ if (!tag || !dir) {
   process.exit(2);
 }
 const version = tag.replace(/^v/, "");
-const REPO = "qq501987847/codex-app-manager";
+const REPO = "ousir0/osir-codex-manager";
 const downloadUrl = (file) =>
   `https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(file)}`;
 
@@ -80,7 +80,7 @@ if (missing.length > 0) {
 
 const manifest = {
   version,
-  notes: `Codex App Manager ${tag}`,
+  notes: `OSIR Codex Manager ${tag}`,
   pub_date: new Date().toISOString(),
   platforms,
 };

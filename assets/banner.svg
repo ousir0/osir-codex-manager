@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif">
-  <title id="title">AWAI Codex App Manager</title>
-  <desc id="desc">A local manager for installing, updating, configuring and theming Codex through the AWAI mirror.</desc>
+  <title id="title">OSIR Codex Manager</title>
+  <desc id="desc">A local manager for installing, updating, configuring and theming Codex through the OSIR mirror.</desc>
 
   <defs>
     <clipPath id="frame"><rect width="1400" height="420" rx="24"/></clipPath>
@@ -21,7 +21,7 @@
     <circle cx="1110" cy="116" r="86" fill="#69A5FA" opacity=".16" filter="url(#glow)"/>
     <circle cx="1218" cy="306" r="58" fill="#8DE1D0" opacity=".12" filter="url(#glow)"/>
 
-    <!-- AWAI route mark: local app -> verified mirror -> API -->
+    <!-- OSIR route mark: local app -> verified mirror -> API -->
     <g transform="translate(915 94)">
       <path d="M56 98H178M218 98H340" fill="none" stroke="#69A5FA" stroke-width="4" stroke-linecap="round"/>
       <path d="M168 89L180 98L168 107M330 89L342 98L330 107" fill="none" stroke="#69A5FA" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -59,8 +59,8 @@
       </g>
 
       <g transform="translate(166 81)">
-        <text x="0" y="24" font-size="31" font-weight="700" fill="#F2F7FF" letter-spacing=".2">AWAI</text>
-        <text x="0" y="54" font-size="20" fill="#9EC7FF" letter-spacing=".4">Codex App Manager</text>
+        <text x="0" y="24" font-size="31" font-weight="700" fill="#F2F7FF" letter-spacing=".2">OSIR</text>
+        <text x="0" y="54" font-size="20" fill="#9EC7FF" letter-spacing=".4">OSIR Codex Manager</text>
         <text x="0" y="96" font-size="15" fill="#DCEBFF" opacity=".78">安装 · 更新 · 配置 · 主题</text>
         <text x="0" y="124" font-size="14" fill="#9EC7FF" opacity=".82">Verified bytes. Local control.</text>
       </g>
@@ -69,13 +69,13 @@
         <rect width="114" height="28" rx="14" fill="#69A5FA" opacity=".15" stroke="#69A5FA" stroke-opacity=".62"/>
         <text x="57" y="19" text-anchor="middle" font-size="12" fill="#BFD9FF">Windows · macOS</text>
         <rect x="124" width="102" height="28" rx="14" fill="#8DE1D0" opacity=".13" stroke="#8DE1D0" stroke-opacity=".62"/>
-        <text x="175" y="19" text-anchor="middle" font-size="12" fill="#BDEFE7">AWAI API</text>
+        <text x="175" y="19" text-anchor="middle" font-size="12" fill="#BDEFE7">OSIR API</text>
         <rect x="236" width="112" height="28" rx="14" fill="#F4BF74" opacity=".12" stroke="#F4BF74" stroke-opacity=".62"/>
         <text x="292" y="19" text-anchor="middle" font-size="12" fill="#F8D59C">.codexskin</text>
       </g>
     </g>
 
-    <text x="1310" y="382" text-anchor="end" font-size="13" fill="#9EC7FF" opacity=".72">codexapp.awai.cc</text>
+    <text x="1310" y="382" text-anchor="end" font-size="13" fill="#9EC7FF" opacity=".72">app.osirclaw.com</text>
     <rect width="1400" height="420" rx="24" fill="none" stroke="#DCEBFF" stroke-opacity=".17"/>
   </g>
 </svg>

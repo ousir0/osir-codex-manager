@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Codex App Manager",
-  "mainBinaryName": "codex-app-manager",
+  "productName": "OSIR Codex Manager",
+  "mainBinaryName": "osir-codex-manager",
   "version": "0.5.3",
-  "identifier": "cc.awai.codexappmanager",
+  "identifier": "com.osir.codexmanager",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -16,7 +16,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "Codex App Manager",
+        "title": "OSIR Codex Manager",
         "width": 400,
         "height": 640,
         "resizable": false,
@@ -42,9 +42,9 @@
       "icons/icon.ico"
     ],
     "category": "Utility",
-    "copyright": "Copyright (c) 2026 AWAI",
-    "shortDescription": "AWAI Codex install, update, and configuration manager.",
-    "longDescription": "AWAI's manager for installing, updating, configuring, and theming the official Codex desktop app.",
+    "copyright": "Copyright (c) 2026 OSIR",
+    "shortDescription": "OSIR installer, updater, configuration, and theme manager for Codex.",
+    "longDescription": "OSIR Codex Manager installs, updates, configures, and themes the official Codex desktop app.",
     "targets": ["nsis", "dmg", "app"],
     "resources": ["resources/*"],
     "windows": {
@@ -86,10 +86,10 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIxQThDQzg4QjlFNjE5QTEKUldTaEdlYTVpTXlvSWNQYVRHMjRNQmtLQ25HdE1aV2FoY0hLSldsZHpHM3NMYkJHMk8zVDR0WDEK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCMzFCRDU1RDJCMTVBRDEKUldUUldySFNWYjB4bTR4YlRmalNIbmQ4RkxYTjBNUHBUZzMvNlM0eU44dGE2TVhKWWNaWksvVzgK",
       "endpoints": [
-        "https://codexapp.awai.cc/manager/latest.json",
-        "https://github.com/qq501987847/codex-app-manager/releases/latest/download/latest.json"
+        "https://app.osirclaw.com/manager/latest.json",
+        "https://github.com/ousir0/osir-codex-manager/releases/latest/download/latest.json"
       ]
     }
   }

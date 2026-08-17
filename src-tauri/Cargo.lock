@@ -535,41 +535,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-app-manager"
-version = "0.5.3"
-dependencies = [
- "base64 0.23.0",
- "codex-mac-engine",
- "codex-theme-engine",
- "codex-win-engine",
- "directories",
- "fs4",
- "libc",
- "log",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-dialog",
- "tauri-plugin-log",
- "tauri-plugin-process",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "thiserror 2.0.19",
- "tokio",
- "toml_edit 0.25.13+spec-1.1.0",
- "url",
- "uuid",
- "webview2-com",
- "windows-core 0.61.2",
- "windows-sys 0.61.2",
- "zip 8.6.0",
-]
-
-[[package]]
 name = "codex-mac-engine"
 version = "0.1.0"
 dependencies = [
@@ -2730,6 +2695,41 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "osir-codex-manager"
+version = "0.5.3"
+dependencies = [
+ "base64 0.23.0",
+ "codex-mac-engine",
+ "codex-theme-engine",
+ "codex-win-engine",
+ "directories",
+ "fs4",
+ "libc",
+ "log",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-dialog",
+ "tauri-plugin-log",
+ "tauri-plugin-process",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "thiserror 2.0.19",
+ "tokio",
+ "toml_edit 0.25.13+spec-1.1.0",
+ "url",
+ "uuid",
+ "webview2-com",
+ "windows-core 0.61.2",
+ "windows-sys 0.61.2",
+ "zip 8.6.0",
 ]
 
 [[package]]

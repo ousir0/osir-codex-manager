@@ -5,7 +5,7 @@
 # Cross-compilation ≠ runtime verification (see docs/windows-signing.md).
 #
 # Usage:
-#   & .\scripts\windows-pe-arch.ps1 -Path path\to\codex-app-manager.exe
+#   & .\scripts\windows-pe-arch.ps1 -Path path\to\osir-codex-manager.exe
 #   & .\scripts\windows-pe-arch.ps1 -Path $main -ExpectMachine 0xAA64
 
 [CmdletBinding()]

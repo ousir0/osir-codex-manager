@@ -56,7 +56,7 @@ def image_file(input_path: str) -> tuple[pathlib.Path, str, bytes]:
 def multipart_edit_body(model: str, prompt: str, input_paths: list[str]) -> tuple[bytes, str]:
     if not input_paths:
         raise RuntimeError("edit 至少需要一张参考图片")
-    boundary = f"----awai-image-edit-{uuid.uuid4().hex}"
+    boundary = f"----osir-image-edit-{uuid.uuid4().hex}"
     body = bytearray()
 
     def field(name: str, value: str) -> None:
@@ -140,7 +140,7 @@ def response_image_bytes(result: object, base_url: str, api_key: str) -> bytes:
         parsed = urllib.parse.urlparse(value)
         if parsed.scheme not in ("http", "https"):
             raise RuntimeError("Image API returned an unsupported image URL")
-        headers = {"User-Agent": "Codex-App-Manager/0.5"}
+        headers = {"User-Agent": "OSIR-Codex-Manager/0.5"}
         if url_origin(value) == url_origin(base_url):
             headers["Authorization"] = f"Bearer {api_key}"
         try:

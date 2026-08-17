@@ -1,13 +1,13 @@
 # manager-download-router
 
 Cloudflare Worker that serves the **manager's own** self-update artifacts at
-`https://codexapp.awai.cc/manager/*`, so the in-app updater doesn't
+`https://app.osirclaw.com/manager/*`, so the in-app updater doesn't
 depend on GitHub (slow/blocked for the mainland-China audience).
 
-It uses the AWAI download-router dual-backend design, but on
+It uses the OSIR download-router dual-backend design, but on
 the manager's **own** bucket so the two never mix:
 
-- **Global** → streamed directly from the bound R2 bucket `codex-app-manager`.
+- **Global** → streamed directly from the bound R2 bucket `osir-codex-manager`.
 - **Mainland China** (`request.cf.country` ∈ `SECONDARY_COUNTRY_CODES`) → 302 to
   a presigned **IHEP S3** URL, once the `SECONDARY_S3_*` secrets are set. Until
   then CN also falls back to R2 (still far better than GitHub).
@@ -38,8 +38,8 @@ self-consistent; v0.1.9+ use the versioned layout.)
 > `release.yml` stage, verify, and promote steps exist.
 
 ## Already provisioned (done)
-- R2 bucket `codex-app-manager` created.
-- This worker deployed with route `codexapp.awai.cc/manager/*` + the R2
+- R2 bucket `osir-codex-manager` created.
+- This worker deployed with route `app.osirclaw.com/manager/*` + the R2
   binding.
 - v0.1.8 seeded (latest.json + installers) — the endpoint is live.
 

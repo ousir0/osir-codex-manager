@@ -12,7 +12,7 @@
 # array binding for -Path on some runners):
 #   & .\scripts\windows-packaged-smoke.ps1 -Installer path\to\*-setup.exe
 #
-# Safe for CI: currentUser installMode → %LOCALAPPDATA%\Codex App Manager
+# Safe for CI: currentUser installMode → %LOCALAPPDATA%\OSIR Codex Manager
 # (no admin elevation). Kills the app between stages. Does not touch ~/.codex.
 
 [CmdletBinding()]
@@ -20,8 +20,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Installer,
 
-    [string]$ProductName = "Codex App Manager",
-    [string]$MainBinaryName = "codex-app-manager",
+    [string]$ProductName = "OSIR Codex Manager",
+    [string]$MainBinaryName = "osir-codex-manager",
     [int]$LaunchSeconds = 12,
     [ValidateSet("optional", "required", "skip")]
     [string]$AuthenticodeMode = "optional"

@@ -87,8 +87,8 @@ export function readReleaseSourceVersions(sourceRoot) {
       ),
     ],
     [
-      'src-tauri/Cargo.lock#[[package]] name="codex-app-manager".version',
-      cargoLockPackageVersion(cargoLock, "codex-app-manager"),
+      'src-tauri/Cargo.lock#[[package]] name="osir-codex-manager".version',
+      cargoLockPackageVersion(cargoLock, "osir-codex-manager"),
     ],
   ];
 }
@@ -131,7 +131,7 @@ export function assertLocalReleaseArtifactNames(releaseTag, artifactsDir) {
     /_(?:x64|arm64)-setup\.(?:exe|nsis\.zip)(?:\.sig)?$/.test(name),
   );
   const wrongVersion = updaterInstallers.filter(
-    (name) => !name.startsWith(`CodexAppManager_${version}_`),
+    (name) => !name.startsWith(`OSIRCodexManager_${version}_`),
   );
   if (wrongVersion.length > 0) {
     throw new Error(
@@ -140,7 +140,7 @@ export function assertLocalReleaseArtifactNames(releaseTag, artifactsDir) {
   }
 
   const unexpected = files.filter(
-    (name) => name.startsWith("CodexAppManager") && !expected.includes(name),
+    (name) => name.startsWith("OSIRCodexManager") && !expected.includes(name),
   );
   if (unexpected.length > 0) {
     throw new Error(

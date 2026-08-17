@@ -135,7 +135,7 @@ async def handle_client(
 
             client_writer.write(
                 b"HTTP/1.1 200 Connection Established\r\n"
-                b"Proxy-Agent: AWAI-Codex-I18n-Relay\r\n\r\n"
+                b"Proxy-Agent: OSIR-Codex-I18n-Relay\r\n\r\n"
             )
             await client_writer.drain()
             stats = TunnelStats()

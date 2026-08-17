@@ -41,7 +41,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       historicalReleaseCatalog: vi.fn(
         (platform: "macos" | "windows", architecture: "arm64" | "x64") =>
           Promise.resolve({
-            repository: "Wangnov/codex-app-mirror",
+            repository: "ousir0/osir-codex-mirror",
             platform,
             architecture,
             releases: [],
@@ -218,7 +218,7 @@ describe("WinHome state machine", () => {
     api.getPausedOperationSnapshot.mockResolvedValue(null);
     api.historicalReleaseCatalog.mockImplementation((platform, architecture) =>
       Promise.resolve({
-        repository: "Wangnov/codex-app-mirror",
+        repository: "ousir0/osir-codex-mirror",
         platform,
         architecture,
         releases: [],

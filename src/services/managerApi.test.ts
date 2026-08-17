@@ -24,12 +24,12 @@ describe("isNetworkError", () => {
   it("classifies transport and TLS failures as connectivity errors", () => {
     expect(
       isNetworkError(
-        "update engine error: io error: curl failed for host=codexapp.awai.cc exit=35: stderr='curl: (35) schannel: failed to receive handshake, SSL/TLS connection failed'",
+        "update engine error: io error: curl failed for host=app.osirclaw.com exit=35: stderr='curl: (35) schannel: failed to receive handshake, SSL/TLS connection failed'",
       ),
     ).toBe(true);
     expect(
       isNetworkError(
-        "curl: (6) Could not resolve host: codexapp.awai.cc",
+        "curl: (6) Could not resolve host: app.osirclaw.com",
       ),
     ).toBe(true);
     expect(

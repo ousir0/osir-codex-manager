@@ -5,9 +5,9 @@ set -euo pipefail
 # after bootstrap.sh. Re-running it refreshes metadata and overwrites the
 # latest artifacts; failed downloads do not replace existing files.
 
-BASE="${SOURCE_BASE_URL:-https://codexapp.awai.cc}"
-PUBLIC_BASE="${PUBLIC_BASE_URL:-https://codexapp.awai.cc}"
-ROOT="${DOWNLOAD_ROOT:-/srv/awai}"
+BASE="${SOURCE_BASE_URL:-https://app.osirclaw.com}"
+PUBLIC_BASE="${PUBLIC_BASE_URL:-https://app.osirclaw.com}"
+ROOT="${DOWNLOAD_ROOT:-/srv/osir}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
@@ -31,10 +31,10 @@ ln -f "${ROOT}/latest/win-x64" "${ROOT}/latest/win"
 
 # Public manager installer links used by the website.
 for name in \
-    CodexAppManager_aarch64.dmg \
-    CodexAppManager_x86_64.dmg \
-    CodexAppManager_x64-setup.exe \
-    CodexAppManager_arm64-setup.exe; do
+    OSIRCodexManager_aarch64.dmg \
+    OSIRCodexManager_x86_64.dmg \
+    OSIRCodexManager_x64-setup.exe \
+    OSIRCodexManager_arm64-setup.exe; do
     download "/manager/latest/${name}" "manager/latest/${name}"
 done
 

@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..");
-const DEFAULT_MIRROR_BASE = "https://codexapp.awai.cc/manager";
+const DEFAULT_MIRROR_BASE = "https://app.osirclaw.com/manager";
 const LATEST_KEY = "latest.json";
 const SUMMARY_SCHEMA_VERSION = 1;
 const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -598,7 +598,7 @@ async function downloadPublicObject(
       let response = await fetchImpl(url, {
         headers: {
           "Cache-Control": "no-cache",
-          "User-Agent": "Codex-App-Manager release verifier",
+          "User-Agent": "OSIR-Codex-Manager release verifier",
         },
         redirect: backend === "ihep" ? "manual" : "follow",
         signal: AbortSignal.timeout(300_000),
@@ -623,7 +623,7 @@ async function downloadPublicObject(
         assertExpectedIhepRedirect(redirected, ihepRedirect.expectation, ihepRedirect.objectKey);
         await response.body?.cancel().catch(() => {});
         response = await fetchImpl(redirected, {
-          headers: { "User-Agent": "Codex-App-Manager release verifier" },
+          headers: { "User-Agent": "OSIR-Codex-Manager release verifier" },
           // Do not let the expected IHEP endpoint redirect the verifier to a
           // different store after its Location has passed the binding check.
           redirect: "manual",
@@ -1059,7 +1059,7 @@ export function backendConfigsFromEnv(env, configPath) {
     new AwsObjectStore({
       name: "r2",
       endpoint: requiredValue(env, "MANAGER_R2_S3_ENDPOINT", "r2"),
-      bucket: env.MANAGER_R2_BUCKET?.trim() || "codex-app-manager",
+      bucket: env.MANAGER_R2_BUCKET?.trim() || "osir-codex-manager",
       region: "auto",
       accessKeyId: requiredValue(env, "MANAGER_R2_ACCESS_KEY_ID", "r2"),
       secretAccessKey: requiredValue(env, "MANAGER_R2_SECRET_ACCESS_KEY", "r2"),

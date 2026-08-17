@@ -65,4 +65,8 @@ if [[ -n "$DMG" ]]; then
   log "dmg repacked (Tauri layout kept, finalized app swapped in): ${DMG##*/}"
 fi
 
-log "done — every macOS artifact now carries the signed, stapled, adaptive-icon app."
+if [[ -n "${AC_API_KEY_ID:-}" ]]; then
+  log "done — every macOS artifact now carries the signed, stapled, adaptive-icon app."
+else
+  log "done — dev artifacts carry the signed adaptive-icon app; notarization was skipped."
+fi

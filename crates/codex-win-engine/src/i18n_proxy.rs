@@ -11,7 +11,7 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 const DEFAULT_PORT: u16 = 19443;
-const SERVER_TUNNEL_URL: &str = "wss://codexapp.awai.cc/i18n-tunnel";
+const SERVER_TUNNEL_URL: &str = "wss://app.osirclaw.com/i18n-tunnel";
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_TUNNEL_BYTES: usize = 16 * 1024 * 1024;
 const TUNNEL_LIFETIME: Duration = Duration::from_secs(5 * 60);
@@ -24,18 +24,18 @@ pub fn ensure_started() -> Option<u16> {
         listener.set_nonblocking(true).ok()?;
         let port = listener.local_addr().ok()?.port();
         std::thread::Builder::new()
-            .name("awai-i18n-proxy".to_string())
+            .name("osir-i18n-proxy".to_string())
             .spawn(move || {
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build();
                 match runtime {
                     Ok(runtime) => runtime.block_on(run(listener)),
-                    Err(error) => log::error!("failed to start AWAI i18n proxy runtime: {error}"),
+                    Err(error) => log::error!("failed to start OSIR i18n proxy runtime: {error}"),
                 }
             })
             .ok()?;
-        log::info!("AWAI i18n loopback proxy listening on 127.0.0.1:{port}");
+        log::info!("OSIR i18n loopback proxy listening on 127.0.0.1:{port}");
         Some(port)
     })
 }
@@ -61,7 +61,7 @@ async fn run(listener: std::net::TcpListener) {
     let listener = match TcpListener::from_std(listener) {
         Ok(listener) => listener,
         Err(error) => {
-            log::error!("failed to bind AWAI i18n proxy listener: {error}");
+            log::error!("failed to bind OSIR i18n proxy listener: {error}");
             return;
         }
     };
@@ -70,11 +70,11 @@ async fn run(listener: std::net::TcpListener) {
             Ok((stream, peer)) => {
                 tokio::spawn(async move {
                     if let Err(error) = handle(stream).await {
-                        log::debug!("AWAI i18n proxy peer={peer:?} closed: {error}");
+                        log::debug!("OSIR i18n proxy peer={peer:?} closed: {error}");
                     }
                 });
             }
-            Err(error) => log::warn!("AWAI i18n proxy accept failed: {error}"),
+            Err(error) => log::warn!("OSIR i18n proxy accept failed: {error}"),
         }
     }
 }
@@ -138,7 +138,7 @@ async fn handle(mut client: TcpStream) -> Result<(), Box<dyn std::error::Error +
     let (mut ws_write, mut ws_read) = socket.split();
     match tokio::time::timeout(Duration::from_secs(10), ws_read.next()).await? {
         Some(Ok(Message::Text(text))) if text == "ready" => {}
-        _ => return Err("AWAI tunnel did not become ready".into()),
+        _ => return Err("OSIR tunnel did not become ready".into()),
     }
     client
         .write_all(b"HTTP/1.1 200 Connection Established\r\nConnection: keep-alive\r\n\r\n")

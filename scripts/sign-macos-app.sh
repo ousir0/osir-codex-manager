@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Inside-out code-sign a built "Codex App Manager.app", including the nested
+# Inside-out code-sign a built "OSIR Codex Manager.app", including the nested
 # vendored Sparkle `BinaryDelta` helper, then verify the whole bundle.
 #
 # Why this exists: `tauri build` copies our helper into Contents/Resources/ and

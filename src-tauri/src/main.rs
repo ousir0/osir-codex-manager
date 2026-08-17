@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    codex_app_manager_lib::run()
+    osir_codex_manager_lib::run()
 }

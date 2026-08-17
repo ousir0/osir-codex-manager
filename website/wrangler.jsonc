@@ -1,10 +1,10 @@
 {
   // The official website, served as static assets at the root of
-  // https://codexapp.awai.cc/. Path routing on the zone:
-  //   /manager/* -> codex-app-manager-download-router (this repo, cloudflare/)
-  //   /latest/*  -> AWAI current-artifact routes
+  // https://app.osirclaw.com/. Path routing on the zone:
+  //   /manager/* -> osir-codex-manager-download-router (this repo, cloudflare/)
+  //   /latest/*  -> OSIR current-artifact routes
   //   /*         -> this worker (longest-match precedence keeps the two above)
-  "name": "codex-app-manager-website",
+  "name": "osir-codex-manager-website",
   "compatibility_date": "2026-06-04",
   "workers_dev": false,
   "assets": {
@@ -13,7 +13,7 @@
   },
   "routes": [
     {
-      "pattern": "codexapp.awai.cc/*",
+      "pattern": "app.osirclaw.com/*",
       "zone_id": "a5bae9b722f3c5fe1a24aaebe7a8e663"
     }
   ]

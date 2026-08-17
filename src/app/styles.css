@@ -10,7 +10,7 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* AWAI / Manager brand blue. Keep the exact source color available to art. */
+  /* OSIR / Manager brand blue. Keep the exact source color available to art. */
   --brand-violet: oklch(0.78 0.13 286);
   --brand-blue: #69a5fa;
   --brand-deep: #2f6fbd;

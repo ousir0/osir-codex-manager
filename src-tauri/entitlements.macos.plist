@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Hardened-runtime entitlements for the Codex App Manager outer app.
+  <!-- Hardened-runtime entitlements for the OSIR Codex Manager outer app.
        WKWebView's JavaScript engine requires JIT; the unsigned-executable-memory
        exception is the WebKit-recommended companion on hardened runtime. These
        are applied only when signing the OUTER app with a real Developer ID

@@ -439,7 +439,7 @@ pub struct RecoverySummary {
 /// `NeedsManual`. Staging cleanup must not delete these.
 ///
 /// We protect install/new/backup **themselves** and staging-ish parents of
-/// `new_path` / `backup_path` (update-* dirs, `.codex-app-manager-staging`),
+/// `new_path` / `backup_path` (update-* dirs, `.osir-codex-manager-staging`),
 /// but never the install's parent (e.g. `/Applications`) — that would block
 /// unrelated cleanup.
 pub fn protected_paths() -> Vec<PathBuf> {
@@ -475,7 +475,7 @@ pub fn protected_paths() -> Vec<PathBuf> {
                 let name = parent.file_name().and_then(|n| n.to_str()).unwrap_or("");
                 let staging_ish = name.starts_with("update-")
                     || name.starts_with("portable-")
-                    || name == ".codex-app-manager-staging"
+                    || name == ".osir-codex-manager-staging"
                     || name.starts_with("Codex.rollback")
                     || name.starts_with("backup-");
                 if staging_ish {

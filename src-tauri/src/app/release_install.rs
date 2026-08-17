@@ -12,12 +12,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::AppError;
 
-const REPOSITORY: &str = "Wangnov/codex-app-mirror";
+const REPOSITORY: &str = "ousir0/osir-codex-mirror";
 const RELEASES_API: &str =
-    "https://api.github.com/repos/Wangnov/codex-app-mirror/releases?per_page=100";
+    "https://api.github.com/repos/ousir0/osir-codex-mirror/releases?per_page=100";
 const MAX_RELEASE_PAGES: usize = 50;
 const RELEASE_TAG_API_PREFIX: &str =
-    "https://api.github.com/repos/Wangnov/codex-app-mirror/releases/tags/";
+    "https://api.github.com/repos/ousir0/osir-codex-mirror/releases/tags/";
 const RELEASE_TAG_PREFIX: &str = "codex-app-";
 const WINDOWS_IDENTITY_SUFFIX: &str = "__2p2nqsd0c76g0.Msix";
 
@@ -675,7 +675,7 @@ mod tests {
     #[test]
     fn download_url_is_pinned_to_repository_tag_and_asset() {
         assert!(validate_download_url(
-            "https://github.com/Wangnov/codex-app-mirror/releases/download/codex-app-26.727.51351/Codex-mac-arm64.dmg",
+            "https://github.com/ousir0/osir-codex-mirror/releases/download/codex-app-26.727.51351/Codex-mac-arm64.dmg",
             "codex-app-26.727.51351",
             "Codex-mac-arm64.dmg"
         )
@@ -698,7 +698,7 @@ mod tests {
             "published_at": "2026-05-13T00:00:00Z",
             "assets": [{
                 "name": "Codex-mac-arm64.dmg",
-                "browser_download_url": "https://github.com/Wangnov/codex-app-mirror/releases/download/codex-app-26.513.20950/Codex-mac-arm64.dmg",
+                "browser_download_url": "https://github.com/ousir0/osir-codex-mirror/releases/download/codex-app-26.513.20950/Codex-mac-arm64.dmg",
                 "size": 42,
                 "digest": format!("sha256:{digest}")
             }]

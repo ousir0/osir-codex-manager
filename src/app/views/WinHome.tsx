@@ -117,7 +117,6 @@ function storeProvenanceRecovery(value: ProvenanceRecovery | null) {
 // the win_* backend (codex-win-engine): MSIX sideload or portable fallback.
 export function WinHome({
   onOpenSettings,
-  hostArchitecture,
 }: {
   onOpenSettings: () => void;
   hostArchitecture?: string | null;

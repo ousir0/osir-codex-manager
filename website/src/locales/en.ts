@@ -1,9 +1,9 @@
 export default {
   meta: {
-    title: "Codex App Manager — install, update & uninstall the official Codex desktop app",
+    title: "OSIR Codex Manager — install, update & uninstall the official Codex desktop app",
     description:
       "One-click install, Sparkle delta updates on macOS, and clean uninstall for the official OpenAI Codex desktop app. Verified byte by byte, mirrored verbatim, and reachable from mainland China without a proxy. Open source, MIT licensed.",
-    ogTitle: "Codex App Manager — official Codex, installed in one click",
+    ogTitle: "OSIR Codex Manager — official Codex, installed in one click",
     ogDescription:
       "Install, update, and uninstall the official Codex desktop app — macOS delta updates with automatic rollback, verbatim mirrors reachable from mainland China. The macOS build is signed and notarized; the project is open source.",
   },
@@ -58,7 +58,7 @@ export default {
     badges: ["macOS signed & notarized", "MIT licensed", "Tauri v2", "11 languages"],
   },
   demo: {
-    window: "Codex App Manager",
+    window: "OSIR Codex Manager",
     updTitle: "Update available",
     updVer: "26.602.71036",
     updFlow: "Now 26.602.40724 → New 26.602.71036 · ~12.6 MiB",
@@ -108,7 +108,7 @@ export default {
   manager: {
     kicker: "The Manager",
     title: "Install, update, uninstall — without the mess",
-    lead: "Codex App Manager treats every operation as three honest steps. It looks before it leaps, and it verifies before doing anything destructive.",
+    lead: "OSIR Codex Manager treats every operation as three honest steps. It looks before it leaps, and it verifies before doing anything destructive.",
     steps: [
       {
         name: "Detect",
@@ -155,7 +155,7 @@ export default {
       },
     ],
     mock: {
-      window: "Codex App Manager",
+      window: "OSIR Codex Manager",
       detect: {
         scan: "Scanning this machine…",
         found: "Codex desktop app found",
@@ -254,7 +254,7 @@ export default {
   },
   download: {
     kicker: "Download",
-    title: "Download Codex App Manager",
+    title: "Download OSIR Codex Manager",
     lead: "Pick your platform. Every link below resolves to the latest release and works from mainland China without a proxy.",
     recommended: "Recommended for you",
     brew: {
@@ -286,8 +286,8 @@ export default {
     github: {
       title: "On GitHub",
       note: "Source, issues, and the full pipeline — audit away.",
-      managerLabel: "qq501987847/codex-app-manager",
-      mirrorLabel: "AWAI/codexapp.awai.cc",
+      managerLabel: "ousir0/osir-codex-manager",
+      mirrorLabel: "OSIR/app.osirclaw.com",
     },
     signing: {
       status: "The SignPath Foundation application for Windows Authenticode is still under review; the current Windows installers are unsigned.",
@@ -322,7 +322,7 @@ export default {
     made: "Built with Tauri v2 and an unreasonable concern for bytes.",
     backTop: "Back to top",
     links: {
-      manager: "Codex App Manager",
+      manager: "OSIR Codex Manager",
       mirror: "Codex App Mirror",
       signingPolicy: "Code signing policy",
       privacyPolicy: "Privacy policy",

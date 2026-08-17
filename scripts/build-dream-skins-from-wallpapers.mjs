@@ -163,7 +163,7 @@ function parseHistogram(imagePath) {
       "histogram:info:-",
     ], { encoding: "utf8" });
   } catch {
-    process.stderr.write(`Color analysis failed for ${path.basename(path.dirname(imagePath))}; using AWAI blue fallback.\n`);
+    process.stderr.write(`Color analysis failed for ${path.basename(path.dirname(imagePath))}; using OSIR blue fallback.\n`);
     return [];
   }
   return output.split("\n").flatMap((line) => {
@@ -266,8 +266,8 @@ async function main() {
       generated.push({ sourceFolder: folder.name, status: "skipped", reason: "No PNG found" });
       continue;
     }
-    const id = `awai-${String(index + 1).padStart(2, "0")}`;
-    const name = THEME_NAMES[index] ?? `AWAI ${String(index + 1).padStart(2, "0")}`;
+    const id = `osir-${String(index + 1).padStart(2, "0")}`;
+    const name = THEME_NAMES[index] ?? `OSIR ${String(index + 1).padStart(2, "0")}`;
     const packageDirectory = path.join(args.output, id);
     await fs.mkdir(packageDirectory, { recursive: true });
     const imagePath = path.join(packageDirectory, "background.webp");
@@ -306,7 +306,7 @@ async function main() {
       minClientVersion: "1.5.0",
       platforms: ["windows"],
       capabilities: ["background", "tokens", "safe-css"],
-      publisher: { id: "awai", displayName: "AWAI" },
+      publisher: { id: "osir", displayName: "OSIR" },
       license: "Proprietary",
       provenance: {
         aiGenerated: false,
@@ -345,7 +345,7 @@ async function main() {
     themes: generated,
   });
   await fs.writeFile(path.join(args.output, "README.txt"), [
-    "AWAI Dream Skin candidate packs",
+    "OSIR Dream Skin candidate packs",
     "",
     "Each ZIP is a Windows Dream Skin package generated from one user-provided PNG.",
     "Brand and API address are intentionally omitted; keep those in the manager UI.",

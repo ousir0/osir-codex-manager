@@ -194,7 +194,7 @@ pub struct WinInstallStatus {
 pub struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
-    /// Host the bytes are coming from, e.g. `codexapp.awai.cc`.
+    /// Host the bytes are coming from, e.g. `app.osirclaw.com`.
     pub source: String,
 }
 
@@ -2197,7 +2197,7 @@ pub fn launch_codex(settings: &AppSettings) -> Result<(), AppError> {
         codex_win_engine::LaunchOptions {
             disable_codex_self_updates: settings.disable_codex_self_updates,
             remote_debugging_port: None,
-            proxy_pac_url: Some(codex_win_engine::awai_i18n_proxy_pac_url()),
+            proxy_pac_url: Some(codex_win_engine::osir_i18n_proxy_pac_url()),
         },
     )
     .map_err(|e| AppError::Engine(e.to_string()))
@@ -2730,7 +2730,7 @@ mod tests {
             "adopted-external",
         );
         let settings = AppSettings::new(
-            "https://codexapp.awai.cc".to_string(),
+            "https://app.osirclaw.com".to_string(),
             temp_test_dir("managed-missing-root")
                 .join("missing")
                 .to_string_lossy()

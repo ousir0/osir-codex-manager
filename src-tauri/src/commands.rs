@@ -2558,7 +2558,7 @@ pub fn codex_theme_preview(theme_ref: String) -> Result<Option<String>, CommandE
     ))
 }
 
-/// The online skin catalog (AWAI skin repository, published by
+/// The online skin catalog (OSIR skin repository, published by
 /// awesome-codex-skins CI).
 #[tauri::command]
 pub async fn codex_theme_catalog() -> Result<Vec<crate::app::codex_theme::CatalogSkin>, CommandError>

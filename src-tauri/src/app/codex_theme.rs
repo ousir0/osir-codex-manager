@@ -548,15 +548,14 @@ pub fn resolve_theme_for_keep(settings: &AppSettings, theme_ref: &str) -> Result
 }
 
 // ── Online catalog ─────────────────────────────────────────────────────────
-// GitHub is the primary source and Gitee is the mainland-China fallback.
-// Catalog URLs stay relative and are resolved ONLY against these fixed bases,
+// OSIR hosts the catalog and packages on its own application domain.
+// Catalog URLs stay relative and are resolved ONLY against this fixed base,
 // so a hostile catalog cannot redirect downloads elsewhere. All transfers go
 // through system curl (Windows 10+ ships curl.exe) with https pinned, size
 // caps, and a sha256 gate before anything reaches the importer.
 
 const SKINS_BASES: &[&str] = &[
-    "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main",
-    "https://gitee.com/qq501987849/codex-app-manager-skins/raw/main",
+    "https://app.osirclaw.com/skins",
 ];
 const CATALOG_MAX_BYTES: &str = "1048576"; // 1 MB index.json cap
 const PACK_MAX_BYTES: &str = "52428800"; // 50 MB archive cap (importer re-checks)
@@ -1579,7 +1578,7 @@ fn launch_codex_with_cdp(
         .arg("--lang=zh-CN")
         .arg(format!(
             "--proxy-pac-url={}",
-            codex_win_engine::awai_i18n_proxy_pac_url()
+            codex_win_engine::osir_i18n_proxy_pac_url()
         ))
         .spawn()
         .map(|_| ())
@@ -1653,7 +1652,7 @@ fn launch_codex_with_cdp(
         codex_win_engine::LaunchOptions {
             disable_codex_self_updates: disable_self_updates,
             remote_debugging_port: Some(port),
-            proxy_pac_url: Some(codex_win_engine::awai_i18n_proxy_pac_url()),
+            proxy_pac_url: Some(codex_win_engine::osir_i18n_proxy_pac_url()),
         },
     )
     .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
@@ -1763,7 +1762,7 @@ mod catalog_network_tests {
         let primary = safe_catalog_path(SKINS_BASES[0], "packs/theme-1.0.0.codexskin").unwrap();
         assert_eq!(
             primary,
-            "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main/packs/theme-1.0.0.codexskin"
+            "https://app.osirclaw.com/skins/packs/theme-1.0.0.codexskin"
         );
         assert!(safe_catalog_path(SKINS_BASES[0], "../secret").is_err());
         assert!(safe_catalog_path(SKINS_BASES[0], "https://evil.example/skin").is_err());

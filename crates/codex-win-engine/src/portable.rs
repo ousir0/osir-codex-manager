@@ -798,7 +798,7 @@ pub fn install_portable_from_msix_with_observer(
     fs::create_dir_all(install_parent).map_err(|e| io_err("create install parent", e))?;
     let operation_id = uuid::Uuid::new_v4();
     let work_dir = install_parent
-        .join(".codex-app-manager-staging")
+        .join(".osir-codex-manager-staging")
         .join(format!("portable-{operation_id}"));
     if work_dir.exists() {
         fs::remove_dir_all(&work_dir).map_err(|e| io_err("clear portable staging", e))?;

@@ -1,11 +1,11 @@
-// Manager update-artifact router for https://codexapp.awai.cc/manager/*
+// Manager update-artifact router for https://app.osirclaw.com/manager/*
 //
-// Global  → served directly from the bound R2 bucket (codex-app-manager).
+// Global  → served directly from the bound R2 bucket (osir-codex-manager).
 // Mainland China (request.cf.country in SECONDARY_COUNTRY_CODES) → 302 to a
 //          presigned IHEP S3 URL, when those secrets are configured.
 //
 // The path after /manager/ is the object key (e.g. /manager/latest.json →
-// "latest.json"). Uses the same AWAI routing contract, but binds R2
+// "latest.json"). Uses the same OSIR routing contract, but binds R2
 // directly (self-contained, no extra public domain) and keys on /manager/.
 
 const PREFIX = "/manager/";
@@ -24,8 +24,8 @@ export default {
     }
 
     // /manager/latest/<file> → rewrite to the current immutable versioned key
-    // (latest/CodexAppManager_aarch64.dmg → 0.1.12/CodexAppManager_aarch64.dmg;
-    // latest/CodexAppManager_arm64-setup.exe → 0.1.12/CodexAppManager_0.1.12_arm64-setup.exe)
+    // (latest/OSIRCodexManager_aarch64.dmg → 0.1.12/OSIRCodexManager_aarch64.dmg;
+    // latest/OSIRCodexManager_arm64-setup.exe → 0.1.12/OSIRCodexManager_0.1.12_arm64-setup.exe)
     // so the README can link a permanent URL that never needs a version bump.
     // The rewrite is IN-PLACE (no redirect): still ONE Worker invocation, and
     // the resolved versioned object keeps its hard cache. Cost is one cheap R2
@@ -163,8 +163,8 @@ async function currentVersion(env) {
 // pass straight through; the Windows NSIS .exe embeds the version in its file
 // name, so insert it so a stable "latest" link resolves to the real object.
 function withVersion(file, version) {
-  const match = /^CodexAppManager_(x64|arm64)-setup\.exe$/.exec(file);
-  return match ? `CodexAppManager_${version}_${match[1]}-setup.exe` : file;
+  const match = /^OSIRCodexManager_(x64|arm64)-setup\.exe$/.exec(file);
+  return match ? `OSIRCodexManager_${version}_${match[1]}-setup.exe` : file;
 }
 
 // ── AWS SigV4 presigner (GET/HEAD) ──────────────────────────────────────────

@@ -85,7 +85,7 @@ jobs:
             Write-Host "::error::[build] no *-setup.exe under $nsis"
             exit 1
           }
-          $main = "src-tauri/target/x86_64-pc-windows-msvc/release/codex-app-manager.exe"
+          $main = "src-tauri/target/x86_64-pc-windows-msvc/release/osir-codex-manager.exe"
           if (-not (Test-Path -LiteralPath $main)) {
             Write-Host "::error::[build] missing main PE: $main"
             exit 1

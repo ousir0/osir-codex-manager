@@ -1,6 +1,6 @@
 import unittest
 
-from awai_connect_relay import RelayError, parse_connect_request
+from osir_connect_relay import RelayError, parse_connect_request
 
 
 def request(target: str, version: str = "HTTP/1.1") -> bytes:

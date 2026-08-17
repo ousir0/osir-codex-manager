@@ -1,4 +1,4 @@
-# Codex App Manager — 官网
+# OSIR Codex Manager — 官网
 
 中英双语单页官网(滚动叙事 + GSAP ScrollTrigger 管线可视化)。纯静态产物,可直接部署到
 Cloudflare Pages / GitHub Pages(`base: "./"`,任意子路径均可)。

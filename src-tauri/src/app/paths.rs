@@ -3,7 +3,13 @@ use std::path::{Path, PathBuf};
 
 const SMOKE_RUN_ENV: &str = "CAM_PACKAGED_SMOKE_RUN";
 const SMOKE_DATA_DIR_ENV: &str = "CAM_PACKAGED_SMOKE_DATA_DIR";
-const SMOKE_DATA_DIR_PREFIX: &str = "codex-app-manager-smoke-";
+const SMOKE_DATA_DIR_PREFIX: &str = "osir-codex-manager-smoke-";
+const NEW_PROJECT_QUALIFIER: &str = "com.osir";
+const NEW_PROJECT_ORGANIZATION: &str = "OSIR";
+const NEW_PROJECT_APPLICATION: &str = "CodexManager";
+const LEGACY_PROJECT_QUALIFIER: &str = "io.github";
+const LEGACY_PROJECT_ORGANIZATION: &str = "wangnov"; // ownership-audit: allow-legacy
+const LEGACY_PROJECT_APPLICATION: &str = "codexappmanager"; // ownership-audit: allow-legacy
 
 #[derive(Debug, PartialEq, Eq)]
 enum SmokeDataDir {
@@ -93,24 +99,79 @@ fn select_staging_root(smoke: SmokeDataDir, temp_dir: &Path, process_id: u32) ->
     match smoke {
         SmokeDataDir::Valid { path, .. } => path.join("staging"),
         SmokeDataDir::Invalid => temp_dir
-            .join(format!("codex-app-manager-smoke-invalid-{process_id}"))
+            .join(format!("osir-codex-manager-smoke-invalid-{process_id}"))
             .join("staging"),
-        SmokeDataDir::Absent => temp_dir.join("codex-app-manager").join("staging"),
+        SmokeDataDir::Absent => temp_dir.join("osir-codex-manager").join("staging"),
     }
+}
+
+fn new_project_dirs() -> Option<directories::ProjectDirs> {
+    directories::ProjectDirs::from(
+        NEW_PROJECT_QUALIFIER,
+        NEW_PROJECT_ORGANIZATION,
+        NEW_PROJECT_APPLICATION,
+    )
+}
+
+fn legacy_project_dirs() -> Option<directories::ProjectDirs> {
+    directories::ProjectDirs::from(
+        LEGACY_PROJECT_QUALIFIER,
+        LEGACY_PROJECT_ORGANIZATION,
+        LEGACY_PROJECT_APPLICATION,
+    )
+}
+
+/// Move the old manager data directory into the OSIR-owned location exactly once.
+///
+/// A rename is used instead of copying so settings, themes, provenance, and any
+/// future files move as one unit. If the new directory already exists, it wins;
+/// the legacy directory is left untouched so a user can recover it manually.
+fn migrate_legacy_dir(legacy: &Path, current: &Path) -> PathBuf {
+    if legacy == current || !legacy.exists() || current.exists() {
+        return current.to_path_buf();
+    }
+    let Ok(metadata) = std::fs::symlink_metadata(legacy) else {
+        return current.to_path_buf();
+    };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        log::warn!("ignoring unsafe legacy manager data path: {}", legacy.display());
+        return current.to_path_buf();
+    }
+    if let Some(parent) = current.parent() {
+        if let Err(error) = std::fs::create_dir_all(parent) {
+            log::warn!("failed to prepare OSIR manager data path: {error}");
+            return current.to_path_buf();
+        }
+    }
+    match std::fs::rename(legacy, current) {
+        Ok(()) => log::info!("migrated legacy manager data to {}", current.display()),
+        Err(error) => log::warn!("failed to migrate legacy manager data: {error}"),
+    }
+    current.to_path_buf()
+}
+
+fn production_data_dir() -> Option<PathBuf> {
+    let current = new_project_dirs()?.data_dir().to_path_buf();
+    let legacy = legacy_project_dirs()?.data_dir().to_path_buf();
+    Some(migrate_legacy_dir(&legacy, &current))
 }
 
 /// Manager data directory shared by settings, provenance, and operation locks.
 pub fn data_dir() -> Option<PathBuf> {
-    let production = directories::ProjectDirs::from("io.github", "wangnov", "codexappmanager")
-        .map(|dirs| dirs.data_dir().to_path_buf());
-    select_data_dir(smoke_data_dir_from_env(), production)
+    let smoke = smoke_data_dir_from_env();
+    let production = if matches!(&smoke, SmokeDataDir::Absent) {
+        production_data_dir()
+    } else {
+        None
+    };
+    select_data_dir(smoke, production)
 }
 
 /// Manager cache directory for re-downloadable, non-critical content (currently
 /// catalog preview thumbnails). Safe to clear at any time — distinct from
 /// `data_dir`, which holds settings/provenance that must persist.
 pub fn cache_dir() -> Option<PathBuf> {
-    directories::ProjectDirs::from("io.github", "wangnov", "codexappmanager")
+    new_project_dirs()
         .map(|dirs| dirs.cache_dir().to_path_buf())
 }
 
@@ -156,7 +217,7 @@ pub fn codex_home_dir() -> Option<PathBuf> {
 /// one — skins are megabytes of re-downloadable content that must not ride
 /// a domain roaming profile.
 pub fn default_skins_store_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("io.github", "wangnov", "codexappmanager")?;
+    let dirs = new_project_dirs()?;
     if cfg!(target_os = "windows") {
         Some(dirs.data_local_dir().join("themes"))
     } else {
@@ -167,8 +228,8 @@ pub fn default_skins_store_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        select_data_dir, select_staging_root, validate_smoke_data_dir, SmokeDataDir,
-        SMOKE_DATA_DIR_PREFIX,
+        migrate_legacy_dir, select_data_dir, select_staging_root, validate_smoke_data_dir,
+        SmokeDataDir, SMOKE_DATA_DIR_PREFIX,
     };
 
     fn test_run_id() -> String {
@@ -243,15 +304,36 @@ mod tests {
         );
 
         let temp_dir = std::env::temp_dir();
-        let production_staging = temp_dir.join("codex-app-manager").join("staging");
+        let production_staging = temp_dir.join("osir-codex-manager").join("staging");
         let invalid_staging = select_staging_root(SmokeDataDir::Invalid, &temp_dir, 1234);
         assert_ne!(invalid_staging, production_staging);
         assert_eq!(
             invalid_staging,
             temp_dir
-                .join("codex-app-manager-smoke-invalid-1234")
+                .join("osir-codex-manager-smoke-invalid-1234")
                 .join("staging")
         );
+    }
+
+    #[test]
+    fn legacy_data_is_migrated_once_without_overwriting_osir_data() {
+        let root = std::env::temp_dir().join(format!("osir-path-migration-{}", uuid::Uuid::new_v4()));
+        let legacy = root.join("legacy");
+        let current = root.join("current");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("settings.json"), b"legacy").unwrap();
+
+        assert_eq!(migrate_legacy_dir(&legacy, &current), current);
+        assert!(!legacy.exists());
+        assert_eq!(std::fs::read_to_string(current.join("settings.json")).unwrap(), "legacy");
+
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("settings.json"), b"newer-legacy").unwrap();
+        assert_eq!(migrate_legacy_dir(&legacy, &current), current);
+        assert!(legacy.exists());
+        assert_eq!(std::fs::read_to_string(current.join("settings.json")).unwrap(), "legacy");
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]

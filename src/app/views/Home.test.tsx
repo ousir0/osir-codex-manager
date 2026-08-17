@@ -41,7 +41,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       historicalReleaseCatalog: vi.fn(
         (platform: "macos" | "windows", architecture: "arm64" | "x64") =>
           Promise.resolve({
-            repository: "Wangnov/codex-app-mirror",
+            repository: "ousir0/osir-codex-mirror",
             platform,
             architecture,
             releases: [],
@@ -175,7 +175,7 @@ describe("MacHome state machine", () => {
     api.getHostArchitecture.mockResolvedValue("aarch64");
     api.historicalReleaseCatalog.mockImplementation((platform, architecture) =>
       Promise.resolve({
-        repository: "Wangnov/codex-app-mirror",
+        repository: "ousir0/osir-codex-mirror",
         platform,
         architecture,
         releases: [],
@@ -228,7 +228,7 @@ describe("MacHome state machine", () => {
 
   it("routes a selected GitHub Release through the tracked historical installer", async () => {
     api.historicalReleaseCatalog.mockResolvedValue({
-      repository: "Wangnov/codex-app-mirror",
+      repository: "ousir0/osir-codex-mirror",
       platform: "macos",
       architecture: "arm64",
       releases: [
@@ -289,7 +289,7 @@ describe("MacHome state machine", () => {
     api.getSettings.mockResolvedValue(settings({ checkOnStartup: false }));
     api.macStatus.mockResolvedValue(STATUS_NONE);
     api.historicalReleaseCatalog.mockResolvedValue({
-      repository: "Wangnov/codex-app-mirror",
+      repository: "ousir0/osir-codex-mirror",
       platform: "macos",
       architecture: "arm64",
       releases: [

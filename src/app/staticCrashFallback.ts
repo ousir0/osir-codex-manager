@@ -198,7 +198,7 @@ export function renderStaticCrashFallback(
   });
 
   const title = doc.createElement("h1");
-  title.textContent = "Codex App Manager could not start / 管理器界面无法启动";
+  title.textContent = "OSIR Codex Manager could not start / 管理器界面无法启动";
   const body = doc.createElement("p");
   body.textContent =
     "Reload the interface. Any backend operation remains protected. / 请重新加载界面；后台操作仍受保护。";

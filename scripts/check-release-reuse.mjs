@@ -14,16 +14,16 @@ export function requiredReleaseAssetNames(releaseTag) {
   return [
     "latest.json",
     "release-binding.json",
-    "CodexAppManager_aarch64.dmg",
-    "CodexAppManager_x86_64.dmg",
-    "CodexAppManager_aarch64.app.tar.gz",
-    "CodexAppManager_aarch64.app.tar.gz.sig",
-    "CodexAppManager_x86_64.app.tar.gz",
-    "CodexAppManager_x86_64.app.tar.gz.sig",
-    `CodexAppManager_${version}_x64-setup.exe`,
-    `CodexAppManager_${version}_x64-setup.exe.sig`,
-    `CodexAppManager_${version}_arm64-setup.exe`,
-    `CodexAppManager_${version}_arm64-setup.exe.sig`,
+    "OSIRCodexManager_aarch64.dmg",
+    "OSIRCodexManager_x86_64.dmg",
+    "OSIRCodexManager_aarch64.app.tar.gz",
+    "OSIRCodexManager_aarch64.app.tar.gz.sig",
+    "OSIRCodexManager_x86_64.app.tar.gz",
+    "OSIRCodexManager_x86_64.app.tar.gz.sig",
+    `OSIRCodexManager_${version}_x64-setup.exe`,
+    `OSIRCodexManager_${version}_x64-setup.exe.sig`,
+    `OSIRCodexManager_${version}_arm64-setup.exe`,
+    `OSIRCodexManager_${version}_arm64-setup.exe.sig`,
   ];
 }
 
@@ -66,7 +66,7 @@ export function inspectReleaseForReuse(release, releaseTag) {
     (asset) =>
       asset?.name === "latest.json" ||
       asset?.name === "release-binding.json" ||
-      asset?.name?.startsWith("CodexAppManager"),
+      asset?.name?.startsWith("OSIRCodexManager"),
   );
   const selectedNames = new Set();
   const digests = {};

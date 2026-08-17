@@ -61,7 +61,7 @@ function catalog(
           ],
   });
   return {
-    repository: "Wangnov/codex-app-mirror",
+    repository: "ousir0/osir-codex-mirror",
     platform,
     architecture,
     releases: [

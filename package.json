@@ -1,5 +1,5 @@
 {
-  "name": "codex-app-manager",
+  "name": "osir-codex-manager",
   "version": "0.5.3",
   "private": true,
   "type": "module",
@@ -11,6 +11,8 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:release": "vitest run scripts/mirror-release.test.mjs scripts/release-workflow.test.mjs",
+    "audit:ownership": "node scripts/audit-ownership.mjs",
+    "audit:ownership:strict": "node scripts/audit-ownership.mjs --strict",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

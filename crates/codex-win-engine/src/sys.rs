@@ -42,7 +42,7 @@ pub struct LaunchOptions {
     /// `None` preserves the ordinary launch path.
     pub remote_debugging_port: Option<u16>,
     /// Optional Chromium PAC URL. The manager uses this to route the one
-    /// i18n bootstrap host through AWAI while leaving every other host direct.
+    /// i18n bootstrap host through OSIR while leaving every other host direct.
     pub proxy_pac_url: Option<String>,
 }
 
@@ -56,9 +56,9 @@ const CODEX_UI_LANGUAGE: &str = "zh-CN";
 
 /// Keep the relay window bounded. PAC cannot observe the encrypted Statsig
 /// response, so this is a time limit rather than a false "success" signal.
-const AWAI_I18N_RELAY_WINDOW_SECONDS: u64 = 10 * 60;
+const OSIR_I18N_RELAY_WINDOW_SECONDS: u64 = 10 * 60;
 
-pub fn awai_i18n_proxy_pac_url() -> String {
+pub fn osir_i18n_proxy_pac_url() -> String {
     let port = super::i18n_proxy::ensure_started().unwrap_or(0);
     if port == 0 {
         return String::new();
@@ -66,16 +66,16 @@ pub fn awai_i18n_proxy_pac_url() -> String {
     super::i18n_proxy::pac_url(port)
 }
 
-fn awai_i18n_proxy_pac_url_for_port(port: u16) -> String {
+fn osir_i18n_proxy_pac_url_for_port(port: u16) -> String {
     let deadline_ms = std::time::SystemTime::now()
         .checked_add(std::time::Duration::from_secs(
-            AWAI_I18N_RELAY_WINDOW_SECONDS,
+            OSIR_I18N_RELAY_WINDOW_SECONDS,
         ))
         .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|value| value.as_millis())
         .unwrap_or_default();
     format!(
-        "data:application/x-javascript-config,var%20awaiRelayUntil%3D{deadline_ms}%3Bfunction%20FindProxyForURL(url%2Chost)%7Bif(Date.now()%3CawaiRelayUntil%20%26%26%20host.toLowerCase()%3D%3D%3D%22ab.chatgpt.com%22)return%20%22PROXY%20127.0.0.1%3A{port}%3BDIRECT%22%3Breturn%20%22DIRECT%22%3B%7D"
+        "data:application/x-javascript-config,var%20osirRelayUntil%3D{deadline_ms}%3Bfunction%20FindProxyForURL(url%2Chost)%7Bif(Date.now()%3CosirRelayUntil%20%26%26%20host.toLowerCase()%3D%3D%3D%22ab.chatgpt.com%22)return%20%22PROXY%20127.0.0.1%3A{port}%3BDIRECT%22%3Breturn%20%22DIRECT%22%3B%7D"
     )
 }
 
@@ -2449,7 +2449,7 @@ mod tests {
 
     #[test]
     fn builds_loopback_remote_debugging_arguments() {
-        let pac = super::awai_i18n_proxy_pac_url_for_port(19443);
+        let pac = super::osir_i18n_proxy_pac_url_for_port(19443);
         assert_eq!(
             remote_debugging_arguments(9345, Some(&pac)),
             vec![
@@ -2463,11 +2463,11 @@ mod tests {
 
     #[test]
     fn i18n_pac_routes_only_the_statsig_host_and_falls_back_direct() {
-        let pac = super::awai_i18n_proxy_pac_url_for_port(19443);
+        let pac = super::osir_i18n_proxy_pac_url_for_port(19443);
         assert!(pac.contains("ab.chatgpt.com"));
         assert!(pac.contains("127.0.0.1%3A19443%3BDIRECT"));
         assert!(pac.contains("return%20%22DIRECT%22"));
-        assert!(pac.contains("Date.now()%3CawaiRelayUntil"));
+        assert!(pac.contains("Date.now()%3CosirRelayUntil"));
         assert!(!pac.contains("%3D%3D%3D%22chatgpt.com%22"));
     }
 

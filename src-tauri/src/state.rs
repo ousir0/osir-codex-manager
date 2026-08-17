@@ -61,7 +61,7 @@ fn webview_startup_gate(safe_to_show: bool, failed: bool) -> WebviewStartupGate 
 impl ManagerState {
     pub fn new() -> Self {
         let target = Target::current();
-        let mirror_base_url = "https://codexapp.awai.cc".to_string();
+        let mirror_base_url = "https://app.osirclaw.com".to_string();
         let (saved, settings_health) = PersistedAppSettings::load_with_health();
         let (_, provenance_health) = ProvenanceStore::load_with_health();
         let config_health = Mutex::new(
@@ -76,7 +76,7 @@ impl ManagerState {
         let endpoints = MirrorEndpoints::from_base_url(&mirror_base_url);
         let lock_path = crate::app::paths::data_dir()
             .map(|dir| dir.join("operation.lock"))
-            .unwrap_or_else(|| std::env::temp_dir().join("codex-app-manager-operation.lock"));
+            .unwrap_or_else(|| std::env::temp_dir().join("osir-codex-manager-operation.lock"));
         let operations = OperationManager::new(lock_path);
 
         Self {

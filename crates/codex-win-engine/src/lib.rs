@@ -1,6 +1,6 @@
 //! codex-win-engine
 //!
-//! Pure Windows update/install logic for Codex App Manager. This crate keeps
+//! Pure Windows update/install logic for OSIR Codex Manager. This crate keeps
 //! parsing, verification, capability detection, and planning free of any Tauri
 //! dependency so it can be tested in isolation and compiled as an unconditional
 //! dependency of the cross-platform desktop app.
@@ -61,7 +61,7 @@ pub use portable::{
     PortableInstallReport, PortableUninstallReport,
 };
 pub use sys::{
-    awai_i18n_proxy_pac_url, close_msix_codex_processes, detect_installed_codex,
+    osir_i18n_proxy_pac_url, close_msix_codex_processes, detect_installed_codex,
     detect_portable_install, fetch_text, fetch_text_with_network, launch_codex,
     launch_codex_with_options, probe_capabilities, registered_msix_package_full_name,
     remove_msix_package, InstalledWindowsCodex, LaunchOptions, MsixRemoveReport,

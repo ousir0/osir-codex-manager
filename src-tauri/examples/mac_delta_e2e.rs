@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use codex_app_manager_lib::app::mac_update::{
+use osir_codex_manager_lib::app::mac_update::{
     perform_macos_update, plan_macos_update, DownloadProgress, PerformExpectation,
 };
 use codex_mac_engine::UpdateStrategy;

@@ -25,11 +25,11 @@ name: Release
 #   MANAGER_IHEP_S3_PROMOTION_ACCESS_KEY_ID /
 #     MANAGER_IHEP_S3_PROMOTION_SECRET_ACCESS_KEY
 #                                           IHEP S3-compatible read/write access
-# Both mirror backends are required for stable publication and must already
-# contain a valid latest.json baseline. R2 is the sole CAS authority and must
-# enforce conditional PutObject plus HeadObject metadata round trips. IHEP is an
-# unconditional single-writer follower and only needs PutObject + metadata
-# round trips; promotion never relies on its ignored conditional headers.
+# Object-storage mirroring is enabled only when
+# vars.MANAGER_OBJECT_MIRROR_ENABLED == 'true'. The first OSIR release may use
+# GitHub Releases plus the manually verified app.osirclaw.com server while COS
+# credentials and lifecycle policies are isolated. When enabled, both mirror
+# backends are required and must already contain a valid latest.json baseline.
 # GitHub Immutable Releases must be enabled before any release starts; the
 # workflow verifies the repository setting with IMMUTABLE_RELEASES_READ_TOKEN.
 # Separate active tag rulesets must restrict refs/tags/v* creation to the named
@@ -76,7 +76,7 @@ permissions:
   contents: read
 
 env:
-  AUTHORIZED_RELEASE_ACTOR_LOGIN: qq501987847
+  AUTHORIZED_RELEASE_ACTOR_LOGIN: ousir0
   AUTHORIZED_RELEASE_ACTOR_ID: "57623923"
   RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.target_tag }}
   RELEASE_SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
@@ -475,7 +475,7 @@ jobs:
         shell: pwsh
         run: |
           $target = "${{ matrix.target }}"
-          $main = "src-tauri/target/$target/release/codex-app-manager.exe"
+          $main = "src-tauri/target/$target/release/osir-codex-manager.exe"
           $setup = @(Get-ChildItem "src-tauri/target/$target/release/bundle/nsis/*-setup.exe" -ErrorAction SilentlyContinue)
           if (-not (Test-Path -LiteralPath $main)) {
             Write-Host "::error::[build] missing main PE: $main"
@@ -563,9 +563,9 @@ jobs:
           ARCH="${{ matrix.target }}"; ARCH="${ARCH%%-*}"
           shopt -s nullglob
           if [ "${{ matrix.os }}" = "macos" ]; then
-            for f in "$B"/macos/*.app.tar.gz;      do cp "$f" "$DST/CodexAppManager_${ARCH}.app.tar.gz"; done
-            for f in "$B"/macos/*.app.tar.gz.sig;  do cp "$f" "$DST/CodexAppManager_${ARCH}.app.tar.gz.sig"; done
-            for f in "$B"/dmg/*.dmg;               do cp "$f" "$DST/CodexAppManager_${ARCH}.dmg"; done
+            for f in "$B"/macos/*.app.tar.gz;      do cp "$f" "$DST/OSIRCodexManager_${ARCH}.app.tar.gz"; done
+            for f in "$B"/macos/*.app.tar.gz.sig;  do cp "$f" "$DST/OSIRCodexManager_${ARCH}.app.tar.gz.sig"; done
+            for f in "$B"/dmg/*.dmg;               do cp "$f" "$DST/OSIRCodexManager_${ARCH}.dmg"; done
           else
             # Strip spaces from the NSIS filenames (productName is "Codex App
             # Manager"). GitHub rewrites spaces to dots in uploaded asset names,
@@ -860,7 +860,7 @@ jobs:
             gh release download "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --dir "$published" \
-              --pattern 'CodexAppManager*' \
+              --pattern 'OSIRCodexManager*' \
               --pattern 'latest.json' \
               --pattern 'release-binding.json'
             test -f "$published/latest.json" || {
@@ -930,12 +930,12 @@ jobs:
               echo "OK $pattern → $(tr '\n' ' ' <<<"$matches")"
             fi
           }
-          require "CodexAppManager_aarch64.dmg"
-          require "CodexAppManager_x86_64.dmg"
-          require "CodexAppManager_aarch64.app.tar.gz"
-          require "CodexAppManager_x86_64.app.tar.gz"
-          require "CodexAppManager_aarch64.app.tar.gz.sig"
-          require "CodexAppManager_x86_64.app.tar.gz.sig"
+          require "OSIRCodexManager_aarch64.dmg"
+          require "OSIRCodexManager_x86_64.dmg"
+          require "OSIRCodexManager_aarch64.app.tar.gz"
+          require "OSIRCodexManager_x86_64.app.tar.gz"
+          require "OSIRCodexManager_aarch64.app.tar.gz.sig"
+          require "OSIRCodexManager_x86_64.app.tar.gz.sig"
           # Windows NSIS names after space-stripping (see Collect artifacts).
           require "*x64*-setup.exe"
           require "*arm64*-setup.exe"
@@ -1024,7 +1024,7 @@ jobs:
           subject-path: |
             dist/*
             latest.json
-          predicate-type: https://codexapp.awai.cc/attestations/release-binding/v1
+          predicate-type: https://app.osirclaw.com/attestations/release-binding/v1
           predicate-path: release-binding.json
 
       # Verify the just-created bundle before any draft upload. The standard
@@ -1049,7 +1049,7 @@ jobs:
             --signer-digest "$TRUSTED_WORKFLOW_SHA" \
             --source-ref "refs/heads/$DEFAULT_BRANCH" \
             --source-digest "$TRUSTED_WORKFLOW_SOURCE_SHA" \
-            --predicate-type "https://codexapp.awai.cc/attestations/release-binding/v1" \
+            --predicate-type "https://app.osirclaw.com/attestations/release-binding/v1" \
             --deny-self-hosted-runners \
             --format json > "$verification"
           node scripts/release-binding.mjs attestation "$verification" release-binding.json
@@ -1072,7 +1072,7 @@ jobs:
         run: |
           set -euo pipefail
           signer_workflow="$GITHUB_REPOSITORY/.github/workflows/release.yml"
-          predicate_type="https://codexapp.awai.cc/attestations/release-binding/v1"
+          predicate_type="https://app.osirclaw.com/attestations/release-binding/v1"
           gh release verify "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --format json > "$RUNNER_TEMP/immutable-release-attestation.json"
@@ -1133,7 +1133,7 @@ jobs:
       # the GitHub Release succeeds. Pre-releases still skip the mirror entirely.
       - name: Stage CDN mirror candidate (R2 + IHEP S3)
         id: mirror_stage
-        if: ${{ steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') }}
+        if: ${{ steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') && vars.MANAGER_OBJECT_MIRROR_ENABLED == 'true' }}
         env:
           MIRROR_PHASE: stage
           MIRROR_REQUIRED_BACKENDS: r2,ihep
@@ -1166,7 +1166,7 @@ jobs:
       # branches must pass before GitHub publication becomes immutable.
       - name: Verify staged CDN mirror before immutable publication
         id: mirror_verify
-        if: ${{ steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') }}
+        if: ${{ steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') && vars.MANAGER_OBJECT_MIRROR_ENABLED == 'true' }}
         env:
           MIRROR_PHASE: verify
           MIRROR_REQUIRED_BACKENDS: r2,ihep
@@ -1369,7 +1369,7 @@ jobs:
       # Existing immutable releases skip draft publication, so fence the final
       # credentialed mirror promotion for both fresh and recovery paths.
       - name: Re-check protected release source before final promotion
-        if: ${{ success() && steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') }}
+        if: ${{ success() && steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') && vars.MANAGER_OBJECT_MIRROR_ENABLED == 'true' }}
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
@@ -1379,7 +1379,7 @@ jobs:
 
       - name: Promote CDN mirror latest (R2 + IHEP S3)
         id: mirror_promote
-        if: ${{ success() && steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') }}
+        if: ${{ success() && steps.provenance.outputs.ready == 'true' && !contains(env.RELEASE_TAG, '-') && vars.MANAGER_OBJECT_MIRROR_ENABLED == 'true' }}
         env:
           MIRROR_PHASE: promote
           MIRROR_REQUIRED_BACKENDS: r2,ihep

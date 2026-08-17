@@ -1,8 +1,8 @@
-# Static origin for codexapp.awai.cc.
-# The site lives under /srv/awai/site; release artifacts live under
-# /srv/awai/latest and /srv/awai/manager.
+# Static origin for app.osirclaw.com.
+# The site lives under /srv/osir/site; release artifacts live under
+# /srv/osir/latest and /srv/osir/manager.
 
-codexapp.awai.cc {
+app.osirclaw.com {
     encode gzip
 
     handle /i18n-tunnel {
@@ -16,17 +16,17 @@ codexapp.awai.cc {
     header @artifacts Cache-Control "public, max-age=3600"
 
     handle /latest/* {
-        root * /srv/awai
+        root * /srv/osir
         file_server
     }
 
     handle /manager/* {
-        root * /srv/awai
+        root * /srv/osir
         file_server
     }
 
     handle {
-        root * /srv/awai/site
+        root * /srv/osir/site
         try_files {path} /index.html
         file_server
     }

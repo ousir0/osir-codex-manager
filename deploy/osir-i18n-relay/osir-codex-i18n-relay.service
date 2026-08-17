@@ -1,5 +1,5 @@
 [Unit]
-Description=AWAI restricted Codex i18n HTTPS CONNECT relay
+Description=OSIR restricted Codex i18n HTTPS CONNECT relay
 After=network-online.target
 Wants=network-online.target
 
@@ -7,15 +7,15 @@ Wants=network-online.target
 Type=simple
 User=wei
 Group=wei
-WorkingDirectory=/srv/awai/relay
-ExecStart=/usr/bin/python3 /srv/awai/relay/awai_connect_relay.py --bind 127.0.0.1 --port 3128
+WorkingDirectory=/srv/osir/relay
+ExecStart=/usr/bin/python3 /srv/osir/relay/osir_connect_relay.py --bind 127.0.0.1 --port 3128
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/srv/awai/relay
+ReadWritePaths=/srv/osir/relay
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]

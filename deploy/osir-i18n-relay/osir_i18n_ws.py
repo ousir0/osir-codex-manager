@@ -70,7 +70,7 @@ async def main() -> None:
         max_queue=8,
         ping_interval=None,
     ):
-        logging.info("AWAI i18n WebSocket tunnel listening on 127.0.0.1:3130")
+        logging.info("OSIR i18n WebSocket tunnel listening on 127.0.0.1:3130")
         await asyncio.Future()
 
 

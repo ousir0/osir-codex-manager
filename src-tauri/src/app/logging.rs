@@ -36,7 +36,7 @@ pub fn prune_old_logs(dir: &Path, keep: usize) {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("codex-app-manager") && name.contains(".log"))
+                .is_some_and(|name| name.starts_with("osir-codex-manager") && name.contains(".log"))
         })
         .map(|path| {
             let modified = std::fs::metadata(&path)
@@ -89,7 +89,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for idx in 0..7 {
-            std::fs::write(dir.join(format!("codex-app-manager.{idx}.log")), b"log").unwrap();
+            std::fs::write(dir.join(format!("osir-codex-manager.{idx}.log")), b"log").unwrap();
         }
         std::fs::write(dir.join("other.log"), b"keep").unwrap();
 
@@ -104,11 +104,11 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "codex-app-manager.2.log",
-                "codex-app-manager.3.log",
-                "codex-app-manager.4.log",
-                "codex-app-manager.5.log",
-                "codex-app-manager.6.log",
+                "osir-codex-manager.2.log",
+                "osir-codex-manager.3.log",
+                "osir-codex-manager.4.log",
+                "osir-codex-manager.5.log",
+                "osir-codex-manager.6.log",
                 "other.log",
             ]
         );

@@ -128,22 +128,22 @@ describe("Codex configuration manager", () => {
     api.openCodexHome.mockResolvedValue();
   });
 
-  it("fills the AWAI provider preset and saves it as structured config", async () => {
+  it("fills the OSIR provider preset and saves it as structured config", async () => {
     const user = userEvent.setup();
     renderConfig();
 
     await screen.findByDisplayValue("gpt-5");
-    await user.click(screen.getByRole("button", { name: /AWAI.*推荐/ }));
+    await user.click(screen.getByRole("button", { name: /OSIR.*推荐/ }));
 
-    expect(screen.getByDisplayValue("awai")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://api.awai.cc/v1")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("osir")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://api.osirclaw.com/v1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /保存基础配置/ }));
 
     await waitFor(() =>
       expect(api.codexConfigSaveBasic).toHaveBeenCalledWith({
         model: "gpt-5",
-        provider: "awai",
-        baseUrl: "https://api.awai.cc/v1",
+        provider: "osir",
+        baseUrl: "https://api.osirclaw.com/v1",
         reasoningEffort: "high",
         personality: "pragmatic",
         approvalPolicy: "never",
@@ -201,11 +201,11 @@ describe("Codex configuration manager", () => {
     expect(screen.getByText("配置已保存；重启 Codex 后生效")).toBeInTheDocument();
   });
 
-  it("keeps AWAI as the single recommended provider and places providers beside details", async () => {
+  it("keeps OSIR as the single recommended provider and places providers beside details", async () => {
     renderConfig();
     await screen.findByDisplayValue("gpt-5");
 
-    expect(screen.getByRole("button", { name: /AWAI.*推荐/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OSIR.*推荐/ })).toBeInTheDocument();
     expect(screen.getByText("推荐供应商")).toBeInTheDocument();
     expect(screen.getByLabelText("已配置供应商")).toBeInTheDocument();
     expect(screen.getByLabelText("当前供应商详情")).toBeInTheDocument();

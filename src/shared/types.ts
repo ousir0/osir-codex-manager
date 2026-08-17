@@ -149,7 +149,7 @@ export interface HistoricalRelease {
 }
 
 export interface HistoricalReleaseCatalog {
-  repository: "Wangnov/codex-app-mirror" | string;
+  repository: "ousir0/osir-codex-mirror" | string;
   platform: HistoricalReleasePlatform;
   architecture: HistoricalReleaseArchitecture;
   releases: HistoricalRelease[];

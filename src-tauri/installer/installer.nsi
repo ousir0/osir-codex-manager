@@ -1,8 +1,8 @@
 ; ─────────────────────────────────────────────────────────────────────────────
-; Codex App Manager — custom NSIS installer template.
+; OSIR Codex Manager — custom NSIS installer template.
 ; Vendored verbatim from Tauri's default (@tauri-apps/cli v2.11.2) and lightly
 ; customized; every {{handlebars}} variable and all Tauri install/uninstall logic
-; is preserved. Local changes are marked with "[codex-app-manager]".
+; is preserved. Local changes are marked with "[osir-codex-manager]".
 ; Re-sync with upstream when bumping the Tauri CLI. Branding (icon/header/sidebar)
 ; and the installer languages are driven from tauri.conf.json > bundle.windows.nsis;
 ; translated welcome/finish copy can be layered in here later (per-language LangStrings).
@@ -166,13 +166,13 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_LANGDLL_REGISTRY_ROOT "HKCU"
 !define MUI_LANGDLL_REGISTRY_KEY "${MANUPRODUCTKEY}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
-; [codex-app-manager] always show the language picker instead of silently reusing
+; [osir-codex-manager] always show the language picker instead of silently reusing
 ; the stored choice, so every run is a chance to pick or switch the language
 !define MUI_LANGDLL_ALWAYSSHOW
 
 ; Installer pages, must be ordered as they appear
 ; 1. Welcome Page
-; [codex-app-manager] give the welcome/finish title 3 lines so CJK titles aren't bottom-clipped
+; [osir-codex-manager] give the welcome/finish title 3 lines so CJK titles aren't bottom-clipped
 !define MUI_WELCOMEFINISHPAGE_TITLE_3LINES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_WELCOME
@@ -282,7 +282,7 @@ Function PageReinstall
     ${NSD_CreateLabel} 0 0 100% 24u $R1
     Pop $R1
 
-    ; [codex-app-manager] 12u (was 8u) so CJK radio labels aren't bottom-clipped
+    ; [osir-codex-manager] 12u (was 8u) so CJK radio labels aren't bottom-clipped
     ${NSD_CreateRadioButton} 30u 50u -30u 12u $R2
     Pop $R2
     ${NSD_OnClick} $R2 PageReinstallUpdateSelection
@@ -502,7 +502,7 @@ Function .onInit
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
     ${If} $PassiveMode = 1
     ${OrIf} $UpdateMode = 1
-      ; [codex-app-manager] passive/unattended self-update (updater runs /P /UPDATE,
+      ; [osir-codex-manager] passive/unattended self-update (updater runs /P /UPDATE,
       ; not silent /S): don't prompt, but restore the saved language so MUI's write-back
       ; on page leave doesn't reset a non-default language to the system default
       Push $0

@@ -311,9 +311,9 @@ const WIN_FALLBACK_INSTALLED = {
 };
 
 const WIN_FALLBACK_PLAN: WinUpdateReport = {
-  manifestUrl: "https://codexapp.awai.cc/latest/manifest",
-  checksumsUrl: "https://codexapp.awai.cc/latest/checksums",
-  packageUrl: "https://codexapp.awai.cc/latest/win",
+  manifestUrl: "https://app.osirclaw.com/latest/manifest",
+  checksumsUrl: "https://app.osirclaw.com/latest/checksums",
+  packageUrl: "https://app.osirclaw.com/latest/win",
   release: {
     version: "26.623.42026",
     packageVersion: "26.623.5546.0",
@@ -341,7 +341,7 @@ const WIN_FALLBACK_PLAN: WinUpdateReport = {
     currentVersion: "26.623.42026",
     latestVersion: "26.623.42026",
     packageMoniker: "OpenAI.Codex_26.623.5546.0_x64__2p2nqsd0c76g0",
-    packageUrl: "https://codexapp.awai.cc/latest/win",
+    packageUrl: "https://app.osirclaw.com/latest/win",
     downloadSize: 671037642,
     sha256: "6dc2e05ac2b760bbc77ce3f8a992efdb327363512c9c4744b9a146c41bc4d55a",
     route: "msix-sideload",
@@ -482,10 +482,10 @@ const FALLBACK_DIAGNOSTICS: Diagnostics = {
   generatedAtUnix: Math.floor(Date.now() / 1000),
 };
 
-// Browser-preview stand-ins so the AWAI theme gallery can be developed and
+// Browser-preview stand-ins so the OSIR theme gallery can be developed and
 // styled without a Tauri backend.
 const BROWSER_SKIN_CATALOG_BASE =
-  "https://raw.githubusercontent.com/qq501987847/codex-app-manager-skins/main";
+  "https://app.osirclaw.com/skins";
 
 function browserCatalogUrl(relativePath: string): string {
   const safe =
@@ -501,7 +501,7 @@ function browserCatalogUrl(relativePath: string): string {
 
 const FALLBACK_THEME_META: import("../shared/types").CodexThemeMeta = {
   version: "1.0.0",
-  author: "AWAI",
+  author: "OSIR",
   codexVerified: null,
   appearance: "dual",
   tags: ["wallpaper", "background"],
@@ -557,27 +557,27 @@ const MOCK_PALETTES = [
   },
 ];
 const MOCK_SKINS = [
-  ["awai-01", "Ink Wanderer", "AWAI 原创壁纸背景主题：Ink Wanderer。"],
-  ["awai-02", "Quiet Resolve", "AWAI 原创壁纸背景主题：Quiet Resolve。"],
-  ["awai-03", "Skybound Motion", "AWAI 原创壁纸背景主题：Skybound Motion。"],
-  ["awai-04", "Lunar Edge", "AWAI 原创壁纸背景主题：Lunar Edge。"],
-  ["awai-05", "Blue Stroke", "AWAI 原创壁纸背景主题：Blue Stroke。"],
-  ["awai-06", "Lakeside Evening", "AWAI 原创壁纸背景主题：Lakeside Evening。"],
-  ["awai-07", "Window at Night", "AWAI 原创壁纸背景主题：Window at Night。"],
-  ["awai-08", "Pixel Workshop", "AWAI 原创壁纸背景主题：Pixel Workshop。"],
-  ["awai-09", "Neon Ridge", "AWAI 原创壁纸背景主题：Neon Ridge。"],
-  ["awai-10", "Sea Wind", "AWAI 原创壁纸背景主题：Sea Wind。"],
-  ["awai-11", "Ashen Machine", "AWAI 原创壁纸背景主题：Ashen Machine。"],
-  ["awai-12", "Red Signal", "AWAI 原创壁纸背景主题：Red Signal。"],
-  ["awai-13", "Blue Guardians", "AWAI 原创壁纸背景主题：Blue Guardians。"],
-  ["awai-14", "Mountain River", "AWAI 原创壁纸背景主题：Mountain River。"],
-  ["awai-15", "Sunset Mark", "AWAI 原创壁纸背景主题：Sunset Mark。"],
-  ["awai-16", "Cosmic Pair", "AWAI 原创壁纸背景主题：Cosmic Pair。"],
-  ["awai-17", "Open Field", "AWAI 原创壁纸背景主题：Open Field。"],
-  ["awai-18", "Red Frequency", "AWAI 原创壁纸背景主题：Red Frequency。"],
-  ["awai-19", "Monochrome Strings", "AWAI 原创壁纸背景主题：Monochrome Strings。"],
-  ["awai-20", "Skyline Story", "AWAI 原创壁纸背景主题：Skyline Story。"],
-  ["awai-21", "Forest Afternoon", "AWAI 原创壁纸背景主题：Forest Afternoon。"],
+  ["osir-01", "Ink Wanderer", "OSIR 原创壁纸背景主题：Ink Wanderer。"],
+  ["osir-02", "Quiet Resolve", "OSIR 原创壁纸背景主题：Quiet Resolve。"],
+  ["osir-03", "Skybound Motion", "OSIR 原创壁纸背景主题：Skybound Motion。"],
+  ["osir-04", "Lunar Edge", "OSIR 原创壁纸背景主题：Lunar Edge。"],
+  ["osir-05", "Blue Stroke", "OSIR 原创壁纸背景主题：Blue Stroke。"],
+  ["osir-06", "Lakeside Evening", "OSIR 原创壁纸背景主题：Lakeside Evening。"],
+  ["osir-07", "Window at Night", "OSIR 原创壁纸背景主题：Window at Night。"],
+  ["osir-08", "Pixel Workshop", "OSIR 原创壁纸背景主题：Pixel Workshop。"],
+  ["osir-09", "Neon Ridge", "OSIR 原创壁纸背景主题：Neon Ridge。"],
+  ["osir-10", "Sea Wind", "OSIR 原创壁纸背景主题：Sea Wind。"],
+  ["osir-11", "Ashen Machine", "OSIR 原创壁纸背景主题：Ashen Machine。"],
+  ["osir-12", "Red Signal", "OSIR 原创壁纸背景主题：Red Signal。"],
+  ["osir-13", "Blue Guardians", "OSIR 原创壁纸背景主题：Blue Guardians。"],
+  ["osir-14", "Mountain River", "OSIR 原创壁纸背景主题：Mountain River。"],
+  ["osir-15", "Sunset Mark", "OSIR 原创壁纸背景主题：Sunset Mark。"],
+  ["osir-16", "Cosmic Pair", "OSIR 原创壁纸背景主题：Cosmic Pair。"],
+  ["osir-17", "Open Field", "OSIR 原创壁纸背景主题：Open Field。"],
+  ["osir-18", "Red Frequency", "OSIR 原创壁纸背景主题：Red Frequency。"],
+  ["osir-19", "Monochrome Strings", "OSIR 原创壁纸背景主题：Monochrome Strings。"],
+  ["osir-20", "Skyline Story", "OSIR 原创壁纸背景主题：Skyline Story。"],
+  ["osir-21", "Forest Afternoon", "OSIR 原创壁纸背景主题：Forest Afternoon。"],
 ];
 function mockTheme(index: number, origin: "dev" | "store"): CodexThemeSummary {
   const [id, name, description] = MOCK_SKINS[index % MOCK_SKINS.length];
@@ -603,7 +603,7 @@ const BROWSER_FALLBACK_CATALOG: CatalogSkin[] = MOCK_SKINS.map(
     name,
     description,
     version: "1.0.0",
-    author: "AWAI",
+    author: "OSIR",
     appearance: "dual",
     license: "personal-use",
     tags: ["wallpaper", "background"],
@@ -643,7 +643,7 @@ let BROWSER_FALLBACK_CODEX_CONFIG: CodexConfigReport = {
   authPath: "C:\\Users\\wei\\.codex\\auth.json",
   exists: true,
   raw: `model = "gpt-5.6-sol"
-model_provider = "awai"
+model_provider = "osir"
 model_reasoning_effort = "high"
 disable_response_storage = true
 personality = "pragmatic"
@@ -653,9 +653,9 @@ sandbox_mode = "danger-full-access"
 [features]
 goals = true
 
-[model_providers.awai]
-name = "AWAI"
-base_url = "https://api.awai.cc/v1"
+[model_providers.osir]
+name = "OSIR"
+base_url = "https://api.osirclaw.com/v1"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -671,7 +671,7 @@ url = "https://example.test/mcp"
 enabled = false
 `,
   redactedRaw: `model = "gpt-5.6-sol"
-model_provider = "awai"
+model_provider = "osir"
 model_reasoning_effort = "high"
 disable_response_storage = true
 personality = "pragmatic"
@@ -681,9 +681,9 @@ sandbox_mode = "danger-full-access"
 [features]
 goals = true
 
-[model_providers.awai]
-name = "AWAI"
-base_url = "https://api.awai.cc/v1"
+[model_providers.osir]
+name = "OSIR"
+base_url = "https://api.osirclaw.com/v1"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -700,8 +700,8 @@ enabled = false
 `,
   parseError: null,
   model: "gpt-5.6-sol",
-  provider: "awai",
-  baseUrl: "https://api.awai.cc/v1",
+  provider: "osir",
+  baseUrl: "https://api.osirclaw.com/v1",
   reasoningEffort: "high",
   personality: "pragmatic",
   approvalPolicy: "never",
@@ -710,9 +710,9 @@ enabled = false
   goalMode: true,
   providers: [
     {
-      id: "awai",
-      name: "AWAI",
-      baseUrl: "https://api.awai.cc/v1",
+      id: "osir",
+      name: "OSIR",
+      baseUrl: "https://api.osirclaw.com/v1",
       wireApi: "responses",
     },
   ],
@@ -778,7 +778,7 @@ function renderBrowserConfig(report: CodexConfigReport): string {
     : report.provider
       ? [{
           id: report.provider,
-          name: report.provider === "awai" ? "AWAI" : report.provider,
+          name: report.provider === "osir" ? "OSIR" : report.provider,
           baseUrl: report.baseUrl,
           wireApi: "responses",
         }]
@@ -942,7 +942,7 @@ export const managerApi = {
       const version = "26.727.51351";
       const packageVersion = "26.727.6591.0";
       return Promise.resolve({
-        repository: "Wangnov/codex-app-mirror",
+        repository: "ousir0/osir-codex-mirror",
         platform,
         architecture,
         releases: [

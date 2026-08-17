@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use crate::app::op_phase::QuitPolicy;
 
-pub const PRODUCT_NAME: &str = "Codex App Manager";
+pub const PRODUCT_NAME: &str = "OSIR Codex Manager";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeLocale {
@@ -55,12 +55,12 @@ impl NativeLocale {
     pub fn menu(self) -> NativeMenuCopy {
         match self {
             Self::En => NativeMenuCopy {
-                about: "About Codex App Manager",
+                about: "About OSIR Codex Manager",
                 services: "Services",
-                hide: "Hide Codex App Manager",
+                hide: "Hide OSIR Codex Manager",
                 hide_others: "Hide Others",
                 show_all: "Show All",
-                quit: "Quit Codex App Manager",
+                quit: "Quit OSIR Codex Manager",
                 edit: "Edit",
                 undo: "Undo",
                 redo: "Redo",
@@ -73,12 +73,12 @@ impl NativeLocale {
                 close_window: "Close Window",
             },
             Self::ZhCn => NativeMenuCopy {
-                about: "关于 Codex App Manager",
+                about: "关于 OSIR Codex Manager",
                 services: "服务",
-                hide: "隐藏 Codex App Manager",
+                hide: "隐藏 OSIR Codex Manager",
                 hide_others: "隐藏其他",
                 show_all: "全部显示",
-                quit: "退出 Codex App Manager",
+                quit: "退出 OSIR Codex Manager",
                 edit: "编辑",
                 undo: "撤销",
                 redo: "重做",
@@ -91,12 +91,12 @@ impl NativeLocale {
                 close_window: "关闭窗口",
             },
             Self::ZhTw => NativeMenuCopy {
-                about: "關於 Codex App Manager",
+                about: "關於 OSIR Codex Manager",
                 services: "服務",
-                hide: "隱藏 Codex App Manager",
+                hide: "隱藏 OSIR Codex Manager",
                 hide_others: "隱藏其他",
                 show_all: "全部顯示",
-                quit: "結束 Codex App Manager",
+                quit: "結束 OSIR Codex Manager",
                 edit: "編輯",
                 undo: "還原",
                 redo: "重做",
@@ -109,12 +109,12 @@ impl NativeLocale {
                 close_window: "關閉視窗",
             },
             Self::Ja => NativeMenuCopy {
-                about: "Codex App Managerについて",
+                about: "OSIR Codex Managerについて",
                 services: "サービス",
-                hide: "Codex App Managerを隠す",
+                hide: "OSIR Codex Managerを隠す",
                 hide_others: "ほかを隠す",
                 show_all: "すべてを表示",
-                quit: "Codex App Managerを終了",
+                quit: "OSIR Codex Managerを終了",
                 edit: "編集",
                 undo: "取り消す",
                 redo: "やり直す",
@@ -127,12 +127,12 @@ impl NativeLocale {
                 close_window: "ウインドウを閉じる",
             },
             Self::Ko => NativeMenuCopy {
-                about: "Codex App Manager에 관하여",
+                about: "OSIR Codex Manager에 관하여",
                 services: "서비스",
-                hide: "Codex App Manager 가리기",
+                hide: "OSIR Codex Manager 가리기",
                 hide_others: "기타 가리기",
                 show_all: "모두 보기",
-                quit: "Codex App Manager 종료",
+                quit: "OSIR Codex Manager 종료",
                 edit: "편집",
                 undo: "실행 취소",
                 redo: "실행 복귀",
@@ -145,12 +145,12 @@ impl NativeLocale {
                 close_window: "윈도우 닫기",
             },
             Self::Fr => NativeMenuCopy {
-                about: "À propos de Codex App Manager",
+                about: "À propos de OSIR Codex Manager",
                 services: "Services",
-                hide: "Masquer Codex App Manager",
+                hide: "Masquer OSIR Codex Manager",
                 hide_others: "Masquer les autres",
                 show_all: "Tout afficher",
-                quit: "Quitter Codex App Manager",
+                quit: "Quitter OSIR Codex Manager",
                 edit: "Édition",
                 undo: "Annuler",
                 redo: "Rétablir",
@@ -163,12 +163,12 @@ impl NativeLocale {
                 close_window: "Fermer la fenêtre",
             },
             Self::De => NativeMenuCopy {
-                about: "Über Codex App Manager",
+                about: "Über OSIR Codex Manager",
                 services: "Dienste",
-                hide: "Codex App Manager ausblenden",
+                hide: "OSIR Codex Manager ausblenden",
                 hide_others: "Andere ausblenden",
                 show_all: "Alle einblenden",
-                quit: "Codex App Manager beenden",
+                quit: "OSIR Codex Manager beenden",
                 edit: "Bearbeiten",
                 undo: "Widerrufen",
                 redo: "Wiederholen",
@@ -181,12 +181,12 @@ impl NativeLocale {
                 close_window: "Fenster schließen",
             },
             Self::Es => NativeMenuCopy {
-                about: "Acerca de Codex App Manager",
+                about: "Acerca de OSIR Codex Manager",
                 services: "Servicios",
-                hide: "Ocultar Codex App Manager",
+                hide: "Ocultar OSIR Codex Manager",
                 hide_others: "Ocultar otros",
                 show_all: "Mostrar todo",
-                quit: "Salir de Codex App Manager",
+                quit: "Salir de OSIR Codex Manager",
                 edit: "Edición",
                 undo: "Deshacer",
                 redo: "Rehacer",
@@ -199,12 +199,12 @@ impl NativeLocale {
                 close_window: "Cerrar ventana",
             },
             Self::PtBr => NativeMenuCopy {
-                about: "Sobre o Codex App Manager",
+                about: "Sobre o OSIR Codex Manager",
                 services: "Serviços",
-                hide: "Ocultar Codex App Manager",
+                hide: "Ocultar OSIR Codex Manager",
                 hide_others: "Ocultar Outros",
                 show_all: "Mostrar Tudo",
-                quit: "Encerrar Codex App Manager",
+                quit: "Encerrar OSIR Codex Manager",
                 edit: "Editar",
                 undo: "Desfazer",
                 redo: "Refazer",
@@ -217,12 +217,12 @@ impl NativeLocale {
                 close_window: "Fechar Janela",
             },
             Self::Ru => NativeMenuCopy {
-                about: "О программе Codex App Manager",
+                about: "О программе OSIR Codex Manager",
                 services: "Службы",
-                hide: "Скрыть Codex App Manager",
+                hide: "Скрыть OSIR Codex Manager",
                 hide_others: "Скрыть остальные",
                 show_all: "Показать все",
-                quit: "Завершить Codex App Manager",
+                quit: "Завершить OSIR Codex Manager",
                 edit: "Правка",
                 undo: "Отменить",
                 redo: "Повторить",
@@ -235,12 +235,12 @@ impl NativeLocale {
                 close_window: "Закрыть окно",
             },
             Self::Ar => NativeMenuCopy {
-                about: "حول Codex App Manager",
+                about: "حول OSIR Codex Manager",
                 services: "الخدمات",
-                hide: "إخفاء Codex App Manager",
+                hide: "إخفاء OSIR Codex Manager",
                 hide_others: "إخفاء الآخرين",
                 show_all: "إظهار الكل",
-                quit: "إنهاء Codex App Manager",
+                quit: "إنهاء OSIR Codex Manager",
                 edit: "تحرير",
                 undo: "تراجع",
                 redo: "إعادة",
@@ -588,7 +588,7 @@ mod tests {
             let menu = locale.menu();
             assert!(!menu.edit.is_empty(), "{tag}:edit");
             assert!(!menu.window.is_empty(), "{tag}:window");
-            assert!(menu.quit.contains("Codex App Manager"), "{tag}:quit");
+            assert!(menu.quit.contains("OSIR Codex Manager"), "{tag}:quit");
         }
         assert_eq!(NativeLocale::from_tag("unsupported"), NativeLocale::En);
     }

@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent 作业指南
 
-Codex App Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理器(Tauri v2)。
+OSIR Codex Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理器(Tauri v2)。
 前端 `src/`,Rust 引擎 `crates/` + `src-tauri/`,分发 Worker `cloudflare/`,官网 `website/`。
 
 ## 质量门与合并
@@ -13,14 +13,14 @@ Codex App Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理�
 
 1. **bump 版本号,5 个文件 6 处**:`package.json`、`package-lock.json`(顶层 + `packages[""]` 两处)、
    `src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock`(只改
-   `codex-app-manager` 那个 `[[package]]` 块——⚠️ lock 里 `winapi-util` 等依赖也是 `0.1.x`,
+   `osir-codex-manager` 那个 `[[package]]` 块——⚠️ lock 里 `winapi-util` 等依赖也是 `0.1.x`,
    **严禁全局替换**)。
 2. **同一个发版 PR 里写 release note**:新增 `docs/releases/v<X.Y.Z>.md`。
    - 结构与双语风格照 `docs/releases/TEMPLATE.md`(banner 头图 → 一句话双语主旨 →
      ✨ 亮点 / 🐛 修复 双语成对行 → 安装升级表)。
    - 素材来源:`git log <上个tag>..HEAD` + **读关键 diff 还原细节**(squash 提交一句话
      背后常有数百行变更);只写用户可感知的变化,内部重构不写。
-   - **事实核查**:渠道、数字必须核实——例:winget(`AWAI.CodexAppManager`)在
+   - **事实核查**:渠道、数字必须核实——例:winget(`OSIR.CodexManager`)在
      microsoft/winget-pkgs 合并前**不存在**,不要写 `winget install`。
    - 安装表、镜像直链、更新器工件说明是模板固化内容,不要改写;Full Changelog 由
      release.yml 自动追加,不要手写。
@@ -30,17 +30,17 @@ Codex App Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理�
    自动:四平台构建(macOS arm64/x64 + Windows x64/ARM64)→ 签名/公证 → R2 + IHEP 镜像同步(失败会阻断发布)→ GitHub
    Release(正文取 `docs/releases/<tag>.md`,缺失回退 `FALLBACK.md` 并告警,同时
    追加自动 What's Changed)。
-5. 发布后会 dispatch `winget.yml`;`AWAI.CodexAppManager` 是否在 winget-pkgs 中可用,
+5. 发布后会 dispatch `winget.yml`;`OSIR.CodexManager` 是否在 winget-pkgs 中可用,
    workflow 失败通常需要处理生成的提交/PR。README 下载链接是 `/manager/latest/*` 永久直链,
    发版**通常无需**改 README。
 
-## website/ 子工程(官网,codexapp.awai.cc)
+## website/ 子工程(官网,app.osirclaw.com)
 
 - 独立 npm 工程,**不要在仓库根目录为它装依赖**(会污染主工程 package.json)。
 - 文案唯一来源 `website/src/locales/{zh,en}.ts`;改文案后重跑 `npm run fonts`
   (中文显示字体按用字子集化,缺字会回退系统字体)。
 - 素材管线:`assets/raw/`(git-ignored,AI 生成)→ `npm run images` → `public/img/`。
 - 部署:`cd website && npm run build && npx wrangler deploy`。zone 路由:
-  `/manager/*` → 本仓库下载路由器,`/latest/*` → AWAI 当前工件,`/*` → 官网,互不抢路。
+  `/manager/*` → 本仓库下载路由器,`/latest/*` → OSIR 当前工件,`/*` → 官网,互不抢路。
 - README banner(`assets/banner.svg`)由 `node website/scripts/readme-banner.mjs`
   再生;官网视觉资产更新后记得重新生成。

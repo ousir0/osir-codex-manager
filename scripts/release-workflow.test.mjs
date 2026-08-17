@@ -388,7 +388,7 @@ describe("release workflow recovery invariants", () => {
       ).toEqual(expected);
 
       await writeFile(
-        join(artifactsDir, "CodexAppManager_9.9.9_x64-setup.exe"),
+        join(artifactsDir, "OSIRCodexManager_9.9.9_x64-setup.exe"),
         "x",
       );
       expect(() =>
@@ -752,7 +752,7 @@ describe("release workflow recovery invariants", () => {
     expect(attestStep).toContain("actions/attest-build-provenance@");
     expect(attestStep).toContain("actions/attest@");
     expect(attestStep).toContain(
-      "https://codexapp.awai.cc/attestations/release-binding/v1",
+      "https://app.osirclaw.com/attestations/release-binding/v1",
     );
     expect(attestStep).toContain("predicate-path: release-binding.json");
     expect(attestStep).not.toContain("continue-on-error: true");
@@ -801,7 +801,7 @@ describe("release workflow recovery invariants", () => {
     const existingStep = releaseJob.slice(verifyExisting, provenance);
 
     expect(sourceStep).toContain("gh release download");
-    expect(sourceStep).toContain("--pattern 'CodexAppManager*'");
+    expect(sourceStep).toContain("--pattern 'OSIRCodexManager*'");
     expect(sourceStep).toContain("--pattern 'latest.json'");
     expect(sourceStep).toContain("--pattern 'release-binding.json'");
     expect(sourceStep).toContain('actual_digest="sha256:$(sha256sum "$file"');

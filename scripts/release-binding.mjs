@@ -12,7 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 export const RELEASE_BINDING_PREDICATE_TYPE =
-  "https://codexapp.awai.cc/attestations/release-binding/v1";
+  "https://app.osirclaw.com/attestations/release-binding/v1";
 export const RELEASE_WORKFLOW_PATH = ".github/workflows/release.yml";
 
 const RELEASE_TAG_PATTERN =
