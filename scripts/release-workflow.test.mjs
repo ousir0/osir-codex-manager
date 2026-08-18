@@ -538,6 +538,12 @@ describe("release workflow recovery invariants", () => {
     expect(releaseJob).toContain(
       "run: node scripts/check-immutable-releases.mjs",
     );
+    expect(prepare).toContain(
+      "manual recovery will publish the verified tag for the first time",
+    );
+    expect(workflow).toContain(
+      "needs.preflight.outputs.trusted_invocation == 'manual-recovery'",
+    );
   });
 
   it("requires immutable release tags and rechecks the live peeled commit at publication", () => {

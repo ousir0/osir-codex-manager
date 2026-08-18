@@ -290,11 +290,10 @@ jobs:
             REQUESTED_TARGET_TAG="$REQUESTED_TARGET_TAG" \
               node scripts/check-release-reuse.mjs "$RELEASE_TAG" "$release_json"
           elif grep -q 'HTTP 404' "$lookup_error"; then
-            if [[ -n "$REQUESTED_TARGET_TAG" ]]; then
-              echo "::error::target_tag $REQUESTED_TARGET_TAG must already exist as a GitHub Release"
-              exit 1
-            fi
             echo "release_reusable=false" >> "$GITHUB_OUTPUT"
+            if [[ -n "$REQUESTED_TARGET_TAG" ]]; then
+              echo "No existing Release for $REQUESTED_TARGET_TAG; manual recovery will publish the verified tag for the first time"
+            fi
           else
             cat "$lookup_error" >&2
             echo "::error::could not determine whether release $RELEASE_TAG already exists"
@@ -303,7 +302,7 @@ jobs:
 
   build:
     needs: [preflight, prepare]
-    if: ${{ needs.prepare.result == 'success' && needs.prepare.outputs.release_reusable != 'true' && needs.preflight.outputs.trusted_invocation == 'tag-signal' }}
+    if: ${{ needs.prepare.result == 'success' && needs.prepare.outputs.release_reusable != 'true' && (needs.preflight.outputs.trusted_invocation == 'tag-signal' || needs.preflight.outputs.trusted_invocation == 'manual-recovery') }}
     # All signing secrets live only in the default-branch-restricted release
     # environment. Never duplicate them as repository or organization secrets.
     environment: release
@@ -808,12 +807,11 @@ jobs:
             REQUESTED_TARGET_TAG="$REQUESTED_TARGET_TAG" \
               node scripts/check-release-reuse.mjs "$RELEASE_TAG" "$release_json"
           elif grep -q 'HTTP 404' "$lookup_error"; then
-            if [[ -n "$REQUESTED_TARGET_TAG" ]]; then
-              echo "::error::target_tag $REQUESTED_TARGET_TAG must already exist as a GitHub Release"
-              exit 1
-            fi
             echo "release_reusable=false" >> "$GITHUB_OUTPUT"
             echo "release_asset_digests={}" >> "$GITHUB_OUTPUT"
+            if [[ -n "$REQUESTED_TARGET_TAG" ]]; then
+              echo "No existing Release for $REQUESTED_TARGET_TAG; release job will publish the verified tag for the first time"
+            fi
           else
             cat "$lookup_error" >&2
             echo "::error::could not refresh release state for $RELEASE_TAG"
