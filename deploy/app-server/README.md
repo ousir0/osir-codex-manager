@@ -20,10 +20,13 @@ This directory defines the isolated OSIR Codex Manager web/download origin. It d
 
 1. Publish a candidate release with `publish-rainyun.sh`.
 2. Install `nginx-http.conf` and verify it with a direct Host-header request.
-3. Add the Alibaba Cloud DNS `A` record `app.osirclaw.com` pointing to the OSIR server.
+3. Run `configure-alidns-app-record.sh` with the local Alibaba Cloud CLI to create/update the `A` record `app.osirclaw.com`.
 4. Issue the Let's Encrypt certificate for `app.osirclaw.com`.
 5. Install `nginx-https.conf`, reload Nginx, and run HTTPS/range checks.
 6. Start the restricted OSIR i18n relay on `127.0.0.1:3130`.
+
+The DNS script is idempotent and defaults to the current OSIR server IP. Override
+`OSIR_DNS_VALUE` or `ALIYUN_PROFILE` when moving the service.
 
 ## Object storage
 
