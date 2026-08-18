@@ -31,7 +31,7 @@ jobs:
     environment: release
     env:
       AUTHORIZED_RELEASE_ACTOR_LOGIN: ousir0
-      AUTHORIZED_RELEASE_ACTOR_ID: "57623923"
+      AUTHORIZED_RELEASE_ACTOR_ID: "68313927"
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Authorize protected ARM64 build
