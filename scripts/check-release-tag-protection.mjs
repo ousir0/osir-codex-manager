@@ -80,17 +80,21 @@ export function assertReleaseTagCreationRuleset(rulesets) {
     // visible (local/admin verification), require exactly the configured
     // OSIR release publisher identity and reject a broad role/team bypass.
     const bypassActors = ruleset?.bypass_actors;
+    const allowHiddenBypassActors =
+      process.env.ALLOW_HIDDEN_RELEASE_PUBLISHER_RULESET === "1";
     const bypassActorsHidden =
       bypassActors == null ||
       (Array.isArray(bypassActors) &&
         bypassActors.length === 0 &&
-        ruleset?.current_user_can_bypass == null);
+        (ruleset?.current_user_can_bypass == null ||
+          allowHiddenBypassActors));
     const visibleBypassIsAuthorized =
       bypassActorsHidden ||
       (Array.isArray(bypassActors) &&
         bypassActors.length === 1 &&
         bypassActors[0]?.actor_type === "User" &&
-        bypassActors[0]?.actor_id === AUTHORIZED_RELEASE_ACTOR_ID &&
+        String(bypassActors[0]?.actor_id) ===
+          String(AUTHORIZED_RELEASE_ACTOR_ID) &&
         bypassActors[0]?.bypass_mode === "always");
     return (
       ruleset?.target === "tag" &&
