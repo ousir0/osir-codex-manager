@@ -1,0 +1,56 @@
+name: OpenCodex component bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      opencodex_version:
+        description: Existing official OpenCodex npm version to bundle
+        required: true
+        default: 2.22.0
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: windows-x64
+            runner: windows-2022
+          - target: windows-arm64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}$
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.19.0
+          cache: npm
+
+      - name: Build external OpenCodex component
+        shell: bash
+        env:
+          OPENCODEX_VERSION: ${{ inputs.opencodex_version }}$
+          TARGET: ${{ matrix.target }}$
+        run: |
+          set -euo pipefail
+          node scripts/build-opencodex-component.mjs \
+            --version "$OPENCODEX_VERSION" \
+            --target "$TARGET" \
+            --output "dist/opencodex-$TARGET.zip"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: opencodex-component-${{ matrix.target }}$-${{ inputs.opencodex_version }}$
+          path: |
+            dist/opencodex-${{ matrix.target }}$.zip
+            dist/opencodex-${{ matrix.target }}$.zip.sha256
+          if-no-files-found: error
