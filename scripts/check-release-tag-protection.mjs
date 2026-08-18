@@ -9,6 +9,7 @@ const RELEASE_TAG_PATTERN =
   /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const REQUIRED_REF_PATTERN = "refs/tags/v*";
+const AUTHORIZED_RELEASE_ACTOR_ID = 68313927;
 
 function parseJson(stdout, label) {
   try {
@@ -79,11 +80,17 @@ export function assertReleaseTagCreationRuleset(rulesets) {
     // visible (local/admin verification), require exactly the configured
     // OSIR release publisher identity and reject a broad role/team bypass.
     const bypassActors = ruleset?.bypass_actors;
+    const bypassActorsHidden =
+      bypassActors == null ||
+      (Array.isArray(bypassActors) &&
+        bypassActors.length === 0 &&
+        ruleset?.current_user_can_bypass == null);
     const visibleBypassIsAuthorized =
-      !Array.isArray(bypassActors) ||
-      (bypassActors.length === 1 &&
+      bypassActorsHidden ||
+      (Array.isArray(bypassActors) &&
+        bypassActors.length === 1 &&
         bypassActors[0]?.actor_type === "User" &&
-        bypassActors[0]?.actor_id === 68313927 &&
+        bypassActors[0]?.actor_id === AUTHORIZED_RELEASE_ACTOR_ID &&
         bypassActors[0]?.bypass_mode === "always");
     return (
       ruleset?.target === "tag" &&
