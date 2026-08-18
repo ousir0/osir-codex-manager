@@ -5,7 +5,7 @@
 //! OpenCodex when available, atomically committed, and paired with the
 //! existing single-step backup mechanism.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -116,6 +116,8 @@ struct ManagedState {
     #[serde(default)]
     managed_provider_ids: Vec<String>,
     locked_route: Option<String>,
+    #[serde(default)]
+    route_health: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -464,7 +466,7 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     write_json(&paths.opencodex_config, &next)?;
     let port = state.port.max(1);
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &state.codex_provider_id, port, &format!("{route_id}/{model}"))?;
-    let next_state = ManagedState { enabled: true, port, codex_provider_id: state.codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id) };
+    let next_state = ManagedState { enabled: true, port, codex_provider_id: state.codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health };
     write_json(&paths.state, &serde_json::to_value(next_state).map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?)?;
     status_at(&paths)
 }
@@ -473,10 +475,18 @@ pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, A
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     let route = format!("{route_id}/{model}");
-    match ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]) {
-        Ok(_) => Ok(OpenCodexRouteCheck { route_id, model, available: true, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() }),
-        Err(error) => Ok(OpenCodexRouteCheck { route_id, model, available: false, detail: error.to_string(), checked_at: timestamp_marker() }),
+    let check = match ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]) {
+        Ok(_) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: true, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() },
+        Err(error) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: false, detail: error.to_string(), checked_at: timestamp_marker() },
+    };
+    if let Ok(paths) = integration_paths() {
+        let mut state = load_state(&paths.state);
+        state.route_health.insert(route, if check.available { "verified" } else { "offline" }.to_string());
+        if let Ok(value) = serde_json::to_value(state) {
+            let _ = write_json(&paths.state, &value);
+        }
     }
+    Ok(check)
 }
 
 pub fn ensure_ready_for_codex() -> Result<(), AppError> {
@@ -623,6 +633,7 @@ fn route_from_config(
     config: &JsonMap<String, JsonValue>,
     models: &[JsonValue],
     locked_route: Option<&str>,
+    route_health: &BTreeMap<String, String>,
 ) -> Option<OpenCodexRoute> {
     let provider = config.get("providers")?.as_object()?.get(id)?.as_object()?;
     let models = models
@@ -660,6 +671,8 @@ fn route_from_config(
             .is_some_and(|key| !key.trim().is_empty()),
         availability: if provider.get("disabled").and_then(JsonValue::as_bool) == Some(true) {
             "offline".to_string()
+        } else if let Some(health) = route_health.get(id) {
+            health.clone()
         } else if provider.get("apiKey").and_then(JsonValue::as_str).is_some_and(|key| !key.trim().is_empty()) {
             "configured".to_string()
         } else {
@@ -682,7 +695,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let routes = state
         .managed_provider_ids
         .iter()
-        .filter_map(|id| route_from_config(id, &config, &models, state.locked_route.as_deref()))
+        .filter_map(|id| route_from_config(id, &config, &models, state.locked_route.as_deref(), &state.route_health))
         .collect::<Vec<_>>();
     let port = config
         .get("port")
@@ -941,6 +954,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         codex_provider_id: provider_id.clone(),
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
         locked_route: None,
+        route_health: BTreeMap::new(),
     };
     let state_json = serde_json::to_value(state)
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
@@ -959,6 +973,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         codex_provider_id: provider_id,
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
         locked_route: None,
+        route_health: BTreeMap::new(),
     };
     write_json(
         &paths.state,
