@@ -17,8 +17,8 @@
 - 旧 Manager 数据目录可自动迁移到 OSIR 目录。
 - 旧 `awai` Provider 可迁移为 `osir`，保留用户 API Key。
 - 全套原始 Codex 演化图标已复用并生成，包括 macOS、Windows、移动端、README 和 NSIS 图片；应用界面不展示独立 OSIRAPI Logo。
-- OSIR 网站和 macOS 候选包已上传至服务器独立目录：
-  `/var/www/osir-codex-manager/releases/20260817-osir-codex-manager-0.5.3`。
+- OSIR 网站和多平台发布包已上传至服务器独立目录：
+  `/var/www/osir-codex-manager/releases/20260818-codex-manager-0.5.3-intel-macos`。
 - Nginx HTTP 候选入口已启用，不影响现有主站和 API。
 - 阿里云 DNS 已创建 `app.osirclaw.com -> 154.40.47.227`。
 - Let's Encrypt HTTPS 证书已签发，当前有效期至 2026-11-16，并启用自动续期。
@@ -50,15 +50,18 @@
 
 - `/health` 返回 `200`。
 - 官网首页返回 OSIR 标题。
-- `/manager/latest.json` 返回 `Codex Manager 0.5.3` 部分发布清单，包含 macOS arm64 与 Windows x64。
-- DMG Range 请求返回 `206`。
-- 远端工件 SHA-256 与本地一致。
+- `/manager/latest.json` 返回 `Codex Manager 0.5.3` 部分发布清单，包含 macOS arm64、macOS Intel 与 Windows x64。
+- macOS Intel DMG、macOS Intel updater tarball、Windows x64 安装器均可公网下载。
+- DMG 与 Windows 安装器 Range 请求返回 `206`；manifest、皮肤目录和下载工件返回 `200`。
+- 远端新增工件 SHA-256 与本地一致：
+  - `CodexManager_x86_64.dmg`: `5da217f3173a68e52acf6e3c32290ed5826aa8477a0929ab6bc9fa5b561e5de6`
+  - `CodexManager_x86_64.app.tar.gz`: `7e64e49a7e11ddc4896a6b7e9aa2e213720e1cbe41bf5289be27d2488596427c`
 
 ## 尚未完成的发布级门槛
 
 1. 本机没有 Apple Developer ID，当前 macOS 包是可验证的 ad-hoc 测试签名，尚未公证。
 2. Windows Authenticode 证书尚未配置，当前安装器内容正确但会显示 unsigned 警告。
-3. 当前服务器候选 `latest.json` 仍缺 macOS Intel 与 Windows ARM64，因此保留 `partial`。
+3. 当前服务器 `latest.json` 仍缺 Windows ARM64，因此保留 `partial`；仓库现有 Windows 检查工作流只构建 x64，正式 release 工作流虽声明 ARM64 target，但尚未产出可验证工件。
 4. 腾讯云 COS 已在 OSIRAPI 生产环境配置，但 Manager 工件的独立前缀、生命周期和 GitHub Secret 尚未启用；当前由服务器 + GitHub Releases 承载。
 
 ## 验证命令
