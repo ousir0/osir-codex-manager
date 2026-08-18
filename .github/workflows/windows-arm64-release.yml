@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Existing application version to build (for example v0.5.3)
+        description: Existing application version to build (for example v0.5.4)
         required: true
         type: string
 

@@ -85,7 +85,7 @@ Manager 不修改 Codex 应用包，不绕过 OpenAI 或 Microsoft 的授权与�
 |---|---|---|
 | Apple Silicon Mac | `CodexManager_aarch64.dmg` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_aarch64.dmg) |
 | Intel Mac | `CodexManager_x86_64.dmg` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_x86_64.dmg) |
-| Windows x64 | `CodexManager_x64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.3) |
+| Windows x64 | `CodexManager_x64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.4) |
 | Windows ARM64 | `CodexManager_arm64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_arm64-setup.exe) |
 
 镜像的 `/manager/latest/` 始终指向当前版本；需要精确历史版本时，请使用对应 GitHub
@@ -263,7 +263,7 @@ for the public release record, or the fixed OSIR mirror links:
 |---|---|
 | Apple Silicon Mac | [CodexManager_aarch64.dmg](https://app.osirclaw.com/manager/latest/CodexManager_aarch64.dmg) |
 | Intel Mac | [CodexManager_x86_64.dmg](https://app.osirclaw.com/manager/latest/CodexManager_x86_64.dmg) |
-| Windows x64 | [CodexManager_x64-setup.exe](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.3) |
+| Windows x64 | [CodexManager_x64-setup.exe](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.4) |
 | Windows ARM64 | [CodexManager_arm64-setup.exe](https://app.osirclaw.com/manager/latest/CodexManager_arm64-setup.exe) |
 
 `/manager/latest/` always means the newest release. Use the matching GitHub Release Assets for
