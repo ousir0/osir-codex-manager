@@ -80,7 +80,7 @@ if (missing.length > 0) {
 
 const manifest = {
   version,
-  notes: `OSIR Codex Manager ${tag}`,
+  notes: `Codex Manager ${tag}`,
   pub_date: new Date().toISOString(),
   platforms,
 };

@@ -17,7 +17,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ICON_SRC="$ROOT/assets/icon.icon"
 
-APP="${1:-$ROOT/src-tauri/target/release/bundle/macos/OSIR Codex Manager.app}"
+APP="${1:-$ROOT/src-tauri/target/release/bundle/macos/Codex Manager.app}"
 
 if [ ! -d "$ICON_SRC" ]; then
   echo "error: .icon source not found: $ICON_SRC" >&2

@@ -1,6 +1,6 @@
 # CLAUDE.md — Agent 作业指南
 
-OSIR Codex Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理器(Tauri v2)。
+Codex Manager:官方 OpenAI Codex 桌面应用的安装/更新/卸载管理器(Tauri v2)。
 前端 `src/`,Rust 引擎 `crates/` + `src-tauri/`,分发 Worker `cloudflare/`,官网 `website/`。
 
 ## 质量门与合并

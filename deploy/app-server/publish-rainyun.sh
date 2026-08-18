@@ -36,6 +36,8 @@ ssh -o BatchMode=yes "${SSH_TARGET}" "set -eu; \
   test -f '${REMOTE_TMP}/manager/latest.json'; \
   mkdir -p '${REMOTE_ROOT}/releases'; \
   mv '${REMOTE_TMP}' '${REMOTE_RELEASE}'; \
+  find '${REMOTE_RELEASE}' -type d -exec chmod 0755 {} +; \
+  find '${REMOTE_RELEASE}' -type f -exec chmod 0644 {} +; \
   ln -s '${REMOTE_RELEASE}' '${REMOTE_ROOT}/.current-${RELEASE_ID}'; \
   mv -Tf '${REMOTE_ROOT}/.current-${RELEASE_ID}' '${REMOTE_ROOT}/current'"
 

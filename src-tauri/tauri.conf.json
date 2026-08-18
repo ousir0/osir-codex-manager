@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OSIR Codex Manager",
+  "productName": "Codex Manager",
   "mainBinaryName": "osir-codex-manager",
   "version": "0.5.3",
   "identifier": "com.osir.codexmanager",
@@ -16,7 +16,7 @@
       {
         "label": "main",
         "create": false,
-        "title": "OSIR Codex Manager",
+        "title": "Codex Manager",
         "width": 400,
         "height": 640,
         "resizable": false,
@@ -43,8 +43,8 @@
     ],
     "category": "Utility",
     "copyright": "Copyright (c) 2026 OSIR",
-    "shortDescription": "OSIR installer, updater, configuration, and theme manager for Codex.",
-    "longDescription": "OSIR Codex Manager installs, updates, configures, and themes the official Codex desktop app.",
+    "shortDescription": "Codex Manager installer, updater, configuration, and theme manager.",
+    "longDescription": "Codex Manager installs, updates, configures, and themes the official Codex desktop app.",
     "targets": ["nsis", "dmg", "app"],
     "resources": ["resources/*"],
     "windows": {

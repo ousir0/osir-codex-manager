@@ -1,9 +1,9 @@
 export default {
   meta: {
-    title: "OSIR Codex Manager — install, update & uninstall the official Codex desktop app",
+    title: "Codex Manager — install, update & uninstall the official Codex desktop app",
     description:
       "One-click install, Sparkle delta updates on macOS, and clean uninstall for the official OpenAI Codex desktop app. Verified byte by byte, mirrored verbatim, and reachable from mainland China without a proxy. Open source, MIT licensed.",
-    ogTitle: "OSIR Codex Manager — official Codex, installed in one click",
+    ogTitle: "Codex Manager — official Codex, installed in one click",
     ogDescription:
       "Install, update, and uninstall the official Codex desktop app — macOS delta updates with automatic rollback, verbatim mirrors reachable from mainland China. The macOS build is signed and notarized; the project is open source.",
   },
@@ -58,7 +58,7 @@ export default {
     badges: ["macOS signed & notarized", "MIT licensed", "Tauri v2", "11 languages"],
   },
   demo: {
-    window: "OSIR Codex Manager",
+    window: "Codex Manager",
     updTitle: "Update available",
     updVer: "26.602.71036",
     updFlow: "Now 26.602.40724 → New 26.602.71036 · ~12.6 MiB",
@@ -108,7 +108,7 @@ export default {
   manager: {
     kicker: "The Manager",
     title: "Install, update, uninstall — without the mess",
-    lead: "OSIR Codex Manager treats every operation as three honest steps. It looks before it leaps, and it verifies before doing anything destructive.",
+    lead: "Codex Manager treats every operation as three honest steps. It looks before it leaps, and it verifies before doing anything destructive.",
     steps: [
       {
         name: "Detect",
@@ -155,7 +155,7 @@ export default {
       },
     ],
     mock: {
-      window: "OSIR Codex Manager",
+      window: "Codex Manager",
       detect: {
         scan: "Scanning this machine…",
         found: "Codex desktop app found",
@@ -254,7 +254,7 @@ export default {
   },
   download: {
     kicker: "Download",
-    title: "Download OSIR Codex Manager",
+    title: "Download Codex Manager",
     lead: "Pick your platform. Every link below resolves to the latest release and works from mainland China without a proxy.",
     recommended: "Recommended for you",
     brew: {
@@ -322,7 +322,7 @@ export default {
     made: "Built with Tauri v2 and an unreasonable concern for bytes.",
     backTop: "Back to top",
     links: {
-      manager: "OSIR Codex Manager",
+      manager: "Codex Manager",
       mirror: "Codex App Mirror",
       signingPolicy: "Code signing policy",
       privacyPolicy: "Privacy policy",

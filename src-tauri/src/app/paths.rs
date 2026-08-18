@@ -139,7 +139,7 @@ fn migrate_legacy_dir(legacy: &Path, current: &Path) -> PathBuf {
     }
     if let Some(parent) = current.parent() {
         if let Err(error) = std::fs::create_dir_all(parent) {
-            log::warn!("failed to prepare OSIR manager data path: {error}");
+            log::warn!("failed to prepare Codex Manager data path: {error}");
             return current.to_path_buf();
         }
     }

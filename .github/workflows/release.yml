@@ -563,9 +563,9 @@ jobs:
           ARCH="${{ matrix.target }}"; ARCH="${ARCH%%-*}"
           shopt -s nullglob
           if [ "${{ matrix.os }}" = "macos" ]; then
-            for f in "$B"/macos/*.app.tar.gz;      do cp "$f" "$DST/OSIRCodexManager_${ARCH}.app.tar.gz"; done
-            for f in "$B"/macos/*.app.tar.gz.sig;  do cp "$f" "$DST/OSIRCodexManager_${ARCH}.app.tar.gz.sig"; done
-            for f in "$B"/dmg/*.dmg;               do cp "$f" "$DST/OSIRCodexManager_${ARCH}.dmg"; done
+            for f in "$B"/macos/*.app.tar.gz;      do cp "$f" "$DST/CodexManager_${ARCH}.app.tar.gz"; done
+            for f in "$B"/macos/*.app.tar.gz.sig;  do cp "$f" "$DST/CodexManager_${ARCH}.app.tar.gz.sig"; done
+            for f in "$B"/dmg/*.dmg;               do cp "$f" "$DST/CodexManager_${ARCH}.dmg"; done
           else
             # Strip spaces from the NSIS filenames (productName is "Codex App
             # Manager"). GitHub rewrites spaces to dots in uploaded asset names,
@@ -860,7 +860,7 @@ jobs:
             gh release download "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --dir "$published" \
-              --pattern 'OSIRCodexManager*' \
+              --pattern 'CodexManager*' \
               --pattern 'latest.json' \
               --pattern 'release-binding.json'
             test -f "$published/latest.json" || {
@@ -930,12 +930,12 @@ jobs:
               echo "OK $pattern → $(tr '\n' ' ' <<<"$matches")"
             fi
           }
-          require "OSIRCodexManager_aarch64.dmg"
-          require "OSIRCodexManager_x86_64.dmg"
-          require "OSIRCodexManager_aarch64.app.tar.gz"
-          require "OSIRCodexManager_x86_64.app.tar.gz"
-          require "OSIRCodexManager_aarch64.app.tar.gz.sig"
-          require "OSIRCodexManager_x86_64.app.tar.gz.sig"
+          require "CodexManager_aarch64.dmg"
+          require "CodexManager_x86_64.dmg"
+          require "CodexManager_aarch64.app.tar.gz"
+          require "CodexManager_x86_64.app.tar.gz"
+          require "CodexManager_aarch64.app.tar.gz.sig"
+          require "CodexManager_x86_64.app.tar.gz.sig"
           # Windows NSIS names after space-stripping (see Collect artifacts).
           require "*x64*-setup.exe"
           require "*arm64*-setup.exe"

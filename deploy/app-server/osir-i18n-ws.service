@@ -1,5 +1,5 @@
 [Unit]
-Description=OSIR Codex Manager restricted i18n WebSocket tunnel
+Description=Codex Manager restricted i18n WebSocket tunnel
 After=network-online.target
 Wants=network-online.target
 

@@ -1,6 +1,6 @@
 //! codex-win-engine
 //!
-//! Pure Windows update/install logic for OSIR Codex Manager. This crate keeps
+//! Pure Windows update/install logic for Codex Manager. This crate keeps
 //! parsing, verification, capability detection, and planning free of any Tauri
 //! dependency so it can be tested in isolation and compiled as an unconditional
 //! dependency of the cross-platform desktop app.

@@ -24,8 +24,8 @@ export default {
     }
 
     // /manager/latest/<file> → rewrite to the current immutable versioned key
-    // (latest/OSIRCodexManager_aarch64.dmg → 0.1.12/OSIRCodexManager_aarch64.dmg;
-    // latest/OSIRCodexManager_arm64-setup.exe → 0.1.12/OSIRCodexManager_0.1.12_arm64-setup.exe)
+    // (latest/CodexManager_aarch64.dmg → 0.1.12/CodexManager_aarch64.dmg;
+    // latest/CodexManager_arm64-setup.exe → 0.1.12/CodexManager_0.1.12_arm64-setup.exe)
     // so the README can link a permanent URL that never needs a version bump.
     // The rewrite is IN-PLACE (no redirect): still ONE Worker invocation, and
     // the resolved versioned object keeps its hard cache. Cost is one cheap R2
@@ -163,8 +163,8 @@ async function currentVersion(env) {
 // pass straight through; the Windows NSIS .exe embeds the version in its file
 // name, so insert it so a stable "latest" link resolves to the real object.
 function withVersion(file, version) {
-  const match = /^OSIRCodexManager_(x64|arm64)-setup\.exe$/.exec(file);
-  return match ? `OSIRCodexManager_${version}_${match[1]}-setup.exe` : file;
+  const match = /^CodexManager_(x64|arm64)-setup\.exe$/.exec(file);
+  return match ? `CodexManager_${version}_${match[1]}-setup.exe` : file;
 }
 
 // ── AWS SigV4 presigner (GET/HEAD) ──────────────────────────────────────────

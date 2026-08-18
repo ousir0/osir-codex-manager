@@ -1,5 +1,5 @@
 ; ─────────────────────────────────────────────────────────────────────────────
-; OSIR Codex Manager — custom NSIS installer template.
+; Codex Manager — custom NSIS installer template.
 ; Vendored verbatim from Tauri's default (@tauri-apps/cli v2.11.2) and lightly
 ; customized; every {{handlebars}} variable and all Tauri install/uninstall logic
 ; is preserved. Local changes are marked with "[osir-codex-manager]".

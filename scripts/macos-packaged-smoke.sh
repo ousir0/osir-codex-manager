@@ -70,17 +70,17 @@ plist() {
 
 menu_copy() {
   case "$EXPECTED_LANG" in
-    en) EDIT_MENU="Edit"; WINDOW_MENU="Window"; QUIT_ITEM="Quit OSIR Codex Manager" ;;
-    zh-CN) EDIT_MENU="编辑"; WINDOW_MENU="窗口"; QUIT_ITEM="退出 OSIR Codex Manager" ;;
-    zh-TW) EDIT_MENU="編輯"; WINDOW_MENU="視窗"; QUIT_ITEM="結束 OSIR Codex Manager" ;;
-    ja) EDIT_MENU="編集"; WINDOW_MENU="ウインドウ"; QUIT_ITEM="OSIR Codex Managerを終了" ;;
-    ko) EDIT_MENU="편집"; WINDOW_MENU="윈도우"; QUIT_ITEM="OSIR Codex Manager 종료" ;;
-    fr) EDIT_MENU="Édition"; WINDOW_MENU="Fenêtre"; QUIT_ITEM="Quitter OSIR Codex Manager" ;;
-    de) EDIT_MENU="Bearbeiten"; WINDOW_MENU="Fenster"; QUIT_ITEM="OSIR Codex Manager beenden" ;;
-    es) EDIT_MENU="Edición"; WINDOW_MENU="Ventana"; QUIT_ITEM="Salir de OSIR Codex Manager" ;;
-    pt-BR) EDIT_MENU="Editar"; WINDOW_MENU="Janela"; QUIT_ITEM="Encerrar OSIR Codex Manager" ;;
-    ru) EDIT_MENU="Правка"; WINDOW_MENU="Окно"; QUIT_ITEM="Завершить OSIR Codex Manager" ;;
-    ar) EDIT_MENU="تحرير"; WINDOW_MENU="نافذة"; QUIT_ITEM="إنهاء OSIR Codex Manager" ;;
+    en) EDIT_MENU="Edit"; WINDOW_MENU="Window"; QUIT_ITEM="Quit Codex Manager" ;;
+    zh-CN) EDIT_MENU="编辑"; WINDOW_MENU="窗口"; QUIT_ITEM="退出 Codex Manager" ;;
+    zh-TW) EDIT_MENU="編輯"; WINDOW_MENU="視窗"; QUIT_ITEM="結束 Codex Manager" ;;
+    ja) EDIT_MENU="編集"; WINDOW_MENU="ウインドウ"; QUIT_ITEM="Codex Managerを終了" ;;
+    ko) EDIT_MENU="편집"; WINDOW_MENU="윈도우"; QUIT_ITEM="Codex Manager 종료" ;;
+    fr) EDIT_MENU="Édition"; WINDOW_MENU="Fenêtre"; QUIT_ITEM="Quitter Codex Manager" ;;
+    de) EDIT_MENU="Bearbeiten"; WINDOW_MENU="Fenster"; QUIT_ITEM="Codex Manager beenden" ;;
+    es) EDIT_MENU="Edición"; WINDOW_MENU="Ventana"; QUIT_ITEM="Salir de Codex Manager" ;;
+    pt-BR) EDIT_MENU="Editar"; WINDOW_MENU="Janela"; QUIT_ITEM="Encerrar Codex Manager" ;;
+    ru) EDIT_MENU="Правка"; WINDOW_MENU="Окно"; QUIT_ITEM="Завершить Codex Manager" ;;
+    ar) EDIT_MENU="تحرير"; WINDOW_MENU="نافذة"; QUIT_ITEM="إنهاء Codex Manager" ;;
     *) fail "locale" "unsupported expected language: $EXPECTED_LANG" ;;
   esac
 }
@@ -222,7 +222,7 @@ APPLESCRIPT
 
 assert_native_menu() {
   local pid=$1
-  osascript - "$pid" "OSIR Codex Manager" "$EDIT_MENU" "$WINDOW_MENU" "$QUIT_ITEM" <<'APPLESCRIPT'
+  osascript - "$pid" "Codex Manager" "$EDIT_MENU" "$WINDOW_MENU" "$QUIT_ITEM" <<'APPLESCRIPT'
 on run argv
   set targetPid to (item 1 of argv) as integer
   set productName to item 2 of argv
@@ -243,7 +243,7 @@ APPLESCRIPT
 
 click_quit_menu() {
   local pid=$1
-  osascript - "$pid" "OSIR Codex Manager" "$QUIT_ITEM" >/dev/null <<'APPLESCRIPT'
+  osascript - "$pid" "Codex Manager" "$QUIT_ITEM" >/dev/null <<'APPLESCRIPT'
 on run argv
   set targetPid to (item 1 of argv) as integer
   set productName to item 2 of argv
@@ -307,7 +307,7 @@ BUNDLE_ID=$(plist "$APP" CFBundleIdentifier)
 [[ "$BUNDLE_ID" == "com.osir.codexmanager.smoke" ]] ||
   fail "bundle" "refusing to smoke non-isolated bundle id: $BUNDLE_ID"
 PRODUCT_NAME=$(plist "$APP" CFBundleName)
-[[ "$PRODUCT_NAME" == "OSIR Codex Manager" ]] ||
+[[ "$PRODUCT_NAME" == "Codex Manager" ]] ||
   fail "bundle" "unexpected product name: $PRODUCT_NAME"
 EXECUTABLE=$(plist "$APP" CFBundleExecutable)
 BINARY="$APP/Contents/MacOS/$EXECUTABLE"

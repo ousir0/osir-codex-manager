@@ -31,10 +31,10 @@ ln -f "${ROOT}/latest/win-x64" "${ROOT}/latest/win"
 
 # Public manager installer links used by the website.
 for name in \
-    OSIRCodexManager_aarch64.dmg \
-    OSIRCodexManager_x86_64.dmg \
-    OSIRCodexManager_x64-setup.exe \
-    OSIRCodexManager_arm64-setup.exe; do
+    CodexManager_aarch64.dmg \
+    CodexManager_x86_64.dmg \
+    CodexManager_x64-setup.exe \
+    CodexManager_arm64-setup.exe; do
     download "/manager/latest/${name}" "manager/latest/${name}"
 done
 

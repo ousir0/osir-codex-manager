@@ -453,7 +453,7 @@ type Key = keyof typeof ZH;
 export type TKey = Key;
 
 const EN: Record<Key, string> = {
-  "app.name": "OSIR Codex Manager",
+  "app.name": "Codex Manager",
 
   "nav.back": "Back",
   "nav.settings": "Settings",
@@ -1739,7 +1739,7 @@ const ZH_TW: Record<Key, string> = {
 };
 
 const DE: Record<Key, string> = {
-  "app.name": "OSIR Codex Manager",
+  "app.name": "Codex Manager",
 
   "nav.back": "Zurück",
   "nav.settings": "Einstellungen",
@@ -3858,7 +3858,7 @@ const AR: Record<Key, string> = {
 };
 
 const ES: Record<Key, string> = {
-  "app.name": "OSIR Codex Manager",
+  "app.name": "Codex Manager",
   "nav.back": "Atrás",
   "nav.settings": "Ajustes",
   "nav.config": "Configuración de Codex",

@@ -1,11 +1,11 @@
-# OSIR Codex Manager 独立化实施规格（草案）
+# Codex Manager 独立化实施规格（OSIR-owned）
 
 状态：阶段 0、阶段 1 已完成；阶段 2/3 执行中，长期 `GOAL.md` 已编译。  
 来源会话：`01a0109f-8289-7013-af31-3371764c84e4`、`01a00ee9-ac4e-7d93-a529-9de46b8784c6`。
 
 ## 目标
 
-将当前客户端迁移为 `OSIR Codex Manager`，使产品身份、运行时服务、构建发布、更新信任链和用户可见入口由 OSIR 独立控制，并保留现有安装、更新、配置、主题和卸载能力。
+将当前客户端迁移为 `Codex Manager`，使产品身份、运行时服务、构建发布、更新信任链和用户可见入口由 OSIR 独立控制，并保留现有安装、更新、配置、主题和卸载能力。
 
 ## 非目标
 
@@ -18,7 +18,7 @@
 
 | 字段 | 目标值 |
 |---|---|
-| 产品名 | `OSIR Codex Manager` |
+| 客户端显示名 | `Codex Manager` |
 | 主二进制名 | `osir-codex-manager` |
 | macOS Bundle ID | `com.osir.codexmanager` |
 | Provider ID | `osir` |
@@ -92,7 +92,7 @@
 ## 阶段 1 候选 done_when（待用户确认）
 
 1. `src-tauri/tauri.conf.json` 的产品名、主二进制名和 Bundle ID 均为 OSIR 值。
-2. 安装器、系统菜单、关于页、诊断标题和多语言界面显示 `OSIR Codex Manager`。
+2. 安装器、系统菜单、关于页、诊断标题和多语言界面显示 `Codex Manager`。
 3. 旧数据目录迁移测试覆盖：首次迁移、重复启动、目标已存在、源损坏四种情况。
 4. Provider 迁移测试证明旧 API Key 不丢失且新配置使用 `osir`。
 5. `npm run audit:ownership:strict` 对生产运行路径不再报告旧品牌、账号、域名和 Bundle ID；历史文档与专用迁移夹具允许保留。

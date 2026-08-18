@@ -43,7 +43,7 @@ const bom = {
     timestamp: new Date().toISOString(),
     tools: [
       {
-        vendor: "OSIR Codex Manager",
+        vendor: "Codex Manager",
         name: "cargo-metadata-to-cyclonedx",
       },
     ],

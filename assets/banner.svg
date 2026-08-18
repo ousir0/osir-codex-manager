@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif">
-  <title id="title">OSIR Codex Manager</title>
+  <title id="title">Codex Manager</title>
   <desc id="desc">A local manager for installing, updating, configuring and theming Codex through the OSIR mirror.</desc>
 
   <defs>
@@ -60,7 +60,7 @@
 
       <g transform="translate(166 81)">
         <text x="0" y="24" font-size="31" font-weight="700" fill="#F2F7FF" letter-spacing=".2">OSIR</text>
-        <text x="0" y="54" font-size="20" fill="#9EC7FF" letter-spacing=".4">OSIR Codex Manager</text>
+        <text x="0" y="54" font-size="20" fill="#9EC7FF" letter-spacing=".4">Codex Manager</text>
         <text x="0" y="96" font-size="15" fill="#DCEBFF" opacity=".78">安装 · 更新 · 配置 · 主题</text>
         <text x="0" y="124" font-size="14" fill="#9EC7FF" opacity=".82">Verified bytes. Local control.</text>
       </g>

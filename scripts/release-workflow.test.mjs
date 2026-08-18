@@ -388,7 +388,7 @@ describe("release workflow recovery invariants", () => {
       ).toEqual(expected);
 
       await writeFile(
-        join(artifactsDir, "OSIRCodexManager_9.9.9_x64-setup.exe"),
+        join(artifactsDir, "CodexManager_9.9.9_x64-setup.exe"),
         "x",
       );
       expect(() =>
@@ -801,7 +801,7 @@ describe("release workflow recovery invariants", () => {
     const existingStep = releaseJob.slice(verifyExisting, provenance);
 
     expect(sourceStep).toContain("gh release download");
-    expect(sourceStep).toContain("--pattern 'OSIRCodexManager*'");
+    expect(sourceStep).toContain("--pattern 'CodexManager*'");
     expect(sourceStep).toContain("--pattern 'latest.json'");
     expect(sourceStep).toContain("--pattern 'release-binding.json'");
     expect(sourceStep).toContain('actual_digest="sha256:$(sha256sum "$file"');

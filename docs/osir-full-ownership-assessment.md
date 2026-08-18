@@ -1,4 +1,4 @@
-# OSIR Codex Manager 完整独立化评估
+# Codex Manager 完整独立化评估（OSIR-owned）
 
 评估日期：2026-08-17
 
@@ -8,7 +8,7 @@
 
 当前仓库中，与原品牌、账号、域名和外部镜像直接相关的内容分布在约 118 个文件。完整迁移必须同时覆盖代码、云端、发布流程和用户数据路径。
 
-推荐目标产品名：`OSIR Codex Manager`。
+推荐客户端显示名：`Codex Manager`；所有权和发布归属由 OSIR 控制。
 
 ## 2. “全部是自己的”应如何定义
 
@@ -106,7 +106,7 @@ flowchart TD
 
 需要替换：
 
-- 产品名：`OSIR Codex Manager`
+- 客户端显示名：`Codex Manager`
 - 主二进制名：建议 `osir-codex-manager`
 - macOS Bundle ID：建议 `com.osir.codexmanager`
 - Windows 应用名称和安装目录
@@ -115,7 +115,7 @@ flowchart TD
 - Logo、托盘图标、安装器图、DMG 图标
 - AWAI 文案、API 名称、主题作者、主题 ID 前缀
 - `awai-*` 内部命名；兼容旧数据时需要迁移映射
-- `CodexAppManager_*` 工件名改为 `OSIRCodexManager_*`
+- `CodexAppManager_*` 工件名改为 `CodexManager_*`
 
 重点文件：
 

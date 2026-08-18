@@ -8,15 +8,15 @@ const latestManifest = JSON.stringify({
   platforms: {
     "darwin-aarch64": {
       signature: "mac-sig",
-      url: "https://app.osirclaw.com/manager/0.1.18/OSIRCodexManager_aarch64.app.tar.gz",
+      url: "https://app.osirclaw.com/manager/0.1.18/CodexManager_aarch64.app.tar.gz",
     },
     "windows-x86_64": {
       signature: "win-sig",
-      url: "https://app.osirclaw.com/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe",
+      url: "https://app.osirclaw.com/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe",
     },
     "windows-aarch64": {
       signature: "win-arm64-sig",
-      url: "https://app.osirclaw.com/manager/0.1.18/OSIRCodexManager_0.1.18_arm64-setup.exe",
+      url: "https://app.osirclaw.com/manager/0.1.18/CodexManager_0.1.18_arm64-setup.exe",
     },
   },
 });
@@ -71,17 +71,17 @@ describe("manager download router", () => {
       BUCKET: bucket(
         {
           "latest.json": r2Object(latestManifest, { contentType: "application/json" }),
-          "0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
+          "0.1.18/CodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
         },
         calls,
       ),
     };
 
-    const res = await worker.fetch(request("/manager/latest/OSIRCodexManager_x64-setup.exe"), env);
+    const res = await worker.fetch(request("/manager/latest/CodexManager_x64-setup.exe"), env);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("installer");
-    expect(calls).toEqual(["latest.json", "0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe"]);
+    expect(calls).toEqual(["latest.json", "0.1.18/CodexManager_0.1.18_x64-setup.exe"]);
   });
 
   it("rewrites latest Windows ARM64 links to the current versioned installer key", async () => {
@@ -90,17 +90,17 @@ describe("manager download router", () => {
       BUCKET: bucket(
         {
           "latest.json": r2Object(latestManifest, { contentType: "application/json" }),
-          "0.1.18/OSIRCodexManager_0.1.18_arm64-setup.exe": r2Object("arm64 installer"),
+          "0.1.18/CodexManager_0.1.18_arm64-setup.exe": r2Object("arm64 installer"),
         },
         calls,
       ),
     };
 
-    const res = await worker.fetch(request("/manager/latest/OSIRCodexManager_arm64-setup.exe"), env);
+    const res = await worker.fetch(request("/manager/latest/CodexManager_arm64-setup.exe"), env);
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("arm64 installer");
-    expect(calls).toEqual(["latest.json", "0.1.18/OSIRCodexManager_0.1.18_arm64-setup.exe"]);
+    expect(calls).toEqual(["latest.json", "0.1.18/CodexManager_0.1.18_arm64-setup.exe"]);
   });
 
   it("rewrites latest macOS links without injecting a version into the filename", async () => {
@@ -109,25 +109,25 @@ describe("manager download router", () => {
       BUCKET: bucket(
         {
           "latest.json": r2Object(latestManifest, { contentType: "application/json" }),
-          "0.1.18/OSIRCodexManager_aarch64.dmg": r2Object("dmg"),
+          "0.1.18/CodexManager_aarch64.dmg": r2Object("dmg"),
         },
         calls,
       ),
     };
 
-    const res = await worker.fetch(request("/manager/latest/OSIRCodexManager_aarch64.dmg"), env);
+    const res = await worker.fetch(request("/manager/latest/CodexManager_aarch64.dmg"), env);
 
     expect(res.status).toBe(200);
-    expect(calls).toEqual(["latest.json", "0.1.18/OSIRCodexManager_aarch64.dmg"]);
+    expect(calls).toEqual(["latest.json", "0.1.18/CodexManager_aarch64.dmg"]);
   });
 
   it("returns 404 for latest links when latest.json is missing or invalid", async () => {
-    const missing = await worker.fetch(request("/manager/latest/OSIRCodexManager_x64-setup.exe"), {
+    const missing = await worker.fetch(request("/manager/latest/CodexManager_x64-setup.exe"), {
       BUCKET: bucket({}),
     });
     expect(missing.status).toBe(404);
 
-    const invalid = await worker.fetch(request("/manager/latest/OSIRCodexManager_x64-setup.exe"), {
+    const invalid = await worker.fetch(request("/manager/latest/CodexManager_x64-setup.exe"), {
       BUCKET: bucket({ "latest.json": r2Object("not json", { invalidJson: true }) }),
     });
     expect(invalid.status).toBe(404);
@@ -146,11 +146,11 @@ describe("manager download router", () => {
 
     const installerEnv = {
       BUCKET: bucket({
-        "0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
+        "0.1.18/CodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
       }),
     };
     const installerRes = await worker.fetch(
-      request("/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe"),
+      request("/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe"),
       installerEnv,
     );
     expect(installerRes.status).toBe(200);
@@ -164,7 +164,7 @@ describe("manager download router", () => {
     };
 
     const res = await worker.fetch(
-      request("/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe", {}, { country: "CN" }),
+      request("/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe", {}, { country: "CN" }),
       env,
     );
 
@@ -172,7 +172,7 @@ describe("manager download router", () => {
     expect(res.headers.get("X-Codex-Mirror-Backend")).toBe("ihep");
     const location = new URL(res.headers.get("Location"));
     expect(location.origin).toBe("https://s3.example.test");
-    expect(location.pathname).toBe("/root/mirror-bucket/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe");
+    expect(location.pathname).toBe("/root/mirror-bucket/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe");
     expect(location.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
     expect(location.searchParams.has("X-Amz-Signature")).toBe(true);
   });
@@ -182,7 +182,7 @@ describe("manager download router", () => {
     const env = {
       BUCKET: bucket(
         {
-          "0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
+          "0.1.18/CodexManager_0.1.18_x64-setup.exe": r2Object("installer"),
         },
         calls,
       ),
@@ -190,21 +190,21 @@ describe("manager download router", () => {
     };
 
     const res = await worker.fetch(
-      request("/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe", {}, { country: "CN" }),
+      request("/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe", {}, { country: "CN" }),
       env,
     );
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("installer");
-    expect(calls).toEqual(["0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe"]);
+    expect(calls).toEqual(["0.1.18/CodexManager_0.1.18_x64-setup.exe"]);
   });
 
   it("lets release probes force and identify both geographic backends", async () => {
     const calls = [];
-    const path = "/manager/0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe";
+    const path = "/manager/0.1.18/CodexManager_0.1.18_x64-setup.exe";
     const env = {
       BUCKET: bucket(
-        { "0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe": r2Object("installer") },
+        { "0.1.18/CodexManager_0.1.18_x64-setup.exe": r2Object("installer") },
         calls,
       ),
       ...secondaryEnv(),
@@ -225,7 +225,7 @@ describe("manager download router", () => {
     expect(forcedIhep.status).toBe(302);
     expect(forcedIhep.headers.get("X-Codex-Mirror-Backend")).toBe("ihep");
     expect(new URL(forcedIhep.headers.get("Location")).origin).toBe("https://s3.example.test");
-    expect(calls).toEqual(["0.1.18/OSIRCodexManager_0.1.18_x64-setup.exe"]);
+    expect(calls).toEqual(["0.1.18/CodexManager_0.1.18_x64-setup.exe"]);
 
     const missingSecondary = await worker.fetch(
       request(`${path}?cam_probe=${PROBE_TOKEN}&cam_backend=ihep`),

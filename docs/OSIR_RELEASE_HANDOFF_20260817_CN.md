@@ -1,4 +1,4 @@
-# OSIR Codex Manager 独立化发布交接
+# Codex Manager 独立化发布交接（OSIR-owned）
 
 ## 当前结论
 
@@ -6,7 +6,7 @@
 
 ## 已完成
 
-- 产品名：`OSIR Codex Manager`。
+- 客户端显示名：`Codex Manager`。
 - 二进制：`osir-codex-manager`。
 - Bundle ID：`com.osir.codexmanager`。
 - GitHub：`ousir0/osir-codex-manager`，私有仓库。
@@ -29,12 +29,12 @@
 
 | 文件 | SHA-256 |
 |---|---|
-| `OSIRCodexManager_aarch64.dmg` | `77f609d397cbaf2aa3ed7b29a33005d02caa9ba58e8764708175764ff9f40a1c` |
-| `OSIRCodexManager_aarch64.app.tar.gz` | `4e32124145bb332c16d9dce09a40c7deeffc28f1848a0c341f3435a2e6735694` |
+| `CodexManager_aarch64.dmg` | `6ebdcdee45a8d47ee9bd9e7635d0bd160b6e9a67ba0c773858ada0f8646e4bb9` |
+| `CodexManager_aarch64.app.tar.gz` | `ef7741557fe3c2222bba6849e7cd3b78f0c1b99574c2162f4f9a7fd087f5784d` |
 
 包内已验证：
 
-- `CFBundleName=OSIR Codex Manager`。
+- `CFBundleName=Codex Manager`。
 - `CFBundleIdentifier=com.osir.codexmanager`。
 - `CFBundleExecutable=osir-codex-manager`。
 - 主二进制为 Apple Silicon arm64。

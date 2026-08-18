@@ -1,5 +1,5 @@
 <goal>
-Deliver an independently owned OSIR Codex Manager release whose product identity, application bundle, icons, installer metadata, runtime URLs, updater trust chain, source repository, website, downloads, and deployment resources are controlled by OSIR. The primary application/download domain is https://app.osirclaw.com and the API provider endpoint is https://api.osirclaw.com/v1.
+Deliver an independently owned Codex Manager release whose product identity, application bundle, icons, installer metadata, runtime URLs, updater trust chain, source repository, website, downloads, and deployment resources are controlled by OSIR. The primary application/download domain is https://app.osirclaw.com and the API provider endpoint is https://api.osirclaw.com/v1.
 </goal>
 
 <context>
@@ -20,7 +20,7 @@ Read SPEC.md, docs/CODEX_MANAGER_SESSIONS_HANDOFF_CN.md, docs/OSIR_API_MANAGER_B
 </constraints>
 
 <done_when>
-1. package.json, Cargo.toml, Cargo.lock, tauri.conf.json, the installer, menus, diagnostics, logs, website, README, icons, and release workflows identify the product as OSIR Codex Manager.
+1. package.json, Cargo.toml, Cargo.lock, tauri.conf.json, the installer, menus, diagnostics, logs, website, README, icons, and release workflows identify the client as Codex Manager while retaining OSIR technical ownership.
 2. The main binary is osir-codex-manager and the bundle identifier is com.osir.codexmanager.
 3. Old manager data and the legacy awai provider migrate automatically, idempotently, and without deleting a newer OSIR destination or API key.
 4. The updater public key in tauri.conf.json belongs to the locally secured OSIR private key, and GitHub Actions receives the matching private key/password through secrets only.
@@ -62,7 +62,7 @@ Read SPEC.md, docs/CODEX_MANAGER_SESSIONS_HANDOFF_CN.md, docs/OSIR_API_MANAGER_B
 - Batch independent reads and verification where safe.
 - Run focused tests before broad tests.
 - Do not paper over failures or expose secrets in output.
-- Do not widen scope beyond OSIR Codex Manager ownership, release, hosting, and verification.
+- Do not widen scope beyond OSIR-owned Codex Manager ownership, release, hosting, and verification.
 - Keep user updates concise and outcome-first.
 </execution_rules>
 

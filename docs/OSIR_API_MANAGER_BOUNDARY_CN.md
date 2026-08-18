@@ -1,4 +1,4 @@
-# OSIRAPI 与 OSIR Codex Manager 接入边界
+# OSIRAPI 与 Codex Manager 接入边界
 
 来源会话：`01a0109f-8289-7013-af31-3371764c84e4`  
 整理日期：2026-08-17

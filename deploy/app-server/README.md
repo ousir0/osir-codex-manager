@@ -1,6 +1,6 @@
 # app.osirclaw.com deployment
 
-This directory defines the isolated OSIR Codex Manager web/download origin. It does not modify the existing `osirclaw.com` or `api.osirclaw.com` services.
+This directory defines the isolated Codex Manager web/download origin. It does not modify the existing `osirclaw.com` or `api.osirclaw.com` services.
 
 ## Layout
 

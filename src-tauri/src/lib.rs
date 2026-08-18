@@ -190,8 +190,8 @@ fn show_native_shell_event(app: tauri::AppHandle, event: ShellEvent) {
             let mut dialog = app
                 .dialog()
                 .message(
-                    "The interface is not responding. Quit OSIR Codex Manager safely?\n\n\
-                     界面没有响应。是否安全退出 OSIR Codex Manager？",
+                    "The interface is not responding. Quit Codex Manager safely?\n\n\
+                     界面没有响应。是否安全退出 Codex Manager？",
                 )
                 .title(PRODUCT_NAME)
                 .kind(MessageDialogKind::Warning)
@@ -227,8 +227,8 @@ fn show_native_shell_event(app: tauri::AppHandle, event: ShellEvent) {
             let mut dialog = app
                 .dialog()
                 .message(format!(
-                    "OSIR Codex Manager must stay open until the protected step finishes.\n\
-                     {reason}\n\n受保护步骤完成前，OSIR Codex Manager 必须保持打开。"
+                    "Codex Manager must stay open until the protected step finishes.\n\
+                     {reason}\n\n受保护步骤完成前，Codex Manager 必须保持打开。"
                 ))
                 .title(PRODUCT_NAME)
                 .kind(MessageDialogKind::Warning)
@@ -321,7 +321,7 @@ fn initial_main_window_visibility(
 fn show_windows_startup_error(detail: &str) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
 
-    let title: Vec<u16> = "OSIR Codex Manager startup error\0".encode_utf16().collect();
+    let title: Vec<u16> = "Codex Manager startup error\0".encode_utf16().collect();
     let body: Vec<u16> = format!(
         "The secure Windows interface could not be initialized. The app will close.\n\n{detail}\0"
     )
@@ -831,7 +831,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             install_macos_menu(app.handle(), NativeLocale::En)?;
             log::info!(
-                "OSIR Codex Manager v{} starting (os={}, arch={})",
+                "Codex Manager v{} starting (os={}, arch={})",
                 app.package_info().version,
                 std::env::consts::OS,
                 std::env::consts::ARCH
@@ -1026,7 +1026,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build OSIR Codex Manager")
+        .expect("failed to build Codex Manager")
         // Cmd+Q (and any other app-level quit) lands as ExitRequested rather than
         // a window CloseRequested — gate it with the same phase-aware policy.
         .run(|app, event| {

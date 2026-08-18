@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Official website for OSIR Codex Manager & Codex App Mirror",
+  "description": "Official website for Codex Manager & Codex App Mirror",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

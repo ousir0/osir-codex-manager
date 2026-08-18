@@ -1,4 +1,4 @@
-# OSIR Codex Manager 会话交接与落地入口
+# Codex Manager 会话交接与落地入口
 
 整理日期：2026-08-17
 
@@ -11,11 +11,11 @@
 
 目标不是给原客户端换 Logo，而是把它迁移成由 OSIR 独立控制的产品：源码仓库、产品身份、运行时服务、更新信任链、安装包镜像、皮肤、签名、发布流水线和监控都不能继续依赖原作者的账号或基础设施。
 
-当前仓库负责 **OSIR Codex Manager 客户端**。`/Users/ouwei/sub2api-new` 负责 **OSIR API 控制面**，包括用户、API Key、模型目录、订阅、额度、路由、计费和审计。大型安装包分发、Manager 自更新、皮肤目录和国际化隧道应保持独立部署边界。
+当前仓库负责 **Codex Manager 客户端**，由 OSIR 独立控制。`/Users/ouwei/sub2api-new` 负责 **OSIR API 控制面**，包括用户、API Key、模型目录、订阅、额度、路由、计费和审计。大型安装包分发、Manager 自更新、皮肤目录和国际化隧道应保持独立部署边界。
 
 ## 已确认方向
 
-- 产品名：`OSIR Codex Manager`。
+- 客户端显示名：`Codex Manager`。
 - 主二进制名：`osir-codex-manager`。
 - macOS Bundle ID：`com.osir.codexmanager`。
 - Git 主仓库由 `ousir0` 控制；原仓库只保留为不可推送的 `upstream`。

@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="./assets/banner.svg" alt="OSIR Codex Manager" width="100%">
+  <img src="./assets/banner.svg" alt="Codex Manager" width="100%">
 </p>
 
 <p align="center">
-  <img src="./assets/logo.png" width="160" alt="OSIR Codex Manager logo">
+  <img src="./assets/logo.png" width="160" alt="Codex Manager logo">
 </p>
 
-<h1 align="center">OSIR Codex Manager</h1>
+<h1 align="center">Codex Manager</h1>
 
 <p align="center">
   Windows / macOS 上的 Codex 安装、更新、配置与主题管理器。<br>
@@ -54,7 +54,7 @@
 
 # 中文
 
-OSIR Codex Manager 是一个 Tauri 桌面应用，用来管理官方 Codex 的本地安装生命周期：
+Codex Manager 是一个 Tauri 桌面应用，用来管理官方 Codex 的本地安装生命周期：
 检测、安装、更新、配置、主题、启动和卸载。它通过自有的 `app.osirclaw.com` 镜像提供
 可达下载，并用 SHA-256、包身份和平台原生签名验证每一个工件。
 
@@ -83,10 +83,10 @@ Manager 不修改 Codex 应用包，不绕过 OpenAI 或 Microsoft 的授权与�
 
 | 平台 | 文件 | OSIR 镜像 |
 |---|---|---|
-| Apple Silicon Mac | `OSIRCodexManager_aarch64.dmg` | [下载](https://app.osirclaw.com/manager/latest/OSIRCodexManager_aarch64.dmg) |
-| Intel Mac | `OSIRCodexManager_x86_64.dmg` | [下载](https://app.osirclaw.com/manager/latest/OSIRCodexManager_x86_64.dmg) |
-| Windows x64 | `OSIRCodexManager_x64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/OSIRCodexManager_x64-setup.exe?build=v0.5.3) |
-| Windows ARM64 | `OSIRCodexManager_arm64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/OSIRCodexManager_arm64-setup.exe) |
+| Apple Silicon Mac | `CodexManager_aarch64.dmg` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_aarch64.dmg) |
+| Intel Mac | `CodexManager_x86_64.dmg` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_x86_64.dmg) |
+| Windows x64 | `CodexManager_x64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.3) |
+| Windows ARM64 | `CodexManager_arm64-setup.exe` | [下载](https://app.osirclaw.com/manager/latest/CodexManager_arm64-setup.exe) |
 
 镜像的 `/manager/latest/` 始终指向当前版本；需要精确历史版本时，请使用对应 GitHub
 Release 的 Assets。安装 Manager 后，Codex 本体由 Manager 负责安装与更新，不需要另找
@@ -97,14 +97,14 @@ Release 的 Assets。安装 Manager 后，Codex 本体由 Manager 负责安装�
 每个发布包含 `SHA256SUMS`。Windows PowerShell：
 
 ```powershell
-Get-FileHash .\OSIRCodexManager_x64-setup.exe -Algorithm SHA256
-# ARM64 替换为 OSIRCodexManager_arm64-setup.exe
+Get-FileHash .\CodexManager_x64-setup.exe -Algorithm SHA256
+# ARM64 替换为 CodexManager_arm64-setup.exe
 ```
 
 macOS：
 
 ```bash
-shasum -a 256 OSIRCodexManager_aarch64.dmg
+shasum -a 256 CodexManager_aarch64.dmg
 ```
 
 Windows 预览安装器当前可能没有 Authenticode，首次运行出现 SmartScreen 提示属于已披露
@@ -237,7 +237,7 @@ npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
 
 # English
 
-OSIR Codex Manager is a Tauri desktop manager for the official Codex app. It covers local
+Codex Manager is a Tauri desktop manager for the official Codex app. It covers local
 install, update, configuration, skin, launch, and uninstall workflows on Windows and macOS.
 It serves current artifacts from `https://app.osirclaw.com`, validates them before touching an
 installation, and keeps API credentials and user content on the local machine.
@@ -261,10 +261,10 @@ for the public release record, or the fixed OSIR mirror links:
 
 | Platform | Mirror |
 |---|---|
-| Apple Silicon Mac | [OSIRCodexManager_aarch64.dmg](https://app.osirclaw.com/manager/latest/OSIRCodexManager_aarch64.dmg) |
-| Intel Mac | [OSIRCodexManager_x86_64.dmg](https://app.osirclaw.com/manager/latest/OSIRCodexManager_x86_64.dmg) |
-| Windows x64 | [OSIRCodexManager_x64-setup.exe](https://app.osirclaw.com/manager/latest/OSIRCodexManager_x64-setup.exe?build=v0.5.3) |
-| Windows ARM64 | [OSIRCodexManager_arm64-setup.exe](https://app.osirclaw.com/manager/latest/OSIRCodexManager_arm64-setup.exe) |
+| Apple Silicon Mac | [CodexManager_aarch64.dmg](https://app.osirclaw.com/manager/latest/CodexManager_aarch64.dmg) |
+| Intel Mac | [CodexManager_x86_64.dmg](https://app.osirclaw.com/manager/latest/CodexManager_x86_64.dmg) |
+| Windows x64 | [CodexManager_x64-setup.exe](https://app.osirclaw.com/manager/latest/CodexManager_x64-setup.exe?build=v0.5.3) |
+| Windows ARM64 | [CodexManager_arm64-setup.exe](https://app.osirclaw.com/manager/latest/CodexManager_arm64-setup.exe) |
 
 `/manager/latest/` always means the newest release. Use the matching GitHub Release Assets for
 an exact historical version. Verify `SHA256SUMS` before running an installer. Preview Windows
@@ -313,7 +313,7 @@ The macOS and Windows engines keep platform verification and rollback logic outs
 
 ## Scope and license
 
-OSIR Codex Manager does not patch Codex, bypass platform policies, forge official signatures,
+Codex Manager does not patch Codex, bypass platform policies, forge official signatures,
 upload conversations or credentials, or operate project-owned telemetry. The repository is an
 MIT-licensed fork; the original copyright and license text in [`LICENSE`](LICENSE) remain intact.
 It is independent from and not endorsed by OpenAI or Microsoft.
