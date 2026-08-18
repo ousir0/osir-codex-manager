@@ -1,0 +1,125 @@
+name: Windows ARM64 release artifact
+
+# Builds the Windows ARM64 NSIS installer from the protected default branch,
+# signs it with the Tauri updater key, and keeps it as a downloadable Actions
+# artifact for the mirror promotion step. It deliberately does not publish a
+# GitHub Release: an immutable cross-platform release cannot be repaired with
+# one late platform artifact, and macOS notarization credentials are unrelated.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing application version to build (for example v0.5.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-arm64-release-${{ github.repository }}-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Secrets are available only to a manual run of this workflow from the
+    # repository default branch. The checkout below also pins application code
+    # to that branch, so an input never selects arbitrary code to run with keys.
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: windows-2022
+    environment: release
+    env:
+      AUTHORIZED_RELEASE_ACTOR_LOGIN: ousir0
+      AUTHORIZED_RELEASE_ACTOR_ID: "57623923"
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Authorize protected ARM64 build
+        shell: bash
+        env:
+          CURRENT_ACTOR_LOGIN: ${{ github.actor }}
+          CURRENT_ACTOR_ID: ${{ github.actor_id }}
+          CURRENT_TRIGGERING_ACTOR_LOGIN: ${{ github.triggering_actor }}
+        run: |
+          set -euo pipefail
+          [[ "$CURRENT_ACTOR_LOGIN" == "$AUTHORIZED_RELEASE_ACTOR_LOGIN" ]] || exit 1
+          [[ "$CURRENT_ACTOR_ID" == "$AUTHORIZED_RELEASE_ACTOR_ID" ]] || exit 1
+          [[ "$CURRENT_TRIGGERING_ACTOR_LOGIN" == "$AUTHORIZED_RELEASE_ACTOR_LOGIN" ]] || exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Require the requested application version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-release-version.mjs source "$RELEASE_TAG" .
+          git fetch origin "${{ github.event.repository.default_branch }}" --depth=1
+          git merge-base --is-ancestor HEAD "origin/${{ github.event.repository.default_branch }}"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: aarch64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - name: Build Windows ARM64 NSIS installer
+        shell: bash
+        run: npm run tauri build -- --bundles nsis --target aarch64-pc-windows-msvc
+
+      - name: Assert ARM64 application PE
+        shell: pwsh
+        run: |
+          $target = "aarch64-pc-windows-msvc"
+          $main = "src-tauri/target/$target/release/osir-codex-manager.exe"
+          $setup = Get-ChildItem "src-tauri/target/$target/release/bundle/nsis/*-setup.exe" -ErrorAction Stop |
+            Select-Object -First 1
+          & .\scripts\windows-pe-arch.ps1 -Path $main -ExpectMachine 0xAA64
+          & .\scripts\windows-pe-arch.ps1 -Path $setup.FullName
+
+      - name: Authenticode-sign installer when configured
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          $setup = Get-ChildItem "src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/*-setup.exe" -ErrorAction Stop |
+            Select-Object -First 1
+          & .\scripts\sign-windows-authenticode.ps1 -Path $setup.FullName -Stage "sign"
+
+      - name: Sign updater installer and collect publishable files
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          bundle="src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis"
+          setup="$(find "$bundle" -maxdepth 1 -type f -name '*-setup.exe' -print -quit)"
+          [[ -n "$setup" ]] || { echo "::error::ARM64 NSIS installer missing"; exit 1; }
+          npx tauri signer sign "$setup"
+          [[ -s "$setup.sig" ]] || { echo "::error::Tauri updater signature missing"; exit 1; }
+          mkdir -p dist
+          cp "$setup" "dist/CodexManager_${version}_arm64-setup.exe"
+          cp "$setup.sig" "dist/CodexManager_${version}_arm64-setup.exe.sig"
+          sha256sum dist/CodexManager_${version}_arm64-setup.exe > dist/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-arm64-release-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/*
+          if-no-files-found: error

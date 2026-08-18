@@ -37,6 +37,10 @@ const signalWorkflow = await readFile(
   join(repoRoot, ".github/workflows/release-source.yml"),
   "utf8",
 );
+const windowsArm64Workflow = await readFile(
+  join(repoRoot, ".github/workflows/windows-arm64-release.yml"),
+  "utf8",
+);
 const mirrorRelease = await readFile(
   join(repoRoot, "scripts/mirror-release.mjs"),
   "utf8",
@@ -44,6 +48,22 @@ const mirrorRelease = await readFile(
 const releaseJob = workflow.slice(workflow.indexOf("  release:\n"));
 
 describe("release workflow recovery invariants", () => {
+  it("builds a signed Windows ARM64 artifact only from the protected default branch", () => {
+    expect(windowsArm64Workflow).toContain("workflow_dispatch:");
+    expect(windowsArm64Workflow).not.toContain("pull_request:");
+    expect(windowsArm64Workflow).toContain(
+      "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)",
+    );
+    expect(windowsArm64Workflow).toContain("environment: release");
+    expect(windowsArm64Workflow).toContain(
+      "ref: ${{ github.event.repository.default_branch }}",
+    );
+    expect(windowsArm64Workflow).toContain("aarch64-pc-windows-msvc");
+    expect(windowsArm64Workflow).toContain("ExpectMachine 0xAA64");
+    expect(windowsArm64Workflow).toContain("TAURI_SIGNING_PRIVATE_KEY");
+    expect(windowsArm64Workflow).toContain("CodexManager_${version}_arm64-setup.exe");
+  });
+
   it("queues every release run instead of replacing an older pending tag", () => {
     expect(workflow).toMatch(
       /concurrency:\n\s+group: release-latest-\$\{\{ github\.repository \}\}\n\s+cancel-in-progress: false\n\s+queue: max/,
