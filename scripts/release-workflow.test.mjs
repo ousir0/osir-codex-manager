@@ -588,6 +588,16 @@ describe("release workflow recovery invariants", () => {
     });
     expect(
       assertReleaseTagCreationRuleset([
+        {
+          ...creationRuleset,
+          bypass_actors: [
+            { actor_id: "68313927", actor_type: "User", bypass_mode: "always" },
+          ],
+        },
+      ]),
+    ).toEqual({ id: 2, name: "authorized release tag creation" });
+    expect(
+      assertReleaseTagCreationRuleset([
         { ...creationRuleset, bypass_actors: [], current_user_can_bypass: null },
       ]),
     ).toEqual({ id: 2, name: "authorized release tag creation" });

@@ -232,6 +232,7 @@ jobs:
         id: tag_source
         env:
           ALLOW_RELEASE_SHA_RESOLUTION: ${{ needs.preflight.outputs.trusted_invocation == 'manual-recovery' && '1' || '0' }}
+          ALLOW_HIDDEN_RELEASE_PUBLISHER_RULESET: "1"
           GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_READ_TOKEN }}
           RELEASE_SOURCE_SHA: ${{ needs.preflight.outputs.release_source_sha }}
         run: node scripts/check-release-tag-protection.mjs "$RELEASE_TAG" "$RELEASE_SOURCE_SHA"
