@@ -351,6 +351,7 @@ jobs:
         id: apple_signing
         if: matrix.os == 'macos'
         shell: bash
+        working-directory: ${{ github.workspace }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
