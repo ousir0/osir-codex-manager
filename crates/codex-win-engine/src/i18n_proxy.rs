@@ -187,7 +187,7 @@ async fn handle(mut client: TcpStream) -> Result<(), Box<dyn std::error::Error +
 
 #[cfg(test)]
 mod tests {
-    use super::is_allowed_connect;
+    use super::{is_allowed_connect, is_pac_request, pac_url};
 
     #[test]
     fn only_the_i18n_connect_target_is_allowed() {
