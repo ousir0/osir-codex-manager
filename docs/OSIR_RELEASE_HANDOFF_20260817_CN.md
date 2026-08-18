@@ -31,6 +31,8 @@
 |---|---|
 | `CodexManager_aarch64.dmg` | `6ebdcdee45a8d47ee9bd9e7635d0bd160b6e9a67ba0c773858ada0f8646e4bb9` |
 | `CodexManager_aarch64.app.tar.gz` | `ef7741557fe3c2222bba6849e7cd3b78f0c1b99574c2162f4f9a7fd087f5784d` |
+| `CodexManager_x86_64.dmg` | `5da217f3173a68e52acf6e3c32290ed5826aa8477a0929ab6bc9fa5b561e5de6` |
+| `CodexManager_x86_64.app.tar.gz` | `7e64e49a7e11ddc4896a6b7e9aa2e213720e1cbe41bf5289be27d2488596427c` |
 
 包内已验证：
 
@@ -55,7 +57,7 @@
 
 1. 本机没有 Apple Developer ID，当前 macOS 包是可验证的 ad-hoc 测试签名，尚未公证。
 2. Windows Authenticode 证书尚未配置；Windows x64 需要 GitHub Actions 构建并下载验收。
-3. 当前服务器候选 `latest.json` 仅包含 macOS arm64，Windows 与 macOS Intel 工件补齐后才能取消 `partial`。
+3. 当前服务器候选 `latest.json` 已包含 macOS arm64 与 Intel，Windows 两个架构工件补齐后才能取消 `partial`。
 4. 腾讯云 COS 已在 OSIRAPI 生产环境配置，但 Manager 工件的独立前缀、生命周期和 GitHub Secret 尚未启用；当前由服务器 + GitHub Releases 承载。
 5. 正确图标版本的 Windows Runs `32064417228`、`32065194564`、`32098144600` 均在 Runner 分配阶段失败，未执行构建步骤、未产生可用工件。
 
