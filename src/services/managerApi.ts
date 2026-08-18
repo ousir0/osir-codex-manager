@@ -11,6 +11,7 @@ import type {
   CodexConfigValidation,
   CodexMcpServerInput,
   OpenCodexConfigInput,
+  OpenCodexRouteCheck,
   OpenCodexStatus,
   CodexThemeStatusReport,
   StoreMigrationReport,
@@ -1571,6 +1572,18 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_start");
   },
+  openCodexSelectRoute(routeId: string, model: string): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+    }
+    return invoke<OpenCodexStatus>("opencodex_select_route", { routeId, model });
+  },
+  openCodexCheckRoute(routeId: string, model: string): Promise<OpenCodexRouteCheck> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve({ routeId, model, available: true, detail: "浏览器预览：未发送真实请求", checkedAt: String(Date.now()) });
+    }
+    return invoke<OpenCodexRouteCheck>("opencodex_check_route", { routeId, model });
+  },
   openCodexConnectOsir(code: string): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
       return Promise.reject(new Error("浏览器预览不支持兑换 OSIRAPI 连接码"));
@@ -1582,6 +1595,8 @@ export const managerApi = {
       const routes = input.routes.map(({ apiKey: _apiKey, ...route }) => ({
         ...route,
         apiKeyConfigured: Boolean(_apiKey?.trim()),
+        availability: "configured" as const,
+        locked: false,
       }));
       const status: OpenCodexStatus = {
         enabled: true,

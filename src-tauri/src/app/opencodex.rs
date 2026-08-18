@@ -10,6 +10,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -67,6 +68,18 @@ pub struct OpenCodexRoute {
     pub models: Vec<String>,
     pub enabled: bool,
     pub api_key_configured: bool,
+    pub availability: String,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodexRouteCheck {
+    pub route_id: String,
+    pub model: String,
+    pub available: bool,
+    pub detail: String,
+    pub checked_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -102,6 +115,7 @@ struct ManagedState {
     codex_provider_id: String,
     #[serde(default)]
     managed_provider_ids: Vec<String>,
+    locked_route: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -421,6 +435,66 @@ fn platform_label(platform: &str) -> &str {
     }
 }
 
+fn timestamp_marker() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".to_string())
+}
+
+pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
+    let paths = integration_paths()?;
+    let state = load_state(&paths.state);
+    let route_id = checked_id(route_id, "路由 ID")?;
+    let model = checked_text(model, "模型名称")?;
+    if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
+        return Err(AppError::Engine("只能锁定 Manager 管理的模型路由".to_string()));
+    }
+    let mut config = load_config(&paths.opencodex_config)?;
+    let provider = config
+        .get_mut("providers")
+        .and_then(JsonValue::as_object_mut)
+        .and_then(|providers| providers.get_mut(&route_id))
+        .and_then(JsonValue::as_object_mut)
+        .ok_or_else(|| AppError::Engine("模型路由不存在或已被删除".to_string()))?;
+    provider.insert("defaultModel".to_string(), JsonValue::String(model.clone()));
+    config.insert("defaultProvider".to_string(), JsonValue::String(route_id.clone()));
+    let next = JsonValue::Object(config);
+    validate_candidate(&paths.opencodex_config, &next)?;
+    write_json(&paths.opencodex_config, &next)?;
+    let port = state.port.max(1);
+    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &state.codex_provider_id, port, &format!("{route_id}/{model}"))?;
+    let next_state = ManagedState { enabled: true, port, codex_provider_id: state.codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id) };
+    write_json(&paths.state, &serde_json::to_value(next_state).map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?)?;
+    status_at(&paths)
+}
+
+pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, AppError> {
+    let route_id = checked_id(route_id, "路由 ID")?;
+    let model = checked_text(model, "模型名称")?;
+    let route = format!("{route_id}/{model}");
+    match ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]) {
+        Ok(_) => Ok(OpenCodexRouteCheck { route_id, model, available: true, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() }),
+        Err(error) => Ok(OpenCodexRouteCheck { route_id, model, available: false, detail: error.to_string(), checked_at: timestamp_marker() }),
+    }
+}
+
+pub fn ensure_ready_for_codex() -> Result<(), AppError> {
+    let current = status()?;
+    if !current.enabled {
+        return Ok(());
+    }
+    let paths = integration_paths()?;
+    if current.service_state == "ready" && current.model_count > 0 && catalog_has_models(&paths.catalog) {
+        return Ok(());
+    }
+    let recovered = start()?;
+    if recovered.service_state != "ready" || recovered.model_count == 0 || !catalog_has_models(&paths.catalog) {
+        return Err(AppError::Engine("OpenCodex 多模型已启用，但服务未 ready；为避免 Codex 启动后不可用，已阻止启动。请先修复或恢复备份。".to_string()));
+    }
+    Ok(())
+}
+
 pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
     let ticket = extract_osir_ticket(code)?;
     if ocx_program().is_none() {
@@ -548,6 +622,7 @@ fn route_from_config(
     id: &str,
     config: &JsonMap<String, JsonValue>,
     models: &[JsonValue],
+    locked_route: Option<&str>,
 ) -> Option<OpenCodexRoute> {
     let provider = config.get("providers")?.as_object()?.get(id)?.as_object()?;
     let models = models
@@ -583,6 +658,14 @@ fn route_from_config(
             .get("apiKey")
             .and_then(JsonValue::as_str)
             .is_some_and(|key| !key.trim().is_empty()),
+        availability: if provider.get("disabled").and_then(JsonValue::as_bool) == Some(true) {
+            "offline".to_string()
+        } else if provider.get("apiKey").and_then(JsonValue::as_str).is_some_and(|key| !key.trim().is_empty()) {
+            "configured".to_string()
+        } else {
+            "unknown".to_string()
+        },
+        locked: locked_route == Some(id),
     })
 }
 
@@ -599,7 +682,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let routes = state
         .managed_provider_ids
         .iter()
-        .filter_map(|id| route_from_config(id, &config, &models))
+        .filter_map(|id| route_from_config(id, &config, &models, state.locked_route.as_deref()))
         .collect::<Vec<_>>();
     let port = config
         .get("port")
@@ -818,6 +901,14 @@ fn write_codex_proxy_config(
     Ok(())
 }
 
+fn catalog_has_models(path: &Path) -> bool {
+    fs::read(path)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<JsonValue>(&raw).ok())
+        .and_then(|value| value.get("models").and_then(JsonValue::as_array).cloned())
+        .is_some_and(|models| !models.is_empty())
+}
+
 fn validate_candidate(path: &Path, candidate: &JsonValue) -> Result<(), AppError> {
     let candidate_path = path.with_extension("json.manager-candidate");
     let bytes = serde_json::to_vec_pretty(candidate)
@@ -845,14 +936,35 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     write_json(&paths.opencodex_config, &candidate)?;
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
     let state = ManagedState {
-        enabled: true,
+        enabled: false,
         port: input.port,
-        codex_provider_id: provider_id,
+        codex_provider_id: provider_id.clone(),
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
+        locked_route: None,
     };
     let state_json = serde_json::to_value(state)
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
     write_json(&paths.state, &state_json)?;
+    if let Err(error) = ocx_output(&["sync"]) {
+        let _ = restore();
+        return Err(error);
+    }
+    if !catalog_has_models(&paths.catalog) {
+        let _ = restore();
+        return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录；已恢复原配置".to_string()));
+    }
+    let enabled_state = ManagedState {
+        enabled: true,
+        port: input.port,
+        codex_provider_id: provider_id,
+        managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
+        locked_route: None,
+    };
+    write_json(
+        &paths.state,
+        &serde_json::to_value(enabled_state)
+            .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
+    )?;
     status_at(&paths)
 }
 

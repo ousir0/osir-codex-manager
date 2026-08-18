@@ -723,6 +723,16 @@ export interface OpenCodexRoute {
   models: string[];
   enabled: boolean;
   apiKeyConfigured: boolean;
+  availability: "configured" | "verified" | "offline" | "unknown";
+  locked: boolean;
+}
+
+export interface OpenCodexRouteCheck {
+  routeId: string;
+  model: string;
+  available: boolean;
+  detail: string;
+  checkedAt: string;
 }
 
 export interface OpenCodexStatus {

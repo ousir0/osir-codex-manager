@@ -790,6 +790,8 @@ pub fn run() {
             commands::opencodex_status,
             commands::opencodex_install,
             commands::opencodex_start,
+            commands::opencodex_select_route,
+            commands::opencodex_check_route,
             commands::opencodex_connect_osir,
             commands::opencodex_save,
             commands::opencodex_sync,
