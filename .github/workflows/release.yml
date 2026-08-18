@@ -77,7 +77,7 @@ permissions:
 
 env:
   AUTHORIZED_RELEASE_ACTOR_LOGIN: ousir0
-  AUTHORIZED_RELEASE_ACTOR_ID: "57623923"
+  AUTHORIZED_RELEASE_ACTOR_ID: "68313927"
   RELEASE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || inputs.target_tag }}
   RELEASE_SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
   TRUSTED_RELEASE_INVOCATION: ${{ github.event_name == 'workflow_run' && 'tag-signal' || 'manual-recovery' }}
