@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "id": "codex-05",
+  "name": "Blue Stroke",
+  "description": "原创壁纸背景主题：Blue Stroke。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+  "version": "1.0.0",
+  "author": "Codex Manager",
+  "codexVerified": null,
+  "appearance": "dual",
+  "license": "personal-use",
+  "category": "wallpaper",
+  "tags": [
+    "wallpaper",
+    "background"
+  ],
+  "previews": [
+    "previews/home.webp"
+  ],
+  "colors": {
+    "background": "#0e1218",
+    "panel": "#121923",
+    "panel-alt": "#172333",
+    "accent": "#0e68e7",
+    "accent-alt": "#478ff5",
+    "secondary": "#de7d4a",
+    "highlight": "#4de5d1",
+    "text": "#f3f7fb",
+    "muted": "#aeb9c5",
+    "line": "rgba(14, 104, 231, .28)"
+  },
+  "assets": {
+    "background": "assets/background.webp"
+  },
+  "codexTheme": {
+    "appearanceTheme": "dark",
+    "codeThemeIds": {
+      "dark": "absolutely",
+      "light": "absolutely"
+    },
+    "dark": {
+      "accent": "#0e68e7",
+      "contrast": 60,
+      "ink": "#f3f7fb",
+      "opaqueWindows": true,
+      "surface": "#0e1218",
+      "fonts": {
+        "code": "SF Mono",
+        "ui": "SF Pro Display, \"PingFang SC\""
+      },
+      "semanticColors": {
+        "diffAdded": "#46c077",
+        "diffRemoved": "#d64541",
+        "skill": "#0e68e7"
+      }
+    },
+    "light": {
+      "accent": "#0a4ba6",
+      "contrast": 60,
+      "ink": "#1b2430",
+      "opaqueWindows": true,
+      "surface": "#f5f8fc",
+      "fonts": {
+        "code": "SF Mono",
+        "ui": "SF Pro Display, \"PingFang SC\""
+      },
+      "semanticColors": {
+        "diffAdded": "#24844f",
+        "diffRemoved": "#b53632",
+        "skill": "#0a4ba6"
+      }
+    }
+  }
+}

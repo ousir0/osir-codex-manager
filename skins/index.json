@@ -1,0 +1,408 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-18T06:27:29.985Z",
+  "source": "https://github.com/ousir0/osir-codex-manager/tree/main/skins",
+  "sourceBuilder": "scripts/build-owned-skin-catalog.mjs",
+  "branding": "Theme packages contain visual styles only; Codex Manager owns runtime configuration.",
+  "skins": [
+    {
+      "id": "codex-01",
+      "name": "Ink Wanderer",
+      "description": "原创壁纸背景主题：Ink Wanderer。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 135736,
+      "sha256": "73d0354bbfe27e157ade7f5ed14228f0a03ec6f1539938431e7e1a3d160f9823",
+      "pack": "packs/codex-01-1.0.0.codexskin",
+      "preview": "previews/codex-01.webp"
+    },
+    {
+      "id": "codex-02",
+      "name": "Quiet Resolve",
+      "description": "原创壁纸背景主题：Quiet Resolve。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 39829,
+      "sha256": "801c78bf08436b7e8897493b95ead9eaf38493b53425515405c86998b9ae7d7c",
+      "pack": "packs/codex-02-1.0.0.codexskin",
+      "preview": "previews/codex-02.webp"
+    },
+    {
+      "id": "codex-03",
+      "name": "Skybound Motion",
+      "description": "原创壁纸背景主题：Skybound Motion。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 101331,
+      "sha256": "ebd9ca800f900f28028f07df693c14a8a9aecdf036acb7167832f6133b8ffd6a",
+      "pack": "packs/codex-03-1.0.0.codexskin",
+      "preview": "previews/codex-03.webp"
+    },
+    {
+      "id": "codex-04",
+      "name": "Lunar Edge",
+      "description": "原创壁纸背景主题：Lunar Edge。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 15515,
+      "sha256": "a2abb15f373a92373ba691cee05b69113546bf089a2e82b1f7bd5540ce3ab6be",
+      "pack": "packs/codex-04-1.0.0.codexskin",
+      "preview": "previews/codex-04.webp"
+    },
+    {
+      "id": "codex-05",
+      "name": "Blue Stroke",
+      "description": "原创壁纸背景主题：Blue Stroke。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 229337,
+      "sha256": "a1340b0c89a5da3bdd178a1176a2cf7838cf97a2becee4df2e46d09a0485478c",
+      "pack": "packs/codex-05-1.0.0.codexskin",
+      "preview": "previews/codex-05.webp"
+    },
+    {
+      "id": "codex-06",
+      "name": "Lakeside Evening",
+      "description": "原创壁纸背景主题：Lakeside Evening。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 189036,
+      "sha256": "1f964c5bd122088856d103abf673059885dd712debdb5582c05d8c51ea13ff66",
+      "pack": "packs/codex-06-1.0.0.codexskin",
+      "preview": "previews/codex-06.webp"
+    },
+    {
+      "id": "codex-07",
+      "name": "Window at Night",
+      "description": "原创壁纸背景主题：Window at Night。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 71771,
+      "sha256": "a8f962bfe694a14879c26dfc8829bed49b7bc20fa192a9a8ae053a11c54f7833",
+      "pack": "packs/codex-07-1.0.0.codexskin",
+      "preview": "previews/codex-07.webp"
+    },
+    {
+      "id": "codex-08",
+      "name": "Pixel Workshop",
+      "description": "原创壁纸背景主题：Pixel Workshop。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 193290,
+      "sha256": "e76ce187e609fe4cb6f6dfee9c26e151df0c14ea308a0f0cd7996c2dd0b03f5e",
+      "pack": "packs/codex-08-1.0.0.codexskin",
+      "preview": "previews/codex-08.webp"
+    },
+    {
+      "id": "codex-09",
+      "name": "Neon Ridge",
+      "description": "原创壁纸背景主题：Neon Ridge。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 238056,
+      "sha256": "05e3235f26cba9336a10c0c53896373a0dae0b56e3b301cecb04fa7df53b04d0",
+      "pack": "packs/codex-09-1.0.0.codexskin",
+      "preview": "previews/codex-09.webp"
+    },
+    {
+      "id": "codex-10",
+      "name": "Sea Wind",
+      "description": "原创壁纸背景主题：Sea Wind。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 316032,
+      "sha256": "090ad3f123b41ff94161a4443e615b183476278f58b43ef32ec74cf5330fc43b",
+      "pack": "packs/codex-10-1.0.0.codexskin",
+      "preview": "previews/codex-10.webp"
+    },
+    {
+      "id": "codex-11",
+      "name": "Ashen Machine",
+      "description": "原创壁纸背景主题：Ashen Machine。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 394243,
+      "sha256": "92f25f9272ceaa38a40c14e57e3b0edca28a180eb640e0a96f8e18da299ba78e",
+      "pack": "packs/codex-11-1.0.0.codexskin",
+      "preview": "previews/codex-11.webp"
+    },
+    {
+      "id": "codex-12",
+      "name": "Red Signal",
+      "description": "原创壁纸背景主题：Red Signal。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 108067,
+      "sha256": "0a76f088e0d02643a44c948c7a845195bbc0ad7eb361dbb8cf92c20a77e6e850",
+      "pack": "packs/codex-12-1.0.0.codexskin",
+      "preview": "previews/codex-12.webp"
+    },
+    {
+      "id": "codex-13",
+      "name": "Blue Guardians",
+      "description": "原创壁纸背景主题：Blue Guardians。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 198227,
+      "sha256": "d80b0bf8e8ebf8635d2ff759c0e70935aa50cd1284a776e2ee314ce1b52bb34b",
+      "pack": "packs/codex-13-1.0.0.codexskin",
+      "preview": "previews/codex-13.webp"
+    },
+    {
+      "id": "codex-14",
+      "name": "Mountain River",
+      "description": "原创壁纸背景主题：Mountain River。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 756562,
+      "sha256": "d5afe26ad036409e86766ea34ee84596aa25c7f1f4a2bd29b63a9fb3a13dd5ca",
+      "pack": "packs/codex-14-1.0.0.codexskin",
+      "preview": "previews/codex-14.webp"
+    },
+    {
+      "id": "codex-15",
+      "name": "Sunset Mark",
+      "description": "原创壁纸背景主题：Sunset Mark。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 30164,
+      "sha256": "8a0773e4733302b887d911ed692d3cbad1d9db6066b88e61c6dde28efaa43192",
+      "pack": "packs/codex-15-1.0.0.codexskin",
+      "preview": "previews/codex-15.webp"
+    },
+    {
+      "id": "codex-16",
+      "name": "Cosmic Pair",
+      "description": "原创壁纸背景主题：Cosmic Pair。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 599325,
+      "sha256": "edafe8b413f180b69d2e974fc061138da0b4964bf58cecdbb78a387a4d9083bf",
+      "pack": "packs/codex-16-1.0.0.codexskin",
+      "preview": "previews/codex-16.webp"
+    },
+    {
+      "id": "codex-17",
+      "name": "Open Field",
+      "description": "原创壁纸背景主题：Open Field。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 246136,
+      "sha256": "5860f841306e98df24934cdc3306978a23e3c627083512a9a17a7b1d6b1ce7bc",
+      "pack": "packs/codex-17-1.0.0.codexskin",
+      "preview": "previews/codex-17.webp"
+    },
+    {
+      "id": "codex-18",
+      "name": "Red Frequency",
+      "description": "原创壁纸背景主题：Red Frequency。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 409197,
+      "sha256": "415c8356b1ee20e45f71c1471b6f2fc825970bcdb91545f5274a07efcdb219bf",
+      "pack": "packs/codex-18-1.0.0.codexskin",
+      "preview": "previews/codex-18.webp"
+    },
+    {
+      "id": "codex-19",
+      "name": "Monochrome Strings",
+      "description": "原创壁纸背景主题：Monochrome Strings。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 178415,
+      "sha256": "bd14c2740791f2e3ffdb301ab7d3d30f259aa0d9096d5fc75de46dc84b2ca2db",
+      "pack": "packs/codex-19-1.0.0.codexskin",
+      "preview": "previews/codex-19.webp"
+    },
+    {
+      "id": "codex-20",
+      "name": "Skyline Story",
+      "description": "原创壁纸背景主题：Skyline Story。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 162024,
+      "sha256": "ce6d75dd0410167d2cdc95d866df855d0193cfae7703758de8816f3b07b979cc",
+      "pack": "packs/codex-20-1.0.0.codexskin",
+      "preview": "previews/codex-20.webp"
+    },
+    {
+      "id": "codex-21",
+      "name": "Forest Afternoon",
+      "description": "原创壁纸背景主题：Forest Afternoon。仅提供视觉样式，品牌与 API 配置由 Manager 管理。",
+      "version": "1.0.0",
+      "author": "Codex Manager",
+      "appearance": "dual",
+      "license": "personal-use",
+      "category": "wallpaper",
+      "tags": [
+        "wallpaper",
+        "background"
+      ],
+      "codexVerified": null,
+      "bytes": 1821655,
+      "sha256": "17720ea1db281e69ad8f76045dac7bfadd541279440041d83584cf93fbe4a011",
+      "pack": "packs/codex-21-1.0.0.codexskin",
+      "preview": "previews/codex-21.webp"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+/* Wallpaper skin: intentionally scoped for complete runtime removal. */
+html.codex-theme-studio {
+  color-scheme: dark !important;
+}
+
+html.codex-theme-studio body {
+  background:
+    linear-gradient(90deg, rgba(10, 14, 20, .92), rgba(10, 14, 20, .74) 52%, rgba(10, 14, 20, .52)),
+    var(--cts-asset-background) center / cover no-repeat fixed,
+    var(--cts-color-background) !important;
+  color: var(--cts-color-text) !important;
+}
+
+html.codex-theme-studio .app-theme {
+  background: transparent !important;
+}
+
+html.codex-theme-studio .app-shell-left-panel {
+  background:
+    linear-gradient(180deg, rgba(8, 12, 18, .98), rgba(18, 27, 40, .94)),
+    var(--cts-asset-background) center / cover no-repeat !important;
+  border-right: 1px solid var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+}
+
+html.codex-theme-studio .app-shell-left-panel :is(nav, header, footer, div) {
+  background-color: transparent !important;
+}
+
+html.codex-theme-studio .app-shell-left-panel :is(button, a, span, p, h1, h2, h3, label) {
+  color: var(--cts-color-text) !important;
+}
+
+html.codex-theme-studio .app-shell-left-panel :is(button, a):hover,
+html.codex-theme-studio .app-shell-left-panel [aria-current="page"] {
+  background: color-mix(in srgb, var(--cts-color-accent) 18%, transparent) !important;
+  box-shadow: inset 3px 0 0 var(--cts-color-accent) !important;
+}
+
+html.codex-theme-studio :is(main.main-surface, div.main-surface) {
+  isolation: isolate;
+  background:
+    linear-gradient(90deg, rgba(12, 18, 27, .72), rgba(12, 18, 27, .48)),
+    var(--cts-asset-background) center / cover no-repeat,
+    var(--cts-color-background) !important;
+}
+
+html.codex-theme-studio :is(main.main-surface, div.main-surface) :is(input, textarea, [contenteditable="true"]) {
+  background-color: color-mix(in srgb, var(--cts-color-panel) 88%, transparent) !important;
+  border-color: var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+  caret-color: var(--cts-color-accent) !important;
+}
+
+html.codex-theme-studio :is(button, [role="button"]):focus-visible,
+html.codex-theme-studio :is(input, textarea, [contenteditable="true"]):focus-visible {
+  outline: 2px solid var(--cts-color-accent) !important;
+  outline-offset: 2px;
+}
+
+html.codex-theme-studio :is(.bg-token-main-surface-primary, .bg-token-main-surface-secondary) {
+  background-color: color-mix(in srgb, var(--cts-color-panel) 84%, transparent) !important;
+}
