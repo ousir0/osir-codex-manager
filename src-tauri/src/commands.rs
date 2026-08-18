@@ -2406,19 +2406,25 @@ pub fn opencodex_status() -> Result<crate::app::opencodex::OpenCodexStatus, Comm
 }
 
 #[tauri::command]
-pub fn opencodex_install(
+pub async fn opencodex_install(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::install().map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::install)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn opencodex_start(
+pub async fn opencodex_start(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::start().map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::start)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2432,37 +2438,49 @@ pub fn opencodex_select_route(
 }
 
 #[tauri::command]
-pub fn opencodex_check_route(
+pub async fn opencodex_check_route(
     route_id: String,
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexRouteCheck, CommandError> {
-    crate::app::opencodex::check_route(&route_id, &model).map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::check_route(&route_id, &model))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn opencodex_connect_osir(
+pub async fn opencodex_connect_osir(
     state: State<'_, ManagerState>,
     code: String,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::connect_osir_code(&code).map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::connect_osir_code(&code))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn opencodex_save(
+pub async fn opencodex_save(
     state: State<'_, ManagerState>,
     input: crate::app::opencodex::OpenCodexConfigInput,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::save(input).map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::save(input))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn opencodex_sync(
+pub async fn opencodex_sync(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::sync().map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::sync)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
