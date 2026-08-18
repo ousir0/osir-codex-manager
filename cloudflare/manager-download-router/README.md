@@ -12,8 +12,8 @@ the manager's **own** bucket so the two never mix:
   a presigned **IHEP S3** URL, once the `SECONDARY_S3_*` secrets are set. Until
   then CN also falls back to R2 (still far better than GitHub).
 
-The updater (`src-tauri/tauri.conf.json`) already checks
-`…/manager/latest.json` first, GitHub second — no app change needed.
+The updater (`src-tauri/tauri.conf.json`) checks only
+`…/manager/latest.json`; GitHub is a source/release backup and is not a client runtime dependency.
 
 ## Why a separate latest.json on the mirror
 `latest.json`'s embedded signatures sign the artifact **bytes**, not the URL, so

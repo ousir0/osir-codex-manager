@@ -113,8 +113,8 @@ Windows 预览安装器当前可能没有 Authenticode，首次运行出现 Smar
 
 ## Manager 自更新
 
-Manager 先检查 `https://app.osirclaw.com/manager/latest.json`，再按配置使用 GitHub
-后备源。`latest.json` 的签名绑定最终安装包字节，OSIR 镜像只复制这些字节并改写 URL。
+Manager 只检查 `https://app.osirclaw.com/manager/latest.json`。`latest.json` 的签名绑定最终安装包字节，
+GitHub 仅作为源码和发布备份，不进入客户端运行时更新链路。
 发现更新、下载、安装和重启都需要用户确认；镜像不可用时不会跳过签名验证。
 
 ## Codex 配置管理
@@ -251,7 +251,7 @@ installation, and keeps API credentials and user content on the local machine.
 | macOS updates | Read the Sparkle appcast, prefer signed deltas, and fall back to the full archive |
 | CODEX configuration | Base URL, models, MCP, separate regular and image API key management, and safety fields |
 | OSIR skins | Import, preview, try on, apply, and restore `.codexskin` packages without editing Codex |
-| Manager self-update | Tauri updater with `https://app.osirclaw.com/manager/latest.json` and a GitHub fallback |
+| Manager self-update | Tauri updater with `https://app.osirclaw.com/manager/latest.json` |
 | Verification | HTTPS, SHA-256, package identity, native platform signatures, and post-install health checks |
 
 ## Download & verify

@@ -88,8 +88,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCMzFCRDU1RDJCMTVBRDEKUldUUldySFNWYjB4bTR4YlRmalNIbmQ4RkxYTjBNUHBUZzMvNlM0eU44dGE2TVhKWWNaWksvVzgK",
       "endpoints": [
-        "https://app.osirclaw.com/manager/latest.json",
-        "https://github.com/ousir0/osir-codex-manager/releases/latest/download/latest.json"
+        "https://app.osirclaw.com/manager/latest.json"
       ]
     }
   }

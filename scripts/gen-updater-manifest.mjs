@@ -2,8 +2,8 @@
 // Build the Tauri updater manifest (latest.json) from collected release
 // artifacts. Each macOS updater tarball is renamed with its arch during the
 // CI "Collect artifacts" step and carries a sibling .sig; we read those sigs
-// and point the urls at the GitHub release download path. The manifest is
-// served as a release asset, matching the updater endpoints in tauri.conf.json.
+// and point the urls at the OSIR app download origin. The manifest is served at
+// /manager/latest.json and artifact bytes live under /manager/<version>/.
 //
 // Usage: node scripts/gen-updater-manifest.mjs <tag> <artifacts-dir>
 import { createHash } from "node:crypto";
@@ -16,9 +16,11 @@ if (!tag || !dir) {
   process.exit(2);
 }
 const version = tag.replace(/^v/, "");
-const REPO = "ousir0/osir-codex-manager";
+const PUBLIC_MANAGER_BASE = (
+  process.env.MANAGER_PUBLIC_BASE_URL || "https://app.osirclaw.com/manager"
+).replace(/\/$/, "");
 const downloadUrl = (file) =>
-  `https://github.com/${REPO}/releases/download/${tag}/${encodeURIComponent(file)}`;
+  `${PUBLIC_MANAGER_BASE}/${version}/${encodeURIComponent(file)}`;
 
 const files = readdirSync(dir);
 const findSig = (re) => files.find((f) => re.test(f) && f.endsWith(".sig"));
