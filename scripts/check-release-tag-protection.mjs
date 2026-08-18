@@ -83,7 +83,7 @@ export function assertReleaseTagCreationRuleset(rulesets) {
       !Array.isArray(bypassActors) ||
       (bypassActors.length === 1 &&
         bypassActors[0]?.actor_type === "User" &&
-        bypassActors[0]?.actor_id === 48670012 &&
+        bypassActors[0]?.actor_id === 68313927 &&
         bypassActors[0]?.bypass_mode === "always");
     return (
       ruleset?.target === "tag" &&
