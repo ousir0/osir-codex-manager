@@ -347,6 +347,19 @@ jobs:
             exit 1
           }
 
+      - name: Detect Apple signing mode
+        id: apple_signing
+        if: matrix.os == 'macos'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -401,7 +414,7 @@ jobs:
 
       # ── macOS: import the Developer ID cert into a throwaway keychain ──────
       - name: Import Apple Developer ID certificate
-        if: matrix.os == 'macos' && secrets.APPLE_CERTIFICATE != ''
+        if: matrix.os == 'macos' && steps.apple_signing.outputs.available == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -449,7 +462,7 @@ jobs:
 
       # ── macOS: adaptive icon → sign → notarize → staple → repackage ───────
       - name: Finalize macOS bundle
-        if: matrix.os == 'macos' && secrets.APPLE_CERTIFICATE != ''
+        if: matrix.os == 'macos' && steps.apple_signing.outputs.available == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           AC_API_KEY_ID: ${{ secrets.AC_API_KEY_ID }}
@@ -463,7 +476,7 @@ jobs:
           bash scripts/finalize-macos.sh "${{ matrix.target }}"
 
       - name: Finalize macOS bundle (ad-hoc fallback)
-        if: matrix.os == 'macos' && secrets.APPLE_CERTIFICATE == ''
+        if: matrix.os == 'macos' && steps.apple_signing.outputs.available != 'true'
         shell: bash
         env:
           APPLE_SIGNING_IDENTITY: "-"
