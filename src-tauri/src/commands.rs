@@ -2396,6 +2396,63 @@ pub fn codex_config_restore_backup(
         .map_err(Into::into)
 }
 
+// ── OpenCodex multi-model integration ────────────────────────────────────
+
+#[tauri::command]
+pub fn opencodex_status() -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    crate::app::opencodex::status().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_install(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::install().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_start(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::start().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_connect_osir(
+    state: State<'_, ManagerState>,
+    code: String,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::connect_osir_code(&code).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_save(
+    state: State<'_, ManagerState>,
+    input: crate::app::opencodex::OpenCodexConfigInput,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::save(input).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_sync(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::sync().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_restore(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::restore().map_err(Into::into)
+}
+
 // ── Codex UI themes ──────────────────────────────────────────────────────────
 // CDP-injected theme packages (see crates/codex-theme-engine). Live try-on
 // needs a debuggable Codex; the apply path restarts Codex with the loopback

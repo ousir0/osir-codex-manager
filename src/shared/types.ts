@@ -709,6 +709,54 @@ export interface CodexConfigReport {
   imageGenerationApiKeyConfigured?: boolean;
   imageGenerationModel?: string;
   imageGenerationBaseUrl?: string;
+  openCodex?: OpenCodexStatus;
+}
+
+export type OpenCodexServiceState = "missing" | "stopped" | "starting" | "ready" | "unhealthy" | "unknown";
+
+export interface OpenCodexRoute {
+  id: string;
+  label: string;
+  adapter: string;
+  baseUrl: string;
+  defaultModel: string;
+  models: string[];
+  enabled: boolean;
+  apiKeyConfigured: boolean;
+}
+
+export interface OpenCodexStatus {
+  enabled: boolean;
+  installed: boolean;
+  version: string | null;
+  port: number;
+  serviceState: OpenCodexServiceState;
+  codexProviderId: string;
+  configPath: string;
+  catalogPath: string;
+  modelCount: number;
+  routes: OpenCodexRoute[];
+  backupAvailable: boolean;
+  error: string | null;
+}
+
+export interface OpenCodexRouteInput {
+  id: string;
+  label: string;
+  adapter: string;
+  baseUrl: string;
+  apiKey?: string;
+  models: string[];
+  defaultModel: string;
+  enabled: boolean;
+}
+
+export interface OpenCodexConfigInput {
+  enabled: boolean;
+  port: number;
+  codexProviderId: string;
+  defaultRoute: string;
+  routes: OpenCodexRouteInput[];
 }
 
 export interface CodexProviderProfile {

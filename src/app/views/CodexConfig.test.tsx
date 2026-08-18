@@ -23,6 +23,13 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       codexConfigUpsertMcp: vi.fn(),
       codexConfigDeleteMcp: vi.fn(),
       codexConfigRestoreBackup: vi.fn(),
+      openCodexStatus: vi.fn(),
+      openCodexInstall: vi.fn(),
+      openCodexStart: vi.fn(),
+      openCodexConnectOsir: vi.fn(),
+      openCodexSave: vi.fn(),
+      openCodexSync: vi.fn(),
+      openCodexRestore: vi.fn(),
       openCodexHome: vi.fn(),
     },
   };
@@ -125,6 +132,34 @@ describe("Codex configuration manager", () => {
     api.codexConfigUpsertMcp.mockResolvedValue(config());
     api.codexConfigDeleteMcp.mockResolvedValue(config({ mcpServers: [] }));
     api.codexConfigRestoreBackup.mockResolvedValue(config());
+    api.openCodexStatus.mockResolvedValue({
+      enabled: false,
+      installed: false,
+      version: null,
+      port: 10100,
+      serviceState: "missing",
+      codexProviderId: "opencodex",
+      configPath: "~/.opencodex/config.json",
+      catalogPath: "~/.codex/opencodex-catalog.json",
+      modelCount: 0,
+      routes: [],
+      backupAvailable: false,
+      error: null,
+    });
+    api.openCodexInstall.mockResolvedValue({
+      enabled: false,
+      installed: true,
+      version: "2.22.0",
+      port: 10100,
+      serviceState: "stopped",
+      codexProviderId: "opencodex",
+      configPath: "~/.opencodex/config.json",
+      catalogPath: "~/.codex/opencodex-catalog.json",
+      modelCount: 0,
+      routes: [],
+      backupAvailable: true,
+      error: null,
+    });
     api.openCodexHome.mockResolvedValue();
   });
 
@@ -182,6 +217,19 @@ describe("Codex configuration manager", () => {
     await user.click(screen.getByRole("button", { name: /Backup.*backup.*https:\/\/backup\.example/ }));
     expect(screen.getByDisplayValue("backup")).toBeInTheDocument();
     expect(screen.getByDisplayValue("https://backup.example/v1")).toBeInTheDocument();
+  });
+
+  it("opens the multi-model workbench and starts the component install flow", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+
+    await screen.findByDisplayValue("gpt-5");
+    await user.click(screen.getByText("多模型", { exact: true }));
+    expect(screen.getByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
+    expect(screen.getByText("尚未安装 OpenCodex")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "安装多模型组件" }));
+    await waitFor(() => expect(api.openCodexInstall).toHaveBeenCalledOnce());
   });
 
   it("allows saving while Codex is running and explains that restart is required", async () => {

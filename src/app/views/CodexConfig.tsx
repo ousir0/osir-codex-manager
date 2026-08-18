@@ -11,8 +11,9 @@ import type {
 import { NavBar, Segmented, Toggle } from "../components";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
+import { OpenCodexPrototype } from "./OpenCodexPrototype";
 
-type ConfigTab = "basic" | "mcp" | "advanced";
+type ConfigTab = "basic" | "multi" | "mcp" | "advanced";
 
 interface McpDraft extends CodexMcpServerInput {
   argsText: string;
@@ -40,6 +41,7 @@ const ZH_COPY = {
   invalid: "当前 TOML 有错误，请在高级编辑中修复",
   running: "Codex 正在运行，修改可以保存；重启 Codex 后生效",
   basic: "基础",
+  multi: "多模型",
   mcp: "MCP",
   advanced: "高级",
   model: "模型",
@@ -130,6 +132,7 @@ const EN_COPY: Record<keyof typeof ZH_COPY, string> = {
   invalid: "The current TOML is invalid. Repair it in Advanced.",
   running: "Codex is running. Changes can be saved; restart Codex to apply them.",
   basic: "Basic",
+  multi: "Multi-model",
   mcp: "MCP",
   advanced: "Advanced",
   model: "Model",
@@ -426,6 +429,7 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
   const tabs = useMemo(
     () => [
       { key: "basic", label: copy.basic },
+      { key: "multi", label: copy.multi },
       { key: "mcp", label: `${copy.mcp}${report ? ` (${report.mcpServers.length})` : ""}` },
       { key: "advanced", label: copy.advanced },
     ],
@@ -894,6 +898,8 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
             </div>
           </section>
         ) : null}
+
+        {report && tab === "multi" ? <OpenCodexPrototype /> : null}
 
         {report && tab === "mcp" ? (
           <section className="config-panel" aria-label={copy.mcp}>

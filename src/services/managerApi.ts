@@ -10,6 +10,8 @@ import type {
   CodexConfigReport,
   CodexConfigValidation,
   CodexMcpServerInput,
+  OpenCodexConfigInput,
+  OpenCodexStatus,
   CodexThemeStatusReport,
   StoreMigrationReport,
   CodexThemeSummary,
@@ -742,6 +744,20 @@ enabled = false
   codexRunning: false,
   imageGenerationCompatibility: false,
   imageGenerationApiKeyConfigured: false,
+  openCodex: {
+    enabled: false,
+    installed: false,
+    version: null,
+    port: 10100,
+    serviceState: "missing",
+    codexProviderId: "opencodex",
+    configPath: "~/.opencodex/config.json",
+    catalogPath: "~/.codex/opencodex-catalog.json",
+    modelCount: 0,
+    routes: [],
+    backupAvailable: false,
+    error: null,
+  },
 };
 
 function browserConfigReport(
@@ -1516,6 +1532,89 @@ export const managerApi = {
       return Promise.resolve(browserConfigReport({ backupAvailable: true }));
     }
     return invoke<CodexConfigReport>("codex_config_restore_backup");
+  },
+  openCodexStatus(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex ?? {
+        enabled: false,
+        installed: false,
+        version: null,
+        port: 10100,
+        serviceState: "missing",
+        codexProviderId: "opencodex",
+        configPath: "~/.opencodex/config.json",
+        catalogPath: "~/.codex/opencodex-catalog.json",
+        modelCount: 0,
+        routes: [],
+        backupAvailable: false,
+        error: null,
+      });
+    }
+    return invoke<OpenCodexStatus>("opencodex_status");
+  },
+  openCodexInstall(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      const status: OpenCodexStatus = {
+        ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus),
+        installed: true,
+        version: "2.22.0",
+        serviceState: "stopped",
+      };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return Promise.resolve(status);
+    }
+    return invoke<OpenCodexStatus>("opencodex_install");
+  },
+  openCodexStart(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+    }
+    return invoke<OpenCodexStatus>("opencodex_start");
+  },
+  openCodexConnectOsir(code: string): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.reject(new Error("浏览器预览不支持兑换 OSIRAPI 连接码"));
+    }
+    return invoke<OpenCodexStatus>("opencodex_connect_osir", { code });
+  },
+  openCodexSave(input: OpenCodexConfigInput): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      const routes = input.routes.map(({ apiKey: _apiKey, ...route }) => ({
+        ...route,
+        apiKeyConfigured: Boolean(_apiKey?.trim()),
+      }));
+      const status: OpenCodexStatus = {
+        enabled: true,
+        installed: true,
+        version: "2.22.0",
+        port: input.port,
+        serviceState: "ready",
+        codexProviderId: input.codexProviderId,
+        configPath: "~/.opencodex/config.json",
+        catalogPath: "~/.codex/opencodex-catalog.json",
+        modelCount: routes.reduce((total, route) => total + route.models.length, 0),
+        routes,
+        backupAvailable: true,
+        error: null,
+      };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return Promise.resolve(status);
+    }
+    return invoke<OpenCodexStatus>("opencodex_save", { input });
+  },
+  openCodexSync(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+    }
+    return invoke<OpenCodexStatus>("opencodex_sync");
+  },
+  openCodexRestore(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), enabled: false };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return Promise.resolve(status);
+    }
+    return invoke<OpenCodexStatus>("opencodex_restore");
   },
   // ── Codex UI themes ────────────────────────────────────────────────────
   /** Locally installed theme packages (managed dir + optional dev dir). */
