@@ -1266,6 +1266,7 @@ pub async fn mac_launch_codex(state: State<'_, ManagerState>) -> Result<(), Comm
     if !cfg!(target_os = "macos") {
         return Err(AppError::UnsupportedPlatform.into());
     }
+    crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     let settings = PersistedAppSettings::load();
     if settings.codex_theme.is_some() && state.operations.snapshot().is_none() {
         let themed =
@@ -1284,6 +1285,7 @@ pub async fn mac_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
     if !cfg!(target_os = "macos") {
         return Err(AppError::UnsupportedPlatform.into());
     }
+    crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     let settings = PersistedAppSettings::load();
     if settings.codex_theme.is_some() && state.operations.snapshot().is_none() {
         let themed =
@@ -2420,6 +2422,24 @@ pub fn opencodex_start(
 }
 
 #[tauri::command]
+pub fn opencodex_select_route(
+    state: State<'_, ManagerState>,
+    route_id: String,
+    model: String,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::select_route(&route_id, &model).map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn opencodex_check_route(
+    route_id: String,
+    model: String,
+) -> Result<crate::app::opencodex::OpenCodexRouteCheck, CommandError> {
+    crate::app::opencodex::check_route(&route_id, &model).map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn opencodex_connect_osir(
     state: State<'_, ManagerState>,
     code: String,
@@ -3017,6 +3037,7 @@ pub async fn win_launch_codex(state: State<'_, ManagerState>) -> Result<(), Comm
     if !matches!(state.target.os, OperatingSystem::Windows) {
         return Err(AppError::UnsupportedPlatform.into());
     }
+    crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     let persisted = PersistedAppSettings::load();
     if persisted.codex_theme.is_some() && state.operations.snapshot().is_none() {
         let themed =
@@ -3039,6 +3060,7 @@ pub async fn win_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
     if !matches!(state.target.os, OperatingSystem::Windows) {
         return Err(AppError::UnsupportedPlatform.into());
     }
+    crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     // The explicit restart button must perform exactly one stop/start cycle.
     // Re-entering the CDP theme-injection workflow here can visibly launch
     // Codex, wait for a debug port, roll it back, and launch it a second time

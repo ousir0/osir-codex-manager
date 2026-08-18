@@ -5195,6 +5195,27 @@ button.row.danger:hover {
   font-size: 9.5px;
   font-style: normal;
 }
+.multi-model-route-state {
+  padding: 2px 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-faint);
+  font-size: 8.5px;
+  font-style: normal;
+  font-weight: 750;
+}
+.multi-model-route-state.state-verified {
+  background: var(--success-tint);
+  color: var(--success-deep);
+}
+.multi-model-route-state.state-offline {
+  background: var(--danger-tint);
+  color: var(--danger-deep);
+}
+.multi-model-route-state.state-configured {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
 .multi-model-route-model {
   overflow: hidden;
   color: var(--text-faint);
@@ -5249,6 +5270,14 @@ button.row.danger:hover {
   color: var(--accent-deep);
   font-size: 9px;
   font-weight: 750;
+}
+.multi-model-route-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
 .multi-model-runtime {
   display: flex;
