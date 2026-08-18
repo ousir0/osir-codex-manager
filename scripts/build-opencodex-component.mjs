@@ -49,16 +49,22 @@ run("curl", ["-fsSL", nodeArchives[target], "-o", nodeArchive]);
 if (target.startsWith("windows-")) {
   const archive = nodeArchive.replaceAll("'", "''");
   const destination = work.replaceAll("'", "''");
-  run("powershell", ["-NoProfile", "-NonInteractive", "-Command", `Expand-Archive -LiteralPath '${archive}' -DestinationPath '${destination}' -Force`]);
+  if (process.platform === "win32") {
+    run("powershell", ["-NoProfile", "-NonInteractive", "-Command", `Expand-Archive -LiteralPath '${archive}' -DestinationPath '${destination}' -Force`]);
+  } else {
+    run("unzip", ["-q", nodeArchive, "-d", work]);
+  }
   const extracted = join(work, `node-v${nodeVersion}-${target === "windows-arm64" ? "win-arm64" : "win-x64"}`);
   await cp(extracted, nodeRoot, { recursive: true });
 } else {
   run("tar", ["-xzf", nodeArchive, "-C", nodeRoot, "--strip-components=1"]);
 }
 
-const npm = target.startsWith("windows-") ? "npm.cmd" : "npm";
+const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const installArgs = ["install", "--prefix", packageRoot, "--omit=dev", `@bitkyc08/opencodex@${version}`];
-if (target === "windows-arm64") installArgs.push("--os=win32", "--cpu=arm64");
+const targetOs = target.startsWith("windows-") ? "win32" : "darwin";
+const targetCpu = target.endsWith("arm64") ? "arm64" : "x64";
+installArgs.push("--os=" + targetOs, "--cpu=" + targetCpu);
 run(npm, installArgs, { env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" } });
 
 const metadata = {

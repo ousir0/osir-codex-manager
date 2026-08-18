@@ -25,6 +25,7 @@ use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use toml_edit::{value, DocumentMut, Item, Table};
 use uuid::Uuid;
+use zip::ZipArchive;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -35,6 +36,8 @@ use crate::errors::AppError;
 const DEFAULT_PORT: u16 = 10100;
 const DEFAULT_PROVIDER_ID: &str = "opencodex";
 const DEFAULT_VERSION: &str = "2.22.0";
+const COMPONENT_MANIFEST_URL: &str = "https://app.osirclaw.com/components/opencodex/index.json";
+const COMPONENT_MANIFEST_FALLBACK_URL: &str = "https://raw.githubusercontent.com/ousir0/osir-codex-manager/main/components/opencodex/index.json";
 const MAX_ROUTE_COUNT: usize = 32;
 const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
@@ -155,6 +158,19 @@ struct RedeemResponse {
     encrypted_bundle: EncryptedBundle,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ComponentTarget {
+    url: String,
+    github_url: String,
+    sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ComponentManifest {
+    targets: BTreeMap<String, ComponentTarget>,
+}
+
 #[derive(Debug, Clone)]
 struct IntegrationPaths {
     codex_config: PathBuf,
@@ -255,35 +271,99 @@ fn load_config(path: &Path) -> Result<JsonMap<String, JsonValue>, AppError> {
         .ok_or_else(|| AppError::Engine("OpenCodex 配置顶层必须是对象".to_string()))
 }
 
-fn ocx_program() -> Option<String> {
-    if let Some(data_dir) = paths::data_dir() {
-        let executable = data_dir
-            .join("opencodex")
-            .join("runtime")
-            .join(DEFAULT_VERSION)
-            .join("node_modules")
-            .join(".bin")
-            .join(if cfg!(target_os = "windows") { "ocx.cmd" } else { "ocx" });
-        if executable.is_file() {
-            return Some(executable.display().to_string());
+fn component_target() -> &'static str {
+    match (cfg!(target_os = "windows"), cfg!(target_arch = "aarch64")) {
+        (true, true) => "windows-arm64",
+        (true, false) => "windows-x64",
+        (false, true) => "darwin-arm64",
+        (false, false) => "darwin-x64",
+    }
+}
+
+fn managed_component_root() -> Option<PathBuf> {
+    paths::data_dir().map(|dir| dir.join("opencodex").join("components").join(DEFAULT_VERSION).join(component_target()))
+}
+
+fn ocx_invocation() -> Option<(String, Vec<String>)> {
+    if let Some(root) = managed_component_root() {
+        let node = root.join(if cfg!(target_os = "windows") { "runtime/node.exe" } else { "runtime/bin/node" });
+        let launcher = root.join("opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
+        if node.is_file() && launcher.is_file() {
+            return Some((node.display().to_string(), vec![launcher.display().to_string()]));
         }
     }
-    for candidate in if cfg!(target_os = "windows") {
-        ["ocx.cmd", "ocx"]
-    } else {
-        ["ocx", "ocx"]
-    } {
-        if Command::new(candidate)
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-        {
-            return Some(candidate.to_string());
+    for candidate in if cfg!(target_os = "windows") { ["ocx.cmd", "ocx"] } else { ["ocx", "ocx"] } {
+        if Command::new(candidate).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|status| status.success()) {
+            return Some((candidate.to_string(), Vec::new()));
         }
     }
     None
+}
+
+fn ocx_program() -> Option<String> {
+    ocx_invocation().map(|(program, _)| program)
+}
+
+fn component_sha256(path: &Path) -> Result<String, AppError> {
+    let bytes = fs::read(path).map_err(|error| AppError::Internal(format!("读取 OpenCodex 组件失败：{error}")))?;
+    let digest = Sha256::digest(bytes);
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn download_component(url: &str, path: &Path) -> Result<(), AppError> {
+    let output = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "/usr/bin/curl" })
+        .args(["-fsSL", "--proto", "=https", "--max-time", "300", url, "-o", path.to_string_lossy().as_ref()])
+        .output()
+        .map_err(|error| AppError::Engine(format!("下载 OpenCodex 组件失败：{error}")))?;
+    if !output.status.success() { return Err(AppError::Engine("OpenCodex 组件下载失败，请检查网络后重试".to_string())); }
+    Ok(())
+}
+
+fn extract_component(zip_path: &Path, destination: &Path) -> Result<(), AppError> {
+    let file = fs::File::open(zip_path).map_err(|error| AppError::Internal(format!("打开 OpenCodex 组件失败：{error}")))?;
+    let mut archive = ZipArchive::new(file).map_err(|error| AppError::Engine(format!("OpenCodex 组件压缩包无效：{error}")))?;
+    let temp = destination.with_extension(format!("tmp-{}", std::process::id()));
+    if temp.exists() { fs::remove_dir_all(&temp).ok(); }
+    fs::create_dir_all(&temp).map_err(|error| AppError::Internal(format!("创建 OpenCodex 组件目录失败：{error}")))?;
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index).map_err(|error| AppError::Engine(format!("读取 OpenCodex 组件失败：{error}")))?;
+        let Some(relative) = entry.enclosed_name().map(|path| path.to_path_buf()) else { return Err(AppError::Engine("OpenCodex 组件包含不安全路径".to_string())); };
+        let target = temp.join(relative);
+        if entry.is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?; continue; }
+        if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?; }
+        let mut output = fs::File::create(&target).map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
+        std::io::copy(&mut entry, &mut output).map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
+        #[cfg(unix)]
+        if let Some(mode) = entry.unix_mode() {
+            fs::set_permissions(&target, fs::Permissions::from_mode(mode & 0o777))
+                .map_err(|error| AppError::Internal(format!("恢复 OpenCodex 组件权限失败：{error}")))?;
+        }
+    }
+    if destination.exists() { fs::remove_dir_all(destination).map_err(|error| AppError::Internal(format!("替换 OpenCodex 组件失败：{error}")))?; }
+    fs::rename(temp, destination).map_err(|error| AppError::Internal(format!("启用 OpenCodex 组件失败：{error}")))?;
+    Ok(())
+}
+
+fn install_component_from_manifest() -> Result<(), AppError> {
+    let data_dir = paths::data_dir().ok_or_else(|| AppError::Internal("无法定位 OpenCodex 组件目录".to_string()))?;
+    let manifest_path = data_dir.join("opencodex").join("component-manifest.json");
+    if let Some(parent) = manifest_path.parent() { fs::create_dir_all(parent).ok(); }
+    let manifest_bytes = [COMPONENT_MANIFEST_URL, COMPONENT_MANIFEST_FALLBACK_URL].iter().find_map(|url| {
+        let temp = manifest_path.with_extension(format!("download-{}", std::process::id()));
+        if download_component(url, &temp).is_ok() { let bytes = fs::read(&temp).ok(); fs::remove_file(&temp).ok(); bytes } else { None }
+    }).ok_or_else(|| AppError::Engine("暂时无法获取 OpenCodex 组件清单".to_string()))?;
+    atomic_file::write_atomic(&manifest_path, &manifest_bytes).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件清单失败：{error}")))?;
+    let manifest: ComponentManifest = serde_json::from_slice(&manifest_bytes).map_err(|error| AppError::Engine(format!("OpenCodex 组件清单无效：{error}")))?;
+    let target = manifest.targets.get(component_target()).ok_or_else(|| AppError::Engine("当前平台没有可用的 OpenCodex 组件".to_string()))?;
+    let archive = data_dir.join("opencodex").join(format!("component-{}-{}.zip", component_target(), DEFAULT_VERSION));
+    if !archive.is_file() || component_sha256(&archive).ok().as_deref() != Some(target.sha256.as_str()) {
+        let temp = archive.with_extension(format!("download-{}", std::process::id()));
+        download_component(&target.url, &temp).or_else(|_| download_component(&target.github_url, &temp))?;
+        if component_sha256(&temp)? != target.sha256 { fs::remove_file(&temp).ok(); return Err(AppError::Engine("OpenCodex 组件 SHA-256 校验失败".to_string())); }
+        fs::rename(temp, &archive).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件失败：{error}")))?;
+    }
+    let destination = data_dir.join("opencodex").join("components").join(DEFAULT_VERSION).join(component_target());
+    extract_component(&archive, &destination)
 }
 
 fn managed_runtime_dir() -> Result<PathBuf, AppError> {
@@ -553,6 +633,9 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
     if ocx_program().is_some() {
         return start();
     }
+    if install_component_from_manifest().is_ok() && ocx_program().is_some() {
+        return start();
+    }
     let runtime = managed_runtime_dir()?;
     fs::create_dir_all(&runtime)
         .map_err(|error| AppError::Internal(format!("创建 OpenCodex 组件目录失败：{error}")))?;
@@ -585,10 +668,11 @@ pub fn start() -> Result<OpenCodexStatus, AppError> {
 }
 
 fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
-    let program = ocx_program().ok_or_else(|| {
+    let (program, prefix) = ocx_invocation().ok_or_else(|| {
         AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string())
     })?;
     let output = Command::new(program)
+        .args(prefix)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

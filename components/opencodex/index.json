@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "component": "opencodex",
+  "version": "2.22.0",
+  "nodeVersion": "22.19.0",
+  "source": {
+    "package": "@bitkyc08/opencodex",
+    "packageVersion": "2.22.0",
+    "license": "MIT",
+    "integrity": "sha512-YFWwTrHEgCEeBOsRBuFltLUdmmhf48xEQM4oaIDO9mEiWBor0wAqE0uIvj6eJpyZY0xd/Mhz8O77q9Nflp/y7A=="
+  },
+  "targets": {
+    "darwin-arm64": {
+      "url": "https://app.osirclaw.com/components/opencodex/opencodex-darwin-arm64.zip",
+      "githubUrl": "https://github.com/ousir0/osir-codex-manager/releases/download/opencodex-2.22.0/opencodex-component-darwin-arm64.zip",
+      "sha256": "fed18fd9e8c8ecdd3b7dc1b0c6a51008f5e8d853de51b76ea6f5ca0036185ffc",
+      "bytes": 113645106,
+      "entry": "runtime/bin/node",
+      "launcher": "opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs"
+    },
+    "darwin-x64": {
+      "url": "https://app.osirclaw.com/components/opencodex/opencodex-darwin-x64.zip",
+      "githubUrl": "https://github.com/ousir0/osir-codex-manager/releases/download/opencodex-2.22.0/opencodex-component-darwin-x64.zip",
+      "sha256": "0c3c285fdc0c90f8a246dce784a317e26857c91298ef8b3021d7a621197c079f",
+      "bytes": 168424756,
+      "entry": "runtime/bin/node",
+      "launcher": "opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs"
+    },
+    "windows-x64": {
+      "url": "https://app.osirclaw.com/components/opencodex/opencodex-windows-x64.zip",
+      "githubUrl": "https://github.com/ousir0/osir-codex-manager/releases/download/opencodex-2.22.0/opencodex-component-windows-x64.zip",
+      "sha256": "48771ffcf1c62e6ff54f68636de10cab160689b581d9b7bc10e6f784d8ee3212",
+      "bytes": 176612062,
+      "entry": "runtime/node.exe",
+      "launcher": "opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs"
+    },
+    "windows-arm64": {
+      "url": "https://app.osirclaw.com/components/opencodex/opencodex-windows-arm64.zip",
+      "githubUrl": "https://github.com/ousir0/osir-codex-manager/releases/download/opencodex-2.22.0/opencodex-component-windows-arm64.zip",
+      "sha256": "91f313b4c72bd40e372d12daa22544fba3c66df25ef91ca1fd0b9aaf65db6778",
+      "bytes": 132539724,
+      "entry": "runtime/node.exe",
+      "launcher": "opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs"
+    }
+  }
+}
