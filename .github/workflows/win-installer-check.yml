@@ -41,7 +41,9 @@ concurrency:
 
 jobs:
   nsis:
-    runs-on: windows-latest
+    # Pin the stable Windows image. The private repository has intermittently
+    # failed before step 1 while the floating windows-latest pool was selected.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
