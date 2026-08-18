@@ -702,7 +702,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         .and_then(JsonValue::as_u64)
         .and_then(|port| u16::try_from(port).ok())
         .filter(|port| *port > 0)
-        .unwrap_or_else(|| if state.port > 0 { state.port } else { DEFAULT_PORT });
+        .unwrap_or(if state.port > 0 { state.port } else { DEFAULT_PORT });
     let codex_provider_id = if state.codex_provider_id.is_empty() {
         DEFAULT_PROVIDER_ID.to_string()
     } else {

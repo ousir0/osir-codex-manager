@@ -942,6 +942,7 @@ fn write_verified_json(path: &Path, raw: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn sync_image_generation_base_url(config_path: &Path, base_url: &str) -> Result<(), AppError> {
     let key_path = image_generation_key_path(config_path);
     let Ok(raw) = fs::read_to_string(&key_path) else {
@@ -953,7 +954,7 @@ fn sync_image_generation_base_url(config_path: &Path, base_url: &str) -> Result<
     if payload
         .get("api_key")
         .and_then(JsonValue::as_str)
-        .map_or(true, |key| key.trim().is_empty())
+        .is_none_or(|key| key.trim().is_empty())
     {
         return Ok(());
     }
@@ -1621,10 +1622,7 @@ requires_openai_auth = true
         let payload: JsonValue = serde_json::from_slice(&fs::read(&key_path).unwrap()).unwrap();
         assert_eq!(payload["base_url"], "https://new.example/v1");
         assert_eq!(payload["api_key"], "secret");
-        assert_eq!(
-            separate_image_generation_api_key_configured(&config_path),
-            true
-        );
+        assert!(separate_image_generation_api_key_configured(&config_path));
 
         #[cfg(unix)]
         {
