@@ -22,6 +22,7 @@ tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
 base64 = "0.23"
+aes-gcm = "0.10"
 codex-mac-engine = { path = "../crates/codex-mac-engine" }
 codex-theme-engine = { path = "../crates/codex-theme-engine" }
 codex-win-engine = { path = "../crates/codex-win-engine" }
@@ -29,6 +30,7 @@ directories = "6.0.0"
 fs4 = "1.1"
 log = "0.4"
 reqwest = { version = "0.13.4", default-features = false, features = ["socks", "system-proxy"] }
+rsa = { version = "0.9", features = ["pem", "sha2"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11"
