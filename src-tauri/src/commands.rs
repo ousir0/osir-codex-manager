@@ -2438,6 +2438,16 @@ pub fn opencodex_select_route(
 }
 
 #[tauri::command]
+pub fn opencodex_remove_model(
+    state: State<'_, ManagerState>,
+    route_id: String,
+    model: String,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::remove_model(&route_id, &model).map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn opencodex_check_route(
     route_id: String,
     model: String,

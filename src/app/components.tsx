@@ -692,11 +692,15 @@ export function Segmented({
   value,
   onChange,
   ariaLabel,
+  className,
+  orientation = "horizontal",
 }: {
   items: SegmentedItem[];
   value: string;
   onChange: (key: string) => void;
   ariaLabel?: string;
+  className?: string;
+  orientation?: "horizontal" | "vertical";
 }) {
   const barRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
@@ -713,8 +717,15 @@ export function Segmented({
     // under jsdom — skip so we don't pin the pill to a zero-width ghost.
     if (!active || active.offsetWidth === 0) return;
     const write = () => {
-      pill.style.transform = `translateX(${active.offsetLeft}px)`;
-      pill.style.width = `${active.offsetWidth}px`;
+      if (orientation === "vertical") {
+        pill.style.transform = `translateY(${active.offsetTop - 3}px)`;
+        pill.style.width = `${bar.clientWidth - 6}px`;
+        pill.style.height = `${active.offsetHeight}px`;
+      } else {
+        pill.style.transform = `translateX(${active.offsetLeft}px)`;
+        pill.style.width = `${active.offsetWidth}px`;
+        pill.style.height = "";
+      }
     };
     if (animate) {
       write();
@@ -733,7 +744,7 @@ export function Segmented({
   useLayoutEffect(() => {
     place(placed.current);
     placed.current = true;
-  }, [value, place]);
+  }, [value, place, orientation]);
 
   // Re-snap (no slide) when the bar's box changes — a language switch rewrites
   // every label's width, and the frequency segment is revealed from a collapsed
@@ -762,7 +773,7 @@ export function Segmented({
     // group itself is correctly non-focusable (WAI-ARIA APG). The arrow-key
     // handler reads keydown bubbling up from the focused radio.
     // eslint-disable-next-line jsx-a11y/interactive-supports-focus
-    <div className="seg" ref={barRef} role="radiogroup" aria-label={ariaLabel} onKeyDown={onKeyDown}>
+    <div className={["seg", orientation === "vertical" ? "seg-vertical" : "", className ?? ""].filter(Boolean).join(" ")} ref={barRef} role="radiogroup" aria-label={ariaLabel} onKeyDown={onKeyDown}>
       <span className="seg-pill" aria-hidden="true" ref={pillRef} />
       {items.map((item) => (
         <button

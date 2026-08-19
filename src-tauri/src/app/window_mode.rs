@@ -11,8 +11,8 @@ use tauri::{LogicalSize, Manager, PhysicalPosition};
 use crate::errors::AppError;
 
 pub const COMPACT_SIZE: (f64, f64) = (400.0, 640.0);
-pub const EXPANDED_DEFAULT_SIZE: (f64, f64) = (1100.0, 720.0);
-pub const EXPANDED_MIN_SIZE: (f64, f64) = (960.0, 640.0);
+pub const EXPANDED_DEFAULT_SIZE: (f64, f64) = (1240.0, 820.0);
+pub const EXPANDED_MIN_SIZE: (f64, f64) = (1040.0, 700.0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

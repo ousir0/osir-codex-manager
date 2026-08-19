@@ -1578,6 +1578,12 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_select_route", { routeId, model });
   },
+  openCodexRemoveModel(routeId: string, model: string): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.reject(new Error("浏览器预览不支持移除真实模型"));
+    }
+    return invoke<OpenCodexStatus>("opencodex_remove_model", { routeId, model });
+  },
   openCodexCheckRoute(routeId: string, model: string): Promise<OpenCodexRouteCheck> {
     if (!hasTauriRuntime()) {
       return Promise.resolve({ routeId, model, available: true, detail: "浏览器预览：未发送真实请求", checkedAt: String(Date.now()) });
@@ -1786,8 +1792,8 @@ export const managerApi = {
     if (!hasTauriRuntime()) {
       return Promise.resolve({
         mode,
-        width: size?.width ?? (mode === "expanded" ? 1100 : 400),
-        height: size?.height ?? (mode === "expanded" ? 720 : 640),
+        width: size?.width ?? (mode === "expanded" ? 1240 : 400),
+        height: size?.height ?? (mode === "expanded" ? 820 : 640),
       });
     }
     return invoke<WindowModeReport>("set_window_mode", {

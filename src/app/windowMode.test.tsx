@@ -66,9 +66,9 @@ describe("window modes", () => {
     expect(screen.getByRole("navigation")).toBeInTheDocument();
     expect(screen.queryByTitle(/expand workspace/i)).not.toBeInTheDocument();
     // The echoed (browser-fallback default) size is persisted for next time.
-    expect(JSON.parse(localStorage.getItem("cam.windowSize.expanded") ?? "null")).toEqual({
-      width: 1100,
-      height: 720,
+    expect(JSON.parse(localStorage.getItem("cam.windowSize.expanded.v2") ?? "null")).toEqual({
+      width: 1240,
+      height: 820,
     });
   });
 
