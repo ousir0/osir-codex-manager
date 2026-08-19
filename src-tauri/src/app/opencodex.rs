@@ -635,9 +635,15 @@ fn open_external_browser(url: &str) -> Result<(), AppError> {
         .map_err(|error| AppError::Engine(format!("无法打开 OSIRAPI 浏览器授权页：{error}")))
 }
 
-fn callback_http_response(stream: &mut std::net::TcpStream, message: &str) {
+fn callback_http_response(stream: &mut std::net::TcpStream, success: bool, message: &str) {
+    let accent = if success { "#36d399" } else { "#fb7185" };
+    let icon = if success { "✓" } else { "!" };
+    let title = if success { "授权回调已收到" } else { "授权没有完成" };
+    let second_step = if success { "回调已收到" } else { "回调未完成" };
+    let second_icon = if success { "✓" } else { "!" };
     let body = format!(
-        "<!doctype html><meta charset=\"utf-8\"><title>Codex Manager</title><p>{message}</p>"
+        "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} · Codex Manager</title></head><body style=\"margin:0;min-height:100vh;background:#0b1020;color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box\"><main style=\"width:min(520px,100%);background:linear-gradient(145deg,#17213b,#10172c);border:1px solid rgba(148,163,184,.22);border-radius:28px;padding:34px;box-shadow:0 24px 80px rgba(0,0,0,.38);box-sizing:border-box\"><div style=\"display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.16em;color:#a5b4fc;font-weight:700\"><span style=\"width:28px;height:28px;border-radius:9px;background:#6366f1;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:0\">CX</span> CODEX MANAGER</div><div style=\"width:72px;height:72px;border-radius:24px;background:{accent}22;color:{accent};display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;margin:38px 0 22px\">{icon}</div><h1 style=\"font-size:30px;line-height:1.2;margin:0 0 12px;letter-spacing:-.03em\">{title}</h1><p style=\"font-size:16px;line-height:1.7;color:#cbd5e1;margin:0\">{message}</p><section style=\"display:grid;gap:10px;margin-top:28px\"><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:#36d399\">✓</b><span>浏览器登录 OSIRAPI</span><small style=\"margin-left:auto;color:#94a3b8\">已完成</small></div><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:{accent}\">{second_icon}</b><span>返回 Codex Manager</span><small style=\"margin-left:auto;color:#94a3b8\">{second_step}</small></div><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:#fbbf24\">…</b><span>安装并同步本地模型</span><small style=\"margin-left:auto;color:#94a3b8\">请看管理器</small></div></section><p style=\"font-size:13px;line-height:1.6;color:#94a3b8;margin:24px 0 0\">{}</p></main><script>setTimeout(function(){{try{{window.close()}}catch(_){{}}}},1800)</script></body></html>",
+        if success { "请返回 Codex Manager，等待模型配置完成。此页面可以关闭。" } else { "请返回 Codex Manager 查看错误信息并重新尝试。" },
     );
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -665,26 +671,34 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
                     .and_then(|line| line.strip_prefix("GET "))
                     .and_then(|line| line.split_whitespace().next())
                 else {
-                    callback_http_response(&mut stream, "授权回调格式无效，请返回管理器重试。");
+                    callback_http_response(&mut stream, false, "授权回调格式无效，请返回管理器重试。");
                     continue;
                 };
                 let Ok(url) = Url::parse(&format!("http://127.0.0.1{target}")) else {
-                    callback_http_response(&mut stream, "授权回调地址无效，请返回管理器重试。");
+                    callback_http_response(&mut stream, false, "授权回调地址无效，请返回管理器重试。");
                     continue;
                 };
                 if url.path() != "/oauth/callback" {
-                    callback_http_response(&mut stream, "授权回调路径无效，请返回管理器重试。");
+                    callback_http_response(&mut stream, false, "授权回调路径无效，请返回管理器重试。");
                     continue;
                 }
                 let params = url.query_pairs().into_owned().collect::<BTreeMap<_, _>>();
                 let state = params.get("state").cloned().unwrap_or_default();
                 if state != expected_state {
-                    callback_http_response(&mut stream, "授权状态不匹配，请返回管理器重试。");
+                    callback_http_response(&mut stream, false, "授权状态不匹配，请返回管理器重试。");
                     continue;
                 }
                 let error = params.get("error").cloned();
                 let code = params.get("code").cloned().unwrap_or_default();
-                callback_http_response(&mut stream, "授权已完成，请返回 Codex Manager。");
+                callback_http_response(
+                    &mut stream,
+                    error.is_none(),
+                    if error.is_none() {
+                        "授权回调已收到，Manager 正在继续完成模型配置。"
+                    } else {
+                        "OSIRAPI 已取消或拒绝本次授权，请返回 Manager 重试。"
+                    },
+                );
                 return Ok(OAuthCallback { code, state, error });
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
