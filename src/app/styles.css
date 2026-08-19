@@ -345,6 +345,68 @@ input {
   margin-inline: auto;
 }
 
+/* Configuration is an operational workbench in expanded mode. Its module
+   navigation owns the left column while the active editor owns the canvas. */
+:root[data-window-mode="expanded"] .config-view {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  align-content: start;
+  column-gap: 24px;
+  row-gap: 14px;
+  padding: 18px 24px 28px;
+}
+:root[data-window-mode="expanded"] .config-view > * {
+  width: auto;
+  max-width: none;
+  margin-inline: 0;
+}
+:root[data-window-mode="expanded"] .config-view > .config-filebar,
+:root[data-window-mode="expanded"] .config-view > .banner {
+  grid-column: 1 / -1;
+}
+:root[data-window-mode="expanded"] .config-view > .seg {
+  grid-column: 1;
+  grid-row: auto;
+  position: sticky;
+  top: 0;
+  align-self: start;
+  display: grid;
+  gap: 4px;
+  width: 188px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+}
+:root[data-window-mode="expanded"] .config-view > .seg .seg-pill {
+  top: 3px;
+  bottom: auto;
+  left: 6px;
+  right: auto;
+  height: 38px;
+  width: auto;
+  transform: translateY(var(--config-seg-offset, 0));
+}
+:root[data-window-mode="expanded"] .config-view > .seg button {
+  min-height: 38px;
+  flex: none;
+  padding: 9px 11px;
+  text-align: left;
+}
+:root[data-window-mode="expanded"] .config-view > .config-panel,
+:root[data-window-mode="expanded"] .config-view > .multi-model-prototype {
+  grid-column: 2;
+  grid-row: auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+:root[data-window-mode="expanded"] .config-view > .config-panel {
+  padding: 0 0 18px;
+}
+:root[data-window-mode="expanded"] .config-view > .multi-model-prototype {
+  padding-bottom: 24px;
+}
+
 /* A scroll container's children must never be squeezed — overflowing content
    is what the scrollbar is for. Critical for children with overflow:hidden
    (.list), whose automatic minimum height computes to 0 as a flex item and
@@ -2579,6 +2641,25 @@ button.row.danger:hover {
 .seg button[aria-checked="true"] {
   color: var(--text);
 }
+.seg.seg-vertical {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+}
+.seg.seg-vertical .seg-pill {
+  top: 3px;
+  bottom: auto;
+  left: 3px;
+  width: auto;
+  height: 0;
+  transform: translateY(0);
+}
+.seg.seg-vertical button {
+  min-height: 38px;
+  flex: none;
+  padding: 9px 11px;
+  text-align: left;
+}
 @media (prefers-reduced-motion: reduce) {
   .seg-pill {
     transition: none;
@@ -3201,11 +3282,11 @@ button.row.danger:hover {
   grid-column: 1 / -1;
 }
 :root[data-window-mode="expanded"] .config-view > .config-panel {
-  max-width: 1120px;
+  max-width: none;
 }
 :root[data-window-mode="expanded"] .config-basic-layout {
-  grid-template-columns: minmax(230px, 0.32fr) minmax(0, 0.68fr);
-  gap: 22px;
+  grid-template-columns: minmax(220px, 0.28fr) minmax(0, 0.72fr);
+  gap: 24px;
 }
 :root[data-window-mode="expanded"] .config-provider-sidebar {
   padding-right: 18px;
@@ -5074,6 +5155,142 @@ button.row.danger:hover {
   transform: translateY(-1px);
   border-color: color-mix(in oklch, var(--accent) 45%, var(--line));
 }
+.multi-model-connection-card.active {
+  border-color: color-mix(in oklch, var(--accent) 70%, var(--line));
+  background: color-mix(in oklch, var(--accent) 9%, var(--surface-2));
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 13%, transparent);
+}
+.multi-model-methods {
+  display: grid;
+  gap: 7px;
+}
+.multi-model-method-panel {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--accent) 5%, var(--surface-2));
+  animation: multi-model-rise 0.2s var(--ease-out) both;
+}
+.multi-model-method-panel > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.multi-model-method-panel strong {
+  font-size: var(--fs-label);
+}
+.multi-model-method-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+.multi-model-method-form .input {
+  min-width: 0;
+}
+.multi-model-method-hint {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.multi-model-model-manager {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.multi-model-model-manager-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.multi-model-model-manager-head > div {
+  display: grid;
+  gap: 3px;
+}
+.multi-model-model-list {
+  display: grid;
+  gap: 5px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.multi-model-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.multi-model-model-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.danger-text {
+  color: var(--danger);
+}
+.multi-model-runtime-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.multi-model-modal {
+  display: grid;
+  gap: 16px;
+}
+.multi-model-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.multi-model-modal-head > div {
+  display: grid;
+  gap: 4px;
+}
+.multi-model-modal-head h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  letter-spacing: -0.02em;
+}
+.multi-model-modal-body {
+  display: grid;
+  gap: 11px;
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  line-height: 1.55;
+}
+.multi-model-modal-body p {
+  margin: 0;
+}
+.multi-model-modal-field,
+.multi-model-manual-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+.multi-model-manual-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.multi-model-manual-form p {
+  grid-column: 1 / -1;
+}
+.multi-model-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
 .multi-model-connection-card.featured {
   border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
   background: linear-gradient(120deg, color-mix(in oklch, var(--accent) 15%, var(--surface-2)), var(--surface-2));
@@ -5443,6 +5660,8 @@ button.row.danger:hover {
     display: none;
   }
   .multi-model-codebox,
+  .multi-model-method-form,
+  .multi-model-manual-form,
   .multi-model-advanced,
   .multi-model-key-editor {
     grid-template-columns: minmax(0, 1fr);
@@ -5453,6 +5672,10 @@ button.row.danger:hover {
   .multi-model-runtime {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .multi-model-runtime-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 @media (prefers-reduced-motion: reduce) {

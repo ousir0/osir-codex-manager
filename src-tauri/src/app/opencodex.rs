@@ -110,7 +110,7 @@ pub struct OpenCodexConfigInput {
     pub routes: Vec<OpenCodexRouteInput>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct ManagedState {
     enabled: bool,
@@ -526,7 +526,7 @@ fn timestamp_marker() -> String {
 
 pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
     let paths = integration_paths()?;
-    let state = load_state(&paths.state);
+    let state = effective_state(&paths)?;
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
@@ -545,9 +545,111 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     validate_candidate(&paths.opencodex_config, &next)?;
     write_json(&paths.opencodex_config, &next)?;
     let port = state.port.max(1);
-    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &state.codex_provider_id, port, &format!("{route_id}/{model}"))?;
-    let next_state = ManagedState { enabled: true, port, codex_provider_id: state.codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health };
+    let codex_provider_id = if state.codex_provider_id.is_empty() {
+        DEFAULT_PROVIDER_ID.to_string()
+    } else {
+        state.codex_provider_id.clone()
+    };
+    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &codex_provider_id, port, &format!("{route_id}/{model}"))?;
+    let next_state = ManagedState { enabled: true, port, codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health };
     write_json(&paths.state, &serde_json::to_value(next_state).map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?)?;
+    status_at(&paths)
+}
+
+pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
+    let paths = integration_paths()?;
+    let state = effective_state(&paths)?;
+    let route_id = checked_id(route_id, "路由 ID")?;
+    let model = checked_text(model, "模型名称")?;
+    if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
+        return Err(AppError::Engine("只能管理 Manager 接管的模型路由".to_string()));
+    }
+    let mut config = load_config(&paths.opencodex_config)?;
+    let models = config
+        .get_mut("customModels")
+        .and_then(JsonValue::as_array_mut)
+        .ok_or_else(|| AppError::Engine("OpenCodex 模型目录不存在".to_string()))?;
+    let before = models.len();
+    models.retain(|entry| {
+        !(entry.get("provider").and_then(JsonValue::as_str) == Some(&route_id)
+            && entry.get("modelId").and_then(JsonValue::as_str) == Some(&model))
+    });
+    if models.len() == before {
+        return Err(AppError::Engine("要移除的模型不存在".to_string()));
+    }
+    let remaining_managed = models
+        .iter()
+        .filter(|entry| {
+            entry
+                .get("provider")
+                .and_then(JsonValue::as_str)
+                .is_some_and(|provider| state.managed_provider_ids.iter().any(|id| id == provider))
+        })
+        .count();
+    if remaining_managed == 0 {
+        return Err(AppError::Engine("至少保留一个可用模型，避免 Codex 选择器为空".to_string()));
+    }
+    let provider_models = models
+        .iter()
+        .filter(|entry| entry.get("provider").and_then(JsonValue::as_str) == Some(&route_id))
+        .filter_map(|entry| entry.get("modelId").and_then(JsonValue::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let providers = config
+        .get_mut("providers")
+        .and_then(JsonValue::as_object_mut)
+        .ok_or_else(|| AppError::Engine("OpenCodex 路由配置不存在".to_string()))?;
+    if provider_models.is_empty() {
+        providers.remove(&route_id);
+    } else if let Some(provider) = providers.get_mut(&route_id).and_then(JsonValue::as_object_mut) {
+        let current_default = provider.get("defaultModel").and_then(JsonValue::as_str);
+        if current_default == Some(model.as_str()) {
+            provider.insert("defaultModel".to_string(), JsonValue::String(provider_models[0].clone()));
+        }
+    }
+    let managed_provider_ids = state
+        .managed_provider_ids
+        .iter()
+        .filter(|id| providers.contains_key(*id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let default_route = inferred_default_route(&config, &managed_provider_ids)
+        .ok_or_else(|| AppError::Engine("移除后没有可用的默认模型路由".to_string()))?;
+    config.insert("defaultProvider".to_string(), JsonValue::String(default_route.split('/').next().unwrap_or_default().to_string()));
+    let next = JsonValue::Object(config);
+    validate_candidate(&paths.opencodex_config, &next)?;
+    write_json(&paths.opencodex_config, &next)?;
+    write_codex_proxy_config(
+        &paths.codex_config,
+        &paths.catalog,
+        &state.codex_provider_id,
+        state.port.max(1),
+        &default_route,
+    )?;
+    if let Err(error) = ocx_output(&["sync"]) {
+        let _ = restore();
+        return Err(error);
+    }
+    let locked_route = state
+        .locked_route
+        .filter(|locked| managed_provider_ids.iter().any(|id| id == locked));
+    let route_health = state
+        .route_health
+        .into_iter()
+        .filter(|(key, _)| managed_provider_ids.iter().any(|id| key.starts_with(&format!("{id}/"))))
+        .collect();
+    write_json(
+        &paths.state,
+        &serde_json::to_value(ManagedState {
+            enabled: true,
+            port: state.port.max(1),
+            codex_provider_id: state.codex_provider_id,
+            managed_provider_ids,
+            locked_route,
+            route_health,
+        })
+        .map_err(|error| AppError::Internal(format!("保存模型移除状态失败：{error}")))?,
+    )?;
     status_at(&paths)
 }
 
@@ -560,7 +662,7 @@ pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, A
         Err(error) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: false, detail: error.to_string(), checked_at: timestamp_marker() },
     };
     if let Ok(paths) = integration_paths() {
-        let mut state = load_state(&paths.state);
+        let mut state = effective_state(&paths).unwrap_or_else(|_| load_state(&paths.state));
         state.route_health.insert(route, if check.available { "verified" } else { "offline" }.to_string());
         if let Ok(value) = serde_json::to_value(state) {
             let _ = write_json(&paths.state, &value);
@@ -766,8 +868,108 @@ fn route_from_config(
     })
 }
 
-fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
+fn inferred_managed_provider_ids(
+    config: &JsonMap<String, JsonValue>,
+    models: &[JsonValue],
+) -> Vec<String> {
+    let provider_ids = models
+        .iter()
+        .filter_map(|model| model.get("provider").and_then(JsonValue::as_str))
+        .collect::<BTreeSet<_>>();
+    provider_ids
+        .into_iter()
+        .filter(|id| {
+            config
+                .get("providers")
+                .and_then(JsonValue::as_object)
+                .and_then(|providers| providers.get(*id))
+                .and_then(JsonValue::as_object)
+                .is_some_and(|provider| {
+                    provider.get("baseUrl").and_then(JsonValue::as_str).is_some()
+                        && provider.get("defaultModel").and_then(JsonValue::as_str).is_some()
+                })
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+fn codex_uses_opencodex(paths: &IntegrationPaths) -> bool {
+    let Ok(raw) = fs::read_to_string(&paths.codex_config) else {
+        return false;
+    };
+    raw.contains("127.0.0.1:")
+        && raw.contains("/v1")
+        && raw.contains(&paths.catalog.display().to_string())
+        && catalog_has_models(&paths.catalog)
+}
+
+fn inferred_default_route(
+    config: &JsonMap<String, JsonValue>,
+    managed_provider_ids: &[String],
+) -> Option<String> {
+    let providers = config.get("providers").and_then(JsonValue::as_object)?;
+    let provider_id = config
+        .get("defaultProvider")
+        .and_then(JsonValue::as_str)
+        .filter(|id| managed_provider_ids.iter().any(|managed| managed == *id))
+        .or_else(|| managed_provider_ids.first().map(String::as_str))?;
+    let default_model = providers
+        .get(provider_id)?
+        .get("defaultModel")
+        .and_then(JsonValue::as_str)?;
+    Some(format!("{provider_id}/{default_model}"))
+}
+
+fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
     let state = load_state(&paths.state);
+    let config = load_config(&paths.opencodex_config)?;
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let inferred_ids = inferred_managed_provider_ids(&config, &models);
+    let uninitialized = state.port == 0
+        && state.codex_provider_id.is_empty()
+        && state.managed_provider_ids.is_empty()
+        && state.locked_route.is_none();
+    if !uninitialized || inferred_ids.is_empty() || !codex_uses_opencodex(paths) {
+        return Ok(state);
+    }
+    let mut adopted = state;
+    adopted.enabled = true;
+    adopted.port = config
+        .get("port")
+        .and_then(JsonValue::as_u64)
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(DEFAULT_PORT);
+    adopted.codex_provider_id = DEFAULT_PROVIDER_ID.to_string();
+    adopted.managed_provider_ids = inferred_ids;
+    adopted.locked_route = config
+        .get("defaultProvider")
+        .and_then(JsonValue::as_str)
+        .filter(|id| adopted.managed_provider_ids.iter().any(|managed| managed == *id))
+        .map(str::to_string);
+    if let Some(default_route) = inferred_default_route(&config, &adopted.managed_provider_ids) {
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            &adopted.codex_provider_id,
+            adopted.port,
+            &default_route,
+        )?;
+    }
+    write_json(
+        &paths.state,
+        &serde_json::to_value(&adopted)
+            .map_err(|error| AppError::Internal(format!("保存已有 OpenCodex 接管状态失败：{error}")))?,
+    )?;
+    Ok(adopted)
+}
+
+fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
+    let state = effective_state(paths)?;
     let config = load_config(&paths.opencodex_config).unwrap_or_default();
     let installed = ocx_program().is_some();
     let (service_state, error) = service_state(installed);
@@ -1097,7 +1299,9 @@ pub fn restore() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_opencodex_config, decrypt_bundle, extract_osir_ticket, validate_input, CodexInstallPayload,
+        build_opencodex_config, decrypt_bundle, extract_osir_ticket, inferred_default_route,
+        inferred_managed_provider_ids,
+        validate_input, CodexInstallPayload,
         EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
@@ -1157,6 +1361,43 @@ mod tests {
         assert!(models.iter().any(|model| model["provider"] == "keep"));
         assert!(models.iter().any(|model| model["provider"] == "osir-gpt"));
         assert!(!models.iter().any(|model| model["provider"] == "old"));
+    }
+
+    #[test]
+    fn infers_existing_manager_routes_from_custom_models_when_state_is_missing() {
+        let config = JsonMap::from_iter([
+            (
+                "defaultProvider".to_string(),
+                json!("osirapi-openai"),
+            ),
+            (
+                "providers".to_string(),
+                json!({
+                    "openai": {"disabled": true},
+                    "osirapi-openai": {"baseUrl": "https://api.osirclaw.com/v1", "defaultModel": "gpt-5.6-sol"},
+                    "osirapi-claude": {"baseUrl": "https://api.osirclaw.com/v1", "defaultModel": "claude-opus-5"}
+                }),
+            ),
+            (
+                "customModels".to_string(),
+                json!([
+                    {"provider":"osirapi-openai","modelId":"gpt-5.6-sol"},
+                    {"provider":"osirapi-claude","modelId":"claude-opus-5"}
+                ]),
+            ),
+        ]);
+        let models = config["customModels"].as_array().unwrap();
+        assert_eq!(
+            inferred_managed_provider_ids(&config, models),
+            vec!["osirapi-claude", "osirapi-openai"]
+        );
+        assert_eq!(
+            inferred_default_route(
+                &config,
+                &["osirapi-claude".to_string(), "osirapi-openai".to_string()]
+            ),
+            Some("osirapi-openai/gpt-5.6-sol".to_string())
+        );
     }
 
     #[test]

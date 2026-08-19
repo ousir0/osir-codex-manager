@@ -18,7 +18,7 @@ import { installWindowDragHandler } from "./windowDrag";
  *  itself is deliberately not persisted: the manager is an at-a-glance popover
  *  first, so every launch starts compact and the workbench is a per-session
  *  posture. */
-const LS_SIZE_KEY = "cam.windowSize.expanded";
+const LS_SIZE_KEY = "cam.windowSize.expanded.v2";
 
 /** How long the stage fade-out gets before the native resize fires — matches
  *  the `#root` opacity transition in styles.css so the reflow happens behind

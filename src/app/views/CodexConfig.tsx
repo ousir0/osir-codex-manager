@@ -11,6 +11,7 @@ import type {
 import { NavBar, Segmented, Toggle } from "../components";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
+import { useWindowModeOptional } from "../windowMode";
 import { OpenCodexPrototype } from "./OpenCodexPrototype";
 
 type ConfigTab = "basic" | "multi" | "mcp" | "advanced";
@@ -247,6 +248,7 @@ function serverInput(draft: McpDraft): CodexMcpServerInput {
 
 export function CodexConfig({ onBack }: { onBack: () => void }) {
   const { t, lang } = useI18n();
+  const windowMode = useWindowModeOptional();
   const copy = lang === "zh-CN" || lang === "zh-TW" ? ZH_COPY : EN_COPY;
   const [tab, setTab] = useState<ConfigTab>("basic");
   const [report, setReport] = useState<CodexConfigReport | null>(null);
@@ -501,6 +503,8 @@ export function CodexConfig({ onBack }: { onBack: () => void }) {
           value={tab}
           onChange={(next) => setTab(next as ConfigTab)}
           ariaLabel={t("nav.config")}
+          className={windowMode?.mode === "expanded" ? "config-module-nav" : undefined}
+          orientation={windowMode?.mode === "expanded" ? "vertical" : "horizontal"}
         />
 
         {report && tab === "basic" ? (
