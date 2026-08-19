@@ -738,7 +738,7 @@ export function Segmented({
       void pill.offsetWidth;
       pill.style.transition = prev;
     }
-  }, []);
+  }, [orientation]);
 
   // Slide on selection change; snap the very first time.
   useLayoutEffect(() => {
