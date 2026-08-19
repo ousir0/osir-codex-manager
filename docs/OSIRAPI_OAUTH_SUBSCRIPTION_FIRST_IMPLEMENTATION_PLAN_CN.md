@@ -139,7 +139,7 @@ Manager 不接收也不提交内部 Group ID。OSIRAPI 根据用户选择的有�
 
 实际落地采用“网页登录态 + PKCE 一次性授权码”，避免新增完整 OAuth Provider 和长期 Token 系统：
 
-- 浏览器授权页：GET /codex-manager/connect
+- 浏览器授权页：https://osirclaw.com/codex-manager/connect
 - 已登录用户签发授权码：POST /api/v1/codex-install/desktop/authorize
 - Manager 兑换加密配置：POST /api/v1/codex-install/desktop/exchange
 
