@@ -235,7 +235,9 @@ describe("InstallOtherVersionSheet", () => {
     const current = await screen.findByRole("button", { name: /26\.727\.51351/ });
     expect(current).toBeDisabled();
     expect(current).toHaveTextContent("Current");
-    expect(screen.getByRole("button", { name: /26\.806\.12001/ })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /26\.806\.12001/ })).toHaveFocus(),
+    );
   });
 
   it("requires an explicit architecture before loading the live catalog", async () => {
