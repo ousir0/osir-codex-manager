@@ -2472,13 +2472,19 @@ pub async fn opencodex_connect_osir(
 
 #[tauri::command]
 pub async fn opencodex_connect_osir_oauth(
+    app: tauri::AppHandle,
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    tauri::async_runtime::spawn_blocking(crate::app::opencodex::connect_osir_oauth)
+    let result = tauri::async_runtime::spawn_blocking(crate::app::opencodex::connect_osir_oauth)
         .await
-        .map_err(|error| AppError::Internal(format!("join: {error}")))?
-        .map_err(Into::into)
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    result.map_err(Into::into)
 }
 
 #[tauri::command]

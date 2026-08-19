@@ -6,7 +6,7 @@ import { Sheet } from "../Sheet";
 import { Icon } from "../icons";
 
 type SetupState = "ready" | "connecting";
-type ConnectionMode = "osir" | "code" | "manual" | null;
+type ConnectionMode = "osir" | "manual" | null;
 
 const ROUTES = [
   { id: "osir-gpt", label: "GPT", provider: "OSIR API", model: "gpt-5.6-sol", count: 7, accent: "blue", initials: "G" },
@@ -20,7 +20,7 @@ export function OpenCodexPrototype() {
   const [setupState, setSetupState] = useState<SetupState>("ready");
   const [notice, setNotice] = useState("正在检测 OpenCodex 和本机配置…");
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(null);
-  const [connectionCode, setConnectionCode] = useState("");
+  const [oauthSuccess, setOauthSuccess] = useState<OpenCodexStatus | null>(null);
   const [removeModel, setRemoveModel] = useState<{ routeId: string; model: string } | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState("osir-gpt");
@@ -124,7 +124,7 @@ export function OpenCodexPrototype() {
     }
     setSetupState("connecting");
     setConnectionMode("osir");
-    setNotice("连接方式已打开；在弹窗中完成授权或粘贴一次性配置码。");
+    setNotice("连接方式已打开；请在浏览器中完成 OSIRAPI 登录授权。");
     window.setTimeout(() => setSetupState("ready"), 500);
   };
 
@@ -232,10 +232,9 @@ export function OpenCodexPrototype() {
           <div className="multi-model-panel-head"><div><span className="multi-model-label">从这里开始</span><h2>一次连接，自动准备好</h2></div><span className="multi-model-panel-index">01</span></div>
           <div className="multi-model-methods" role="list" aria-label="模型连接方式">
             <button className="multi-model-connection-card featured" type="button" disabled={Boolean(busy)} onClick={() => { setConnectionMode("osir"); connect(); }}><span className="multi-model-connection-icon"><Icon name="globe" /></span><span className="multi-model-connection-copy"><strong>{installed ? "连接 OSIRAPI" : "安装并连接 OSIRAPI"}</strong><span>授权后自动导入多供应商模型</span></span><span className="multi-model-card-arrow">↗</span></button>
-            <button className="multi-model-connection-card" type="button" disabled={Boolean(busy)} onClick={() => setConnectionMode("code")}><span className="multi-model-connection-icon quiet"><Icon name="copy" /></span><span className="multi-model-connection-copy"><strong>粘贴配置码</strong><span>适合团队分发和其他供应商渠道</span></span><span className="multi-model-card-arrow">→</span></button>
             <button className="multi-model-connection-card" type="button" disabled={Boolean(busy)} onClick={() => { setCustomEnabled(true); setConnectionMode("manual"); }}><span className="multi-model-connection-icon quiet"><Icon name="plus" /></span><span className="multi-model-connection-copy"><strong>手动添加供应商</strong><span>自定义 Base URL、模型和 API Key</span></span><span className="multi-model-card-arrow">→</span></button>
           </div>
-          <div className="multi-model-safe-note"><Icon name="shield" /><span>连接码短时有效，不包含长期 API Key；已有 Codex 配置会先自动备份。</span></div>
+          <div className="multi-model-safe-note"><Icon name="shield" /><span>浏览器授权使用短时 PKCE 校验；长期模型 Key 不会出现在网页、链接或日志中。</span></div>
         </section>
 
         <section className="multi-model-panel multi-model-routes-panel">
@@ -253,11 +252,18 @@ export function OpenCodexPrototype() {
 
       <Sheet open={connectionMode !== null} onDismiss={() => setConnectionMode(null)} centeredInExpanded labelledBy="opencodex-connect-title" initialFocus="first">
         <div className="multi-model-modal">
-          <div className="multi-model-modal-head"><div><span className="multi-model-label">连接方式</span><h2 id="opencodex-connect-title">{connectionMode === "manual" ? "手动添加供应商" : connectionMode === "code" ? "粘贴配置码" : "连接 OSIRAPI"}</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setConnectionMode(null)}><Icon name="close" /></button></div>
-          {connectionMode === "osir" ? <div className="multi-model-modal-body"><p>点击下方按钮后，Manager 会打开 OSIRAPI 浏览器授权页。登录并确认后会自动创建或复用订阅模型 Key，并同步到 OpenCodex。</p><button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => void run("oauth", async () => { const next = await managerApi.openCodexConnectOsirOAuth(); setConnectionMode(null); return next; }, "OSIRAPI 已授权，模型目录已同步；请重启 Codex。")}><Icon name={busy === "oauth" ? "loader" : "globe"} />{busy === "oauth" ? "正在等待浏览器授权…" : "浏览器登录并连接"}</button><div className="multi-model-method-hint">如果浏览器授权不可用，仍可使用一次性配置码作为备用方式。</div><label className="multi-model-modal-field"><span>一次性连接码</span><input className="input mono" value={connectionCode} onChange={(event) => setConnectionCode(event.target.value)} placeholder="osir://codex-manager/connect…" /></label></div> : null}
-          {connectionMode === "code" ? <div className="multi-model-modal-body"><p>把团队或其他供应商提供的一次性连接码粘贴到这里，Manager 会先备份现有配置，再导入并同步模型。</p><label className="multi-model-modal-field"><span>配置码</span><input className="input mono" value={connectionCode} onChange={(event) => setConnectionCode(event.target.value)} placeholder="osir://codex-manager/connect…" /></label></div> : null}
+          <div className="multi-model-modal-head"><div><span className="multi-model-label">连接方式</span><h2 id="opencodex-connect-title">{connectionMode === "manual" ? "手动添加供应商" : "连接 OSIRAPI"}</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setConnectionMode(null)}><Icon name="close" /></button></div>
+          {connectionMode === "osir" ? <div className="multi-model-modal-body"><p>点击后会打开 OSIRAPI 登录授权页。授权成功后浏览器窗口会自动关闭，Manager 将回到前台并自动创建或复用订阅 Key、同步模型目录。</p><button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => void run("oauth", async () => { const next = await managerApi.openCodexConnectOsirOAuth(); setConnectionMode(null); setOauthSuccess(next); return next; }, "OSIRAPI 已授权，模型目录已同步；请重启 Codex。")}><Icon name={busy === "oauth" ? "loader" : "globe"} />{busy === "oauth" ? "正在等待浏览器授权…" : "浏览器登录并连接"}</button><div className="multi-model-safe-note"><Icon name="shield" /><span>无需粘贴配置码，长期 API Key 不会显示在网页、链接或日志中。</span></div></div> : null}
           {connectionMode === "manual" ? <div className="multi-model-modal-body multi-model-manual-form"><p>填写一条自定义供应商路由。保存后会同步到 OpenCodex 和 Codex 模型目录。</p><label><span>路由 ID</span><input className="input mono" value={customRoute.id} onChange={(event) => setCustomRoute((current) => ({ ...current, id: event.target.value }))} /></label><label><span>显示名称</span><input className="input" value={customRoute.label} onChange={(event) => setCustomRoute((current) => ({ ...current, label: event.target.value }))} /></label><label><span>Base URL</span><input className="input mono" placeholder="https://provider.example/v1" value={customRoute.baseUrl} onChange={(event) => setCustomRoute((current) => ({ ...current, baseUrl: event.target.value }))} /></label><label><span>模型 ID</span><input className="input mono" placeholder="model-name" value={customRoute.model} onChange={(event) => setCustomRoute((current) => ({ ...current, model: event.target.value }))} /></label><label><span>API Key</span><input className="input mono" type="password" autoComplete="off" value={customRoute.apiKey} onChange={(event) => setCustomRoute((current) => ({ ...current, apiKey: event.target.value }))} /></label></div> : null}
-          <div className="multi-model-modal-actions"><button className="btn ghost" type="button" onClick={() => setConnectionMode(null)}>取消</button>{connectionMode === "manual" ? <button className="btn primary" type="button" disabled={!customReady || Boolean(busy)} onClick={() => void run("save", async () => { const saved = await managerApi.openCodexSave(routeInput()); await managerApi.openCodexSync(); setConnectionMode(null); return saved; }, "供应商已保存，模型目录已同步。")}>{busy === "save" ? "保存中…" : "保存并同步"}</button> : <button className="btn primary" type="button" disabled={!connectionCode.trim() || Boolean(busy)} onClick={() => void run("connect", () => managerApi.openCodexConnectOsir(connectionCode), "OSIRAPI 已连接，模型目录已同步。")} >{busy === "connect" ? "导入中…" : "校验并导入"}</button>}</div>
+          <div className="multi-model-modal-actions"><button className="btn ghost" type="button" onClick={() => setConnectionMode(null)}>{connectionMode === "manual" ? "取消" : "关闭"}</button>{connectionMode === "manual" ? <button className="btn primary" type="button" disabled={!customReady || Boolean(busy)} onClick={() => void run("save", async () => { const saved = await managerApi.openCodexSave(routeInput()); await managerApi.openCodexSync(); setConnectionMode(null); return saved; }, "供应商已保存，模型目录已同步。")}>{busy === "save" ? "保存中…" : "保存并同步"}</button> : null}</div>
+        </div>
+      </Sheet>
+
+      <Sheet open={oauthSuccess !== null} onDismiss={() => setOauthSuccess(null)} centeredInExpanded labelledBy="opencodex-oauth-success-title" initialFocus="first">
+        <div className="multi-model-modal">
+          <div className="multi-model-modal-head"><div><span className="multi-model-label">连接完成</span><h2 id="opencodex-oauth-success-title">OSIRAPI 已授权并同步</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setOauthSuccess(null)}><Icon name="close" /></button></div>
+          <div className="multi-model-modal-body"><div className="multi-model-runtime-main"><div className="multi-model-runtime-mark"><Icon name="check" /></div><div><strong>订阅凭据已验证，可以直接使用</strong><span className="multi-model-runtime-meta"><i className="ready" />OpenCodex {oauthSuccess?.serviceState === "ready" ? "已就绪" : "配置已保存"}</span></div></div><div className="multi-model-safe-note"><Icon name="shield" /><span>已创建或复用 Manager 专用订阅 Key；长期 Key 不会回显。</span></div><div className="multi-model-model-list"><div className="multi-model-model-row"><span>已连接路由</span><strong>{oauthSuccess?.routes.length || 0} 条</strong></div><div className="multi-model-model-row"><span>已同步模型</span><strong>{oauthSuccess?.modelCount || 0} 个</strong></div><div className="multi-model-model-row"><span>本机服务</span><strong>127.0.0.1:{oauthSuccess?.port || 10100}</strong></div></div><p className="multi-model-method-hint">请完全退出并重新打开 Codex，让原生模型选择器读取最新目录。</p></div>
+          <div className="multi-model-modal-actions"><button className="btn primary" type="button" onClick={() => setOauthSuccess(null)}>完成</button></div>
         </div>
       </Sheet>
 

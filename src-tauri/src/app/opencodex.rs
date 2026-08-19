@@ -1708,6 +1708,8 @@ mod tests {
             let mut response = String::new();
             stream.read_to_string(&mut response).unwrap();
             assert!(response.starts_with("HTTP/1.1 200 OK"));
+            assert!(response.contains("授权回调已收到"));
+            assert!(response.contains("安装并同步本地模型"));
         });
         let callback = wait_for_oauth_callback(listener, "expected-state").unwrap();
         client.join().unwrap();
