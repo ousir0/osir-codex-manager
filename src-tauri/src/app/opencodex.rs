@@ -7,10 +7,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -24,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use toml_edit::{value, DocumentMut, Item, Table};
+use url::Url;
 use uuid::Uuid;
 use zip::ZipArchive;
 
@@ -38,6 +41,8 @@ const DEFAULT_PROVIDER_ID: &str = "opencodex";
 const DEFAULT_VERSION: &str = "2.22.0";
 const COMPONENT_MANIFEST_URL: &str = "https://app.osirclaw.com/components/opencodex/index.json";
 const COMPONENT_MANIFEST_FALLBACK_URL: &str = "https://raw.githubusercontent.com/ousir0/osir-codex-manager/main/components/opencodex/index.json";
+const OSIRAPI_DESKTOP_CONNECT_URL: &str = "https://app.osirclaw.com/codex-manager/connect";
+const OSIRAPI_DESKTOP_EXCHANGE_URL: &str = "https://api.osirclaw.com/api/v1/codex-install/desktop/exchange";
 const MAX_ROUTE_COUNT: usize = 32;
 const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
@@ -156,6 +161,18 @@ struct CodexInstallPayload {
 #[derive(Debug, Deserialize)]
 struct RedeemResponse {
     encrypted_bundle: EncryptedBundle,
+}
+
+#[derive(Debug, Deserialize)]
+struct DesktopExchangeResponse {
+    encrypted_bundle: EncryptedBundle,
+}
+
+#[derive(Debug)]
+struct OAuthCallback {
+    code: String,
+    state: String,
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -372,6 +389,22 @@ fn managed_runtime_dir() -> Result<PathBuf, AppError> {
         .ok_or_else(|| AppError::Internal("无法定位 OpenCodex 组件目录".to_string()))
 }
 
+fn new_redemption_state() -> Result<RedemptionState, AppError> {
+    let private = RsaPrivateKey::new(&mut OsRng, 3072)
+        .map_err(|error| AppError::Internal(format!("生成连接加密密钥失败：{error}")))?;
+    Ok(RedemptionState {
+        private_key: private
+            .to_pkcs8_pem(LineEnding::LF)
+            .map_err(|error| AppError::Internal(format!("编码连接私钥失败：{error}")))?
+            .to_string(),
+        public_key: private
+            .to_public_key()
+            .to_public_key_pem(LineEnding::LF)
+            .map_err(|error| AppError::Internal(format!("编码连接公钥失败：{error}")))?,
+        idempotency_key: Uuid::new_v4().to_string(),
+    })
+}
+
 fn redemption_path(paths: &IntegrationPaths, ticket: &str) -> PathBuf {
     let digest = Sha256::digest(ticket.as_bytes());
     let hash = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
@@ -394,19 +427,7 @@ fn load_or_create_redemption(paths: &IntegrationPaths, ticket: &str) -> Result<(
             return Ok((existing, path));
         }
     }
-    let private = RsaPrivateKey::new(&mut OsRng, 3072)
-        .map_err(|error| AppError::Internal(format!("生成连接加密密钥失败：{error}")))?;
-    let state = RedemptionState {
-        private_key: private
-            .to_pkcs8_pem(LineEnding::LF)
-            .map_err(|error| AppError::Internal(format!("编码连接私钥失败：{error}")))?
-            .to_string(),
-        public_key: private
-            .to_public_key()
-            .to_public_key_pem(LineEnding::LF)
-            .map_err(|error| AppError::Internal(format!("编码连接公钥失败：{error}")))?,
-        idempotency_key: Uuid::new_v4().to_string(),
-    };
+    let state = new_redemption_state()?;
     write_json(
         &path,
         &serde_json::to_value(&state)
@@ -484,6 +505,70 @@ fn redeem_ticket(ticket: &str, state: &RedemptionState) -> Result<RedeemResponse
         .map_err(|error| AppError::Engine(format!("OSIRAPI 连接配置格式无效：{error}")))
 }
 
+fn exchange_osir_oauth(
+    authorization_code: &str,
+    state: &str,
+    redirect_uri: &str,
+    code_verifier: &str,
+    redemption: &RedemptionState,
+) -> Result<DesktopExchangeResponse, AppError> {
+    let payload = serde_json::to_vec(&json!({
+        "authorization_code": authorization_code,
+        "state": state,
+        "redirect_uri": redirect_uri,
+        "code_verifier": code_verifier,
+        "client_public_key": redemption.public_key,
+        "idempotency_key": redemption.idempotency_key,
+        "installer_version": format!("codex-manager-{}", env!("CARGO_PKG_VERSION")),
+        "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+    }))
+    .map_err(|error| AppError::Internal(format!("生成 OSIRAPI OAuth 请求失败：{error}")))?;
+    let mut child = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "/usr/bin/curl" })
+        .args([
+            "-sS",
+            "--fail-with-body",
+            "--proto",
+            "=https",
+            "--max-time",
+            "30",
+            "--header",
+            "Content-Type: application/json",
+            "--header",
+            "Cache-Control: no-store",
+            "--data-binary",
+            "@-",
+            OSIRAPI_DESKTOP_EXCHANGE_URL,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| AppError::Engine(format!("无法连接 OSIRAPI：{error}")))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| AppError::Internal("无法写入 OSIRAPI OAuth 请求".to_string()))?
+        .write_all(&payload)
+        .map_err(|error| AppError::Internal(format!("写入 OSIRAPI OAuth 请求失败：{error}")))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|error| AppError::Engine(format!("OSIRAPI OAuth 请求失败：{error}")))?;
+    let response = serde_json::from_slice::<JsonValue>(&output.stdout).ok();
+    if !output.status.success() {
+        let message = response
+            .as_ref()
+            .and_then(|body| body.get("message").or_else(|| body.get("error")))
+            .and_then(JsonValue::as_str)
+            .unwrap_or("OSIRAPI OAuth 兑换失败");
+        return Err(AppError::Engine(message.to_string()));
+    }
+    let data = response
+        .and_then(|body| body.get("data").cloned().or(Some(body)))
+        .ok_or_else(|| AppError::Engine("OSIRAPI OAuth 未返回配置".to_string()))?;
+    serde_json::from_value::<DesktopExchangeResponse>(data)
+        .map_err(|error| AppError::Engine(format!("OSIRAPI OAuth 配置格式无效：{error}")))
+}
+
 fn decrypt_bundle(state: &RedemptionState, encrypted: EncryptedBundle) -> Result<CodexInstallPayload, AppError> {
     let private = RsaPrivateKey::from_pkcs8_pem(&state.private_key)
         .map_err(|error| AppError::Internal(format!("读取连接私钥失败：{error}")))?;
@@ -522,6 +607,95 @@ fn timestamp_marker() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs().to_string())
         .unwrap_or_else(|_| "0".to_string())
+}
+
+fn random_urlsafe_value() -> String {
+    let mut bytes = [0u8; 32];
+    let mut rng = OsRng;
+    rsa::rand_core::RngCore::fill_bytes(&mut rng, &mut bytes);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn pkce_challenge(verifier: &str) -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
+}
+
+fn open_external_browser(url: &str) -> Result<(), AppError> {
+    let result = if cfg!(target_os = "macos") {
+        Command::new("open").arg(url).spawn()
+    } else if cfg!(target_os = "windows") {
+        Command::new("rundll32.exe")
+            .args(["url.dll,FileProtocolHandler", url])
+            .spawn()
+    } else {
+        Command::new("xdg-open").arg(url).spawn()
+    };
+    result
+        .map(|_| ())
+        .map_err(|error| AppError::Engine(format!("无法打开 OSIRAPI 浏览器授权页：{error}")))
+}
+
+fn callback_http_response(stream: &mut std::net::TcpStream, message: &str) {
+    let body = format!(
+        "<!doctype html><meta charset=\"utf-8\"><title>Codex Manager</title><p>{message}</p>"
+    );
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(), body
+    );
+    let _ = stream.write_all(response.as_bytes());
+}
+
+fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Result<OAuthCallback, AppError> {
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| AppError::Internal(format!("设置 OAuth 回调监听失败：{error}")))?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(600);
+    loop {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let mut buffer = [0u8; 8192];
+                let size = stream
+                    .read(&mut buffer)
+                    .map_err(|error| AppError::Engine(format!("读取 OAuth 回调失败：{error}")))?;
+                let request = String::from_utf8_lossy(&buffer[..size]);
+                let Some(target) = request
+                    .lines()
+                    .next()
+                    .and_then(|line| line.strip_prefix("GET "))
+                    .and_then(|line| line.split_whitespace().next())
+                else {
+                    callback_http_response(&mut stream, "授权回调格式无效，请返回管理器重试。");
+                    continue;
+                };
+                let Ok(url) = Url::parse(&format!("http://127.0.0.1{target}")) else {
+                    callback_http_response(&mut stream, "授权回调地址无效，请返回管理器重试。");
+                    continue;
+                };
+                if url.path() != "/oauth/callback" {
+                    callback_http_response(&mut stream, "授权回调路径无效，请返回管理器重试。");
+                    continue;
+                }
+                let params = url.query_pairs().into_owned().collect::<BTreeMap<_, _>>();
+                let state = params.get("state").cloned().unwrap_or_default();
+                if state != expected_state {
+                    callback_http_response(&mut stream, "授权状态不匹配，请返回管理器重试。");
+                    continue;
+                }
+                let error = params.get("error").cloned();
+                let code = params.get("code").cloned().unwrap_or_default();
+                callback_http_response(&mut stream, "授权已完成，请返回 Codex Manager。");
+                return Ok(OAuthCallback { code, state, error });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(AppError::Engine("OSIRAPI 浏览器授权超时，请重新连接".to_string()));
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) => return Err(AppError::Engine(format!("OAuth 回调监听失败：{error}"))),
+        }
+    }
 }
 
 pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
@@ -687,15 +861,7 @@ pub fn ensure_ready_for_codex() -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
-    let ticket = extract_osir_ticket(code)?;
-    if ocx_program().is_none() {
-        install()?;
-    }
-    let paths = integration_paths()?;
-    let (redemption, redemption_file) = load_or_create_redemption(&paths, &ticket)?;
-    let response = redeem_ticket(&ticket, &redemption)?;
-    let payload = decrypt_bundle(&redemption, response.encrypted_bundle)?;
+fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodexStatus, AppError> {
     if payload.providers.is_empty() || payload.providers.len() > MAX_ROUTE_COUNT {
         return Err(AppError::Engine("OSIRAPI 未返回可用多模型路由".to_string()));
     }
@@ -727,8 +893,64 @@ pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
         routes,
     })?;
     let synced = sync()?;
-    let _ = fs::remove_file(redemption_file);
     Ok(OpenCodexStatus { error: configured.error.or(synced.error), ..synced })
+}
+
+pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
+    let ticket = extract_osir_ticket(code)?;
+    if ocx_program().is_none() {
+        install()?;
+    }
+    let paths = integration_paths()?;
+    let (redemption, redemption_file) = load_or_create_redemption(&paths, &ticket)?;
+    let response = redeem_ticket(&ticket, &redemption)?;
+    let payload = decrypt_bundle(&redemption, response.encrypted_bundle)?;
+    let status = apply_codex_install_payload(payload)?;
+    let _ = fs::remove_file(redemption_file);
+    Ok(status)
+}
+
+pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))
+        .map_err(|error| AppError::Engine(format!("无法启动 OAuth 本机回调：{error}")))?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| AppError::Internal(format!("读取 OAuth 回调端口失败：{error}")))?
+        .port();
+    let redirect_uri = format!("http://127.0.0.1:{port}/oauth/callback");
+    let state = random_urlsafe_value();
+    let code_verifier = random_urlsafe_value();
+    let code_challenge = pkce_challenge(&code_verifier);
+    let mut authorization_url = Url::parse(OSIRAPI_DESKTOP_CONNECT_URL)
+        .map_err(|error| AppError::Internal(format!("OSIRAPI 授权地址无效：{error}")))?;
+    authorization_url.query_pairs_mut()
+        .append_pair("state", &state)
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("code_challenge", &code_challenge)
+        .append_pair("code_challenge_method", "S256");
+    open_external_browser(authorization_url.as_str())?;
+    let callback = wait_for_oauth_callback(listener, &state)?;
+    if let Some(error) = callback.error.filter(|value| !value.is_empty()) {
+        return Err(AppError::Engine(format!("OSIRAPI 授权未完成：{error}")));
+    }
+    if callback.code.is_empty() || callback.state != state {
+        return Err(AppError::Engine("OSIRAPI 授权回调无效，请重新连接".to_string()));
+    }
+    let redemption = new_redemption_state()?;
+    let response = exchange_osir_oauth(
+        &callback.code,
+        &callback.state,
+        &redirect_uri,
+        &code_verifier,
+        &redemption,
+    )?;
+    let payload = decrypt_bundle(&redemption, response.encrypted_bundle)?;
+    if ocx_program().is_none() {
+        install()?;
+    } else if status()?.service_state != "ready" {
+        start()?;
+    }
+    apply_codex_install_payload(payload)
 }
 
 pub fn install() -> Result<OpenCodexStatus, AppError> {
@@ -1300,8 +1522,8 @@ pub fn restore() -> Result<OpenCodexStatus, AppError> {
 mod tests {
     use super::{
         build_opencodex_config, decrypt_bundle, extract_osir_ticket, inferred_default_route,
-        inferred_managed_provider_ids,
-        validate_input, CodexInstallPayload,
+        inferred_managed_provider_ids, pkce_challenge, validate_input, wait_for_oauth_callback,
+        CodexInstallPayload,
         EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
@@ -1312,6 +1534,9 @@ mod tests {
     use rsa::sha2::Sha256 as RsaSha256;
     use rsa::{Oaep, RsaPrivateKey};
     use serde_json::{json, Map as JsonMap};
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
 
     fn input() -> OpenCodexConfigInput {
         OpenCodexConfigInput {
@@ -1441,5 +1666,39 @@ mod tests {
         }).unwrap();
         assert_eq!(result.providers[0].provider, "osirapi-openai");
         assert_eq!(result.providers[0].models, vec!["gpt-5.6-sol"]);
+    }
+
+    #[test]
+    fn generates_the_standard_pkce_s256_challenge() {
+        assert_eq!(
+            pkce_challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
+    }
+
+    #[test]
+    fn accepts_a_loopback_oauth_callback_with_matching_state() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let client = thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).unwrap();
+            let lf = String::from_utf8(vec![10]).unwrap();
+            let request = [
+                "GET /oauth/callback?code=auth-code&state=expected-state HTTP/1.1",
+                "Host: 127.0.0.1",
+                "",
+                "",
+            ]
+            .join(&lf);
+            stream.write_all(request.as_bytes()).unwrap();
+            let mut response = String::new();
+            stream.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200 OK"));
+        });
+        let callback = wait_for_oauth_callback(listener, "expected-state").unwrap();
+        client.join().unwrap();
+        assert_eq!(callback.code, "auth-code");
+        assert_eq!(callback.state, "expected-state");
+        assert!(callback.error.is_none());
     }
 }

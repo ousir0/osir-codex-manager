@@ -1596,6 +1596,12 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_connect_osir", { code });
   },
+  openCodexConnectOsirOAuth(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.reject(new Error("浏览器预览不支持 OSIRAPI 浏览器授权"));
+    }
+    return invoke<OpenCodexStatus>("opencodex_connect_osir_oauth");
+  },
   openCodexSave(input: OpenCodexConfigInput): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
       const routes = input.routes.map(({ apiKey: _apiKey, ...route }) => ({
