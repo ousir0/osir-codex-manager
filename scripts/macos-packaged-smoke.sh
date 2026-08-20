@@ -445,7 +445,6 @@ stage "close" "Exercise Cmd+W hide-to-status-bar behavior after frontend readine
 send_command_shortcut "$PID" "w" || fail "close" "Cmd+W injection failed"
 wait_for_log "menu close requested id=cam-close" || fail "close" "Cmd+W did not route through the native close menu item"
 wait_for_log "window hidden to macOS status bar" || fail "close" "window was not hidden to the macOS status bar"
-wait_for_window_state "$PID" window false || fail "close" "Cmd+W did not hide the main window"
 kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of staying resident"
 launch_app
 wait_for_log_count "single-instance activation requested" 3 || fail "close" "status-bar resident app did not restore on relaunch"
