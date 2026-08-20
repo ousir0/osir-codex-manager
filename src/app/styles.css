@@ -301,6 +301,133 @@ input {
   }
 }
 
+/* ── OpenCodex simplified workbench ─────────────────────────────────────── */
+/* Keep the connected-account card as the trust anchor. The rest of the page
+   should read as one model workspace instead of a stack of status modules. */
+.multi-model-prototype {
+  gap: 10px;
+}
+.multi-model-hero {
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 18px 20px;
+  border-radius: var(--r-lg);
+}
+.multi-model-hero h1 {
+  max-width: 720px;
+  font-size: clamp(25px, 3.2vw, 38px);
+}
+.multi-model-hero p {
+  max-width: 680px;
+  margin-bottom: 12px;
+}
+.multi-model-orbit,
+.multi-model-environment,
+.multi-model-steps,
+.multi-model-connect-panel {
+  display: none;
+}
+.multi-model-notice {
+  min-height: 30px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+}
+.multi-model-account-card {
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+}
+.multi-model-account-card.status-connected {
+  box-shadow: 0 12px 30px -24px color-mix(in oklch, var(--success) 65%, transparent);
+}
+.multi-model-workgrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.multi-model-routes-panel {
+  gap: 12px;
+  padding: 15px;
+}
+.multi-model-routes-panel > .multi-model-panel-head h2::before {
+  content: "模型目录 · ";
+  color: var(--text-faint);
+  font-size: .72em;
+  font-weight: 650;
+}
+.multi-model-route-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.multi-model-route {
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 9px;
+}
+.multi-model-route > svg {
+  display: none;
+}
+.multi-model-route-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+.multi-model-route-topline em,
+.multi-model-route-state {
+  display: none;
+}
+.multi-model-route-topline strong {
+  font-size: 11px;
+}
+.multi-model-route-model {
+  font-size: 9px;
+}
+.multi-model-route-count {
+  font-size: 11px;
+}
+.multi-model-model-manager {
+  margin-top: 2px;
+  padding-top: 12px;
+}
+.multi-model-model-manager-head {
+  align-items: center;
+}
+.multi-model-model-manager-head .multi-model-method-hint {
+  max-width: 260px;
+  text-align: right;
+}
+.multi-model-default-route {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-top: 0;
+  padding: 10px;
+}
+.multi-model-runtime {
+  padding: 10px 13px;
+  border-radius: var(--r-md);
+  box-shadow: none;
+}
+.multi-model-runtime-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 9px;
+}
+.multi-model-runtime-actions .btn {
+  min-height: 29px;
+}
+@media (max-width: 680px) {
+  .multi-model-route-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .multi-model-model-manager-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .multi-model-model-manager-head .multi-model-method-hint {
+    max-width: none;
+    text-align: left;
+  }
+}
+
 /* Expanded: a solid desktop window, edge to edge. The compact popover's
    transparent gutter would read as a phantom border here (clicks and edge
    drags land on "air"), so the workbench drops it entirely: no padding, the
