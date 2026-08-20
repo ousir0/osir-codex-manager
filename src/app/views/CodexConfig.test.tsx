@@ -145,6 +145,8 @@ describe("Codex configuration manager", () => {
       routes: [],
       backupAvailable: false,
       error: null,
+      connectionStatus: "notConnected",
+      account: null,
     });
     api.openCodexInstall.mockResolvedValue({
       enabled: false,
@@ -159,6 +161,8 @@ describe("Codex configuration manager", () => {
       routes: [],
       backupAvailable: true,
       error: null,
+      connectionStatus: "notConnected",
+      account: null,
     });
     api.openCodexHome.mockResolvedValue();
   });

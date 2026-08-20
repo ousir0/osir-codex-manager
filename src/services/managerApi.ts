@@ -758,6 +758,8 @@ enabled = false
     routes: [],
     backupAvailable: false,
     error: null,
+    connectionStatus: "notConnected",
+    account: null,
   },
 };
 
@@ -1549,6 +1551,8 @@ export const managerApi = {
         routes: [],
         backupAvailable: false,
         error: null,
+        connectionStatus: "notConnected",
+        account: null,
       });
     }
     return invoke<OpenCodexStatus>("opencodex_status");
@@ -1602,6 +1606,12 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_connect_osir_oauth");
   },
+  openCodexDisconnectOsir(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      return Promise.resolve({ ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), connectionStatus: "signedOut", account: null });
+    }
+    return invoke<OpenCodexStatus>("opencodex_disconnect_osir");
+  },
   openCodexSave(input: OpenCodexConfigInput): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
       const routes = input.routes.map(({ apiKey: _apiKey, ...route }) => ({
@@ -1623,6 +1633,8 @@ export const managerApi = {
         routes,
         backupAvailable: true,
         error: null,
+        connectionStatus: "notConnected",
+        account: null,
       };
       BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
       return Promise.resolve(status);

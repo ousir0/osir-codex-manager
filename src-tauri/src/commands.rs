@@ -2488,6 +2488,14 @@ pub async fn opencodex_connect_osir_oauth(
 }
 
 #[tauri::command]
+pub fn opencodex_disconnect_osir(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::opencodex::disconnect_osir().map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn opencodex_save(
     state: State<'_, ManagerState>,
     input: crate::app::opencodex::OpenCodexConfigInput,

@@ -63,6 +63,31 @@ pub struct OpenCodexStatus {
     pub routes: Vec<OpenCodexRoute>,
     pub backup_available: bool,
     pub error: Option<String>,
+    pub connection_status: String,
+    pub account: Option<OpenCodexAccountSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodexAccountSummary {
+    pub user_id: i64,
+    pub display_name: Option<String>,
+    pub email: Option<String>,
+    pub balance: f64,
+    pub subscriptions: Vec<OpenCodexSubscriptionSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodexSubscriptionSummary {
+    pub id: i64,
+    pub group_name: Option<String>,
+    pub status: String,
+    pub expires_at: Option<String>,
+    pub days_remaining: i32,
+    pub monthly_used_usd: f64,
+    pub monthly_limit_usd: f64,
+    pub monthly_remaining_usd: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -126,6 +151,9 @@ struct ManagedState {
     locked_route: Option<String>,
     #[serde(default)]
     route_health: BTreeMap<String, String>,
+    connection: Option<OpenCodexAccountSummary>,
+    #[serde(default)]
+    signed_out: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,6 +184,7 @@ struct CodexInstallProvider {
 #[derive(Debug, Deserialize)]
 struct CodexInstallPayload {
     providers: Vec<CodexInstallProvider>,
+    account: Option<OpenCodexAccountSummary>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -739,7 +768,7 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         state.codex_provider_id.clone()
     };
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &codex_provider_id, port, &format!("{route_id}/{model}"))?;
-    let next_state = ManagedState { enabled: true, port, codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health };
+    let next_state = ManagedState { enabled: true, port, codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health, connection: state.connection, signed_out: state.signed_out };
     write_json(&paths.state, &serde_json::to_value(next_state).map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?)?;
     status_at(&paths)
 }
@@ -835,6 +864,8 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
             managed_provider_ids,
             locked_route,
             route_health,
+            connection: state.connection,
+            signed_out: state.signed_out,
         })
         .map_err(|error| AppError::Internal(format!("保存模型移除状态失败：{error}")))?,
     )?;
@@ -879,6 +910,7 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
     if payload.providers.is_empty() || payload.providers.len() > MAX_ROUTE_COUNT {
         return Err(AppError::Engine("OSIRAPI 未返回可用多模型路由".to_string()));
     }
+    let account = payload.account.clone();
     let routes = payload
         .providers
         .into_iter()
@@ -906,6 +938,15 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
         default_route,
         routes,
     })?;
+    let paths = integration_paths()?;
+    let mut state = load_state(&paths.state);
+    state.connection = account;
+    state.signed_out = false;
+    write_json(
+        &paths.state,
+        &serde_json::to_value(state)
+            .map_err(|error| AppError::Internal(format!("保存 OSIRAPI 连接状态失败：{error}")))?,
+    )?;
     let synced = sync()?;
     Ok(OpenCodexStatus { error: configured.error.or(synced.error), ..synced })
 }
@@ -1230,6 +1271,11 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     } else {
         state.codex_provider_id
     };
+    let connection_status = if state.signed_out {
+        "signedOut"
+    } else if state.connection.is_some() {
+        if service_state == "ready" && !routes.is_empty() { "connected" } else { "error" }
+    } else if state.enabled { "error" } else { "notConnected" }.to_string();
     Ok(OpenCodexStatus {
         enabled: state.enabled,
         installed,
@@ -1244,6 +1290,8 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         backup_available: atomic_file::backup_path(&paths.opencodex_config).is_file()
             || atomic_file::backup_path(&paths.codex_config).is_file(),
         error,
+        connection_status,
+        account: state.connection,
     })
 }
 
@@ -1477,6 +1525,8 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
         locked_route: None,
         route_health: BTreeMap::new(),
+        connection: prior.connection.clone(),
+        signed_out: prior.signed_out,
     };
     let state_json = serde_json::to_value(state)
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
@@ -1496,6 +1546,8 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
         locked_route: None,
         route_health: BTreeMap::new(),
+        connection: prior.connection,
+        signed_out: prior.signed_out,
     };
     write_json(
         &paths.state,
@@ -1529,6 +1581,20 @@ pub fn restore() -> Result<OpenCodexStatus, AppError> {
     }
     let state = JsonValue::Object(JsonMap::new());
     write_json(&paths.state, &state)?;
+    status_at(&paths)
+}
+
+pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
+    let paths = integration_paths()?;
+    let mut state = load_state(&paths.state);
+    state.connection = None;
+    state.signed_out = true;
+    state.enabled = false;
+    write_json(
+        &paths.state,
+        &serde_json::to_value(state)
+            .map_err(|error| AppError::Internal(format!("保存 OSIRAPI 退出状态失败：{error}")))?,
+    )?;
     status_at(&paths)
 }
 

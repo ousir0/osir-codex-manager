@@ -748,6 +748,27 @@ export interface OpenCodexStatus {
   routes: OpenCodexRoute[];
   backupAvailable: boolean;
   error: string | null;
+  connectionStatus: "notConnected" | "connected" | "error" | "signedOut";
+  account: OpenCodexAccountSummary | null;
+}
+
+export interface OpenCodexAccountSummary {
+  userId: number;
+  displayName?: string | null;
+  email?: string | null;
+  balance: number;
+  subscriptions: OpenCodexSubscriptionSummary[];
+}
+
+export interface OpenCodexSubscriptionSummary {
+  id: number;
+  groupName?: string | null;
+  status: string;
+  expiresAt?: string | null;
+  daysRemaining: number;
+  monthlyUsedUsd: number;
+  monthlyLimitUsd: number;
+  monthlyRemainingUsd: number;
 }
 
 export interface OpenCodexRouteInput {

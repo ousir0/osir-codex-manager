@@ -795,6 +795,7 @@ pub fn run() {
             commands::opencodex_check_route,
             commands::opencodex_connect_osir,
             commands::opencodex_connect_osir_oauth,
+            commands::opencodex_disconnect_osir,
             commands::opencodex_save,
             commands::opencodex_sync,
             commands::opencodex_restore,
