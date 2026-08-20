@@ -70,7 +70,9 @@ pub struct OpenCodexStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenCodexAccountSummary {
+    #[serde(alias = "user_id")]
     pub user_id: i64,
+    #[serde(alias = "display_name")]
     pub display_name: Option<String>,
     pub email: Option<String>,
     pub balance: f64,
@@ -81,12 +83,18 @@ pub struct OpenCodexAccountSummary {
 #[serde(rename_all = "camelCase")]
 pub struct OpenCodexSubscriptionSummary {
     pub id: i64,
+    #[serde(alias = "group_name")]
     pub group_name: Option<String>,
     pub status: String,
+    #[serde(alias = "expires_at")]
     pub expires_at: Option<String>,
+    #[serde(alias = "days_remaining")]
     pub days_remaining: i32,
+    #[serde(alias = "monthly_used_usd")]
     pub monthly_used_usd: f64,
+    #[serde(alias = "monthly_limit_usd")]
     pub monthly_limit_usd: f64,
+    #[serde(alias = "monthly_remaining_usd")]
     pub monthly_remaining_usd: f64,
 }
 
@@ -976,6 +984,7 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
     let state = random_urlsafe_value();
     let code_verifier = random_urlsafe_value();
     let code_challenge = pkce_challenge(&code_verifier);
+    log::info!("OSIRAPI desktop OAuth started callback_port={port}");
     let mut authorization_url = Url::parse(OSIRAPI_DESKTOP_CONNECT_URL)
         .map_err(|error| AppError::Internal(format!("OSIRAPI 授权地址无效：{error}")))?;
     authorization_url.query_pairs_mut()
@@ -985,6 +994,7 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
         .append_pair("code_challenge_method", "S256");
     open_external_browser(authorization_url.as_str())?;
     let callback = wait_for_oauth_callback(listener, &state)?;
+    log::info!("OSIRAPI desktop OAuth callback received");
     if let Some(error) = callback.error.filter(|value| !value.is_empty()) {
         return Err(AppError::Engine(format!("OSIRAPI 授权未完成：{error}")));
     }
@@ -1000,12 +1010,30 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
         &redemption,
     )?;
     let payload = decrypt_bundle(&redemption, response.encrypted_bundle)?;
+    if payload.account.is_none() {
+        return Err(AppError::Engine(
+            "OSIRAPI 授权成功，但服务端未返回账户摘要；已停止写入本地配置，请重新连接"
+                .to_string(),
+        ));
+    }
+    log::info!(
+        "OSIRAPI desktop OAuth exchange decoded providers={} account_present=true",
+        payload.providers.len()
+    );
     if ocx_program().is_none() {
         install()?;
     } else if status()?.service_state != "ready" {
         start()?;
     }
-    apply_codex_install_payload(payload)
+    let status = apply_codex_install_payload(payload)?;
+    log::info!(
+        "OSIRAPI desktop OAuth applied connection_status={} account_present={} routes={} models={}",
+        status.connection_status,
+        status.account.is_some(),
+        status.routes.len(),
+        status.model_count
+    );
+    Ok(status)
 }
 
 pub fn install() -> Result<OpenCodexStatus, AppError> {
@@ -1729,7 +1757,23 @@ mod tests {
                 "base_url": "https://api.osirclaw.com/v1",
                 "models": ["gpt-5.6-sol"],
                 "recommended_model": "gpt-5.6-sol"
-            }]
+            }],
+            "account": {
+                "user_id": 41,
+                "display_name": "订阅用户",
+                "email": "user@example.com",
+                "balance": 12.5,
+                "subscriptions": [{
+                    "id": 91,
+                    "group_name": "多模型订阅",
+                    "status": "active",
+                    "expires_at": "2026-09-20T00:00:00Z",
+                    "days_remaining": 31,
+                    "monthly_used_usd": 8.5,
+                    "monthly_limit_usd": 100.0,
+                    "monthly_remaining_usd": 91.5
+                }]
+            }
         })).unwrap();
         let aes_key = [7_u8; 32];
         let iv = [9_u8; 12];
@@ -1746,6 +1790,11 @@ mod tests {
         }).unwrap();
         assert_eq!(result.providers[0].provider, "osirapi-openai");
         assert_eq!(result.providers[0].models, vec!["gpt-5.6-sol"]);
+        let account = result.account.expect("account summary");
+        assert_eq!(account.user_id, 41);
+        assert_eq!(account.display_name.as_deref(), Some("订阅用户"));
+        assert_eq!(account.subscriptions[0].days_remaining, 31);
+        assert_eq!(account.subscriptions[0].monthly_remaining_usd, 91.5);
     }
 
     #[test]

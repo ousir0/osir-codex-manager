@@ -16,11 +16,12 @@ const ROUTES = [
 
 const STEPS = ["检测环境", "连接供应商", "同步模型", "完成"];
 
-export function OpenCodexPrototype() {
+export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (status: OpenCodexStatus) => void } = {}) {
   const [setupState, setSetupState] = useState<SetupState>("ready");
   const [notice, setNotice] = useState("正在检测 OpenCodex 和本机配置…");
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(null);
   const [oauthSuccess, setOauthSuccess] = useState<OpenCodexStatus | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
   const [removeModel, setRemoveModel] = useState<{ routeId: string; model: string } | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const [selectedRoute, setSelectedRoute] = useState("osir-gpt");
@@ -57,6 +58,10 @@ export function OpenCodexPrototype() {
     if (!status?.routes.length || status.routes.some((route) => route.id === selectedRoute)) return;
     setSelectedRoute(status.routes.find((route) => route.locked)?.id || status.routes[0].id);
   }, [selectedRoute, status]);
+
+  useEffect(() => {
+    if (status) onStatusChange?.(status);
+  }, [onStatusChange, status]);
 
   const run = async (kind: string, action: () => Promise<OpenCodexStatus>, success: string) => {
     setBusy(kind);
@@ -107,6 +112,7 @@ export function OpenCodexPrototype() {
   };
 
   const connect = () => {
+    setOauthError(null);
     if (!status?.installed) {
       void run("install", async () => {
         const next = await managerApi.openCodexInstall();
@@ -126,6 +132,27 @@ export function OpenCodexPrototype() {
     setConnectionMode("osir");
     setNotice("连接方式已打开；请在浏览器中完成 OSIRAPI 登录授权。");
     window.setTimeout(() => setSetupState("ready"), 500);
+  };
+
+  const connectOsirOAuth = async () => {
+    setBusy("oauth");
+    setOauthError(null);
+    try {
+      const next = await managerApi.openCodexConnectOsirOAuth();
+      if (next.connectionStatus !== "connected" || !next.account) {
+        throw new Error(
+          "OSIRAPI 授权已完成，但账户信息没有返回到本地。请重新连接；如果仍失败，请检查 OSIRAPI 桌面兑换接口。",
+        );
+      }
+      setStatus(next);
+      setNotice("OSIRAPI 已授权，账户与模型状态已同步。");
+      setConnectionMode(null);
+      setOauthSuccess(next);
+    } catch (cause) {
+      setOauthError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const displayRoutes = status?.routes.length
@@ -265,16 +292,16 @@ export function OpenCodexPrototype() {
       {advanced ? <section className="multi-model-advanced"><div><span className="multi-model-label">高级设置</span><strong>只在需要时打开</strong></div><label><span>本机端口</span><input className="input mono" value={String(status?.port || 10100)} readOnly /></label><label><span>模型目录</span><input className="input mono" value={status?.catalogPath || "~/.codex/opencodex-catalog.json"} readOnly /></label><button className="btn ghost" type="button" disabled={!status?.backupAvailable || Boolean(busy)} onClick={() => void run("restore", () => managerApi.openCodexRestore(), "已恢复上次备份；请重新检查 Codex 配置。")}><Icon name="refresh" />恢复备份</button><div className="multi-model-key-editor"><div><span className="multi-model-label">OSIR 手动配置</span><strong>填写分组 Key 后保存并同步</strong></div>{ROUTES.map((route) => <label key={route.id}><span>{route.label} API Key</span><input className="input mono" type="password" autoComplete="off" placeholder="仅保存到本机 OpenCodex 配置" value={routeKeys[route.id] || ""} onChange={(event) => setRouteKeys((current) => ({ ...current, [route.id]: event.target.value }))} /></label>)}<button className="btn ghost multi-model-add-route" type="button" onClick={() => setCustomEnabled((value) => !value)}><Icon name="plus" />{customEnabled ? "移除自定义路由" : "添加自定义路由"}</button>{customEnabled ? <div className="multi-model-custom-route"><label><span>路由 ID</span><input className="input mono" value={customRoute.id} onChange={(event) => setCustomRoute((current) => ({ ...current, id: event.target.value }))} /></label><label><span>显示名称</span><input className="input" value={customRoute.label} onChange={(event) => setCustomRoute((current) => ({ ...current, label: event.target.value }))} /></label><label><span>Base URL</span><input className="input mono" placeholder="https://provider.example/v1" value={customRoute.baseUrl} onChange={(event) => setCustomRoute((current) => ({ ...current, baseUrl: event.target.value }))} /></label><label><span>模型 ID</span><input className="input mono" placeholder="model-name" value={customRoute.model} onChange={(event) => setCustomRoute((current) => ({ ...current, model: event.target.value }))} /></label><label><span>API Key</span><input className="input mono" type="password" autoComplete="off" value={customRoute.apiKey} onChange={(event) => setCustomRoute((current) => ({ ...current, apiKey: event.target.value }))} /></label></div> : null}<button className="btn primary" type="button" disabled={!installed || !canSave || Boolean(busy)} onClick={() => void run("save", async () => { const saved = await managerApi.openCodexSave(routeInput()); await managerApi.openCodexSync(); return saved; }, "模型路由已保存并同步；请重启 Codex。")}>{busy === "save" ? "正在保存…" : "保存并同步模型"}</button></div></section> : null}
       {advanced ? <section className="multi-model-advanced"><div><span className="multi-model-label">高级设置</span><strong>只在需要时打开</strong></div><label><span>本机端口</span><input className="input mono" value={String(status?.port || 10100)} readOnly /></label><label><span>模型目录</span><input className="input mono" value={status?.catalogPath || "~/.codex/opencodex-catalog.json"} readOnly /></label><button className="btn ghost" type="button" disabled={!status?.backupAvailable || Boolean(busy)} onClick={() => void run("restore", () => managerApi.openCodexRestore(), "已恢复上次备份；请重新检查 Codex 配置。")}><Icon name="refresh" />恢复备份</button><div className="multi-model-key-editor"><div><span className="multi-model-label">OSIR 手动配置</span><strong>填写分组 Key 后保存并同步</strong></div>{ROUTES.map((route) => <label key={route.id}><span>{route.label} API Key</span><input className="input mono" type="password" autoComplete="off" placeholder="仅保存到本机 OpenCodex 配置" value={routeKeys[route.id] || ""} onChange={(event) => setRouteKeys((current) => ({ ...current, [route.id]: event.target.value }))} /></label>)}<button className="btn ghost multi-model-add-route" type="button" onClick={() => setCustomEnabled((value) => !value)}><Icon name="plus" />{customEnabled ? "移除自定义路由" : "添加自定义路由"}</button>{customEnabled ? <div className="multi-model-custom-route"><label><span>路由 ID</span><input className="input mono" value={customRoute.id} onChange={(event) => setCustomRoute((current) => ({ ...current, id: event.target.value }))} /></label><label><span>显示名称</span><input className="input" value={customRoute.label} onChange={(event) => setCustomRoute((current) => ({ ...current, label: event.target.value }))} /></label><label><span>Base URL</span><input className="input mono" placeholder="https://provider.example/v1" value={customRoute.baseUrl} onChange={(event) => setCustomRoute((current) => ({ ...current, baseUrl: event.target.value }))} /></label><label><span>模型 ID</span><input className="input mono" placeholder="model-name" value={customRoute.model} onChange={(event) => setCustomRoute((current) => ({ ...current, model: event.target.value }))} /></label><label><span>API Key</span><input className="input mono" type="password" autoComplete="off" value={customRoute.apiKey} onChange={(event) => setCustomRoute((current) => ({ ...current, apiKey: event.target.value }))} /></label></div> : null}<button className="btn primary" type="button" disabled={!installed || !canSave || Boolean(busy)} onClick={() => void run("save", async () => { const saved = await managerApi.openCodexSave(routeInput()); await managerApi.openCodexSync(); return saved; }, "模型路由已保存并同步；请重启 Codex。")}>{busy === "save" ? "正在保存…" : "保存并同步模型"}</button></div></section> : null}
 
-      <Sheet open={connectionMode !== null} onDismiss={() => setConnectionMode(null)} centeredInExpanded labelledBy="opencodex-connect-title" initialFocus="first">
+      <Sheet open={connectionMode !== null} onDismiss={() => setConnectionMode(null)} centeredAlways labelledBy="opencodex-connect-title" initialFocus="first">
         <div className="multi-model-modal">
           <div className="multi-model-modal-head"><div><span className="multi-model-label">连接方式</span><h2 id="opencodex-connect-title">{connectionMode === "manual" ? "手动添加供应商" : "连接 OSIRAPI"}</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setConnectionMode(null)}><Icon name="close" /></button></div>
-          {connectionMode === "osir" ? <div className="multi-model-modal-body"><p>点击后会打开 OSIRAPI 登录授权页。授权成功后浏览器窗口会自动关闭，Manager 将回到前台并自动创建或复用订阅 Key、同步模型目录。</p><button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => void run("oauth", async () => { const next = await managerApi.openCodexConnectOsirOAuth(); setConnectionMode(null); setOauthSuccess(next); return next; }, "OSIRAPI 已授权，模型目录已同步；请重启 Codex。")}><Icon name={busy === "oauth" ? "loader" : "globe"} />{busy === "oauth" ? "正在等待浏览器授权…" : "浏览器登录并连接"}</button><div className="multi-model-safe-note"><Icon name="shield" /><span>无需粘贴配置码，长期 API Key 不会显示在网页、链接或日志中。</span></div></div> : null}
+          {connectionMode === "osir" ? <div className="multi-model-modal-body"><p>点击后会打开 OSIRAPI 登录授权页。授权成功后浏览器窗口会自动关闭，Manager 将回到前台并自动校验账户、订阅、路由和模型目录。</p>{oauthError ? <div className="banner err" role="alert"><Icon name="alert" /><span>{oauthError}</span></div> : null}<button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => void connectOsirOAuth()}><Icon name={busy === "oauth" ? "loader" : "globe"} />{busy === "oauth" ? "正在等待浏览器授权…" : "浏览器登录并连接"}</button><div className="multi-model-safe-note"><Icon name="shield" /><span>无需粘贴配置码，长期 API Key 不会显示在网页、链接或日志中。</span></div></div> : null}
           {connectionMode === "manual" ? <div className="multi-model-modal-body multi-model-manual-form"><p>填写一条自定义供应商路由。保存后会同步到 OpenCodex 和 Codex 模型目录。</p><label><span>路由 ID</span><input className="input mono" value={customRoute.id} onChange={(event) => setCustomRoute((current) => ({ ...current, id: event.target.value }))} /></label><label><span>显示名称</span><input className="input" value={customRoute.label} onChange={(event) => setCustomRoute((current) => ({ ...current, label: event.target.value }))} /></label><label><span>Base URL</span><input className="input mono" placeholder="https://provider.example/v1" value={customRoute.baseUrl} onChange={(event) => setCustomRoute((current) => ({ ...current, baseUrl: event.target.value }))} /></label><label><span>模型 ID</span><input className="input mono" placeholder="model-name" value={customRoute.model} onChange={(event) => setCustomRoute((current) => ({ ...current, model: event.target.value }))} /></label><label><span>API Key</span><input className="input mono" type="password" autoComplete="off" value={customRoute.apiKey} onChange={(event) => setCustomRoute((current) => ({ ...current, apiKey: event.target.value }))} /></label></div> : null}
           <div className="multi-model-modal-actions"><button className="btn ghost" type="button" onClick={() => setConnectionMode(null)}>{connectionMode === "manual" ? "取消" : "关闭"}</button>{connectionMode === "manual" ? <button className="btn primary" type="button" disabled={!customReady || Boolean(busy)} onClick={() => void run("save", async () => { const saved = await managerApi.openCodexSave(routeInput()); await managerApi.openCodexSync(); setConnectionMode(null); return saved; }, "供应商已保存，模型目录已同步。")}>{busy === "save" ? "保存中…" : "保存并同步"}</button> : null}</div>
         </div>
       </Sheet>
 
-      <Sheet open={oauthSuccess !== null} onDismiss={() => setOauthSuccess(null)} centeredInExpanded labelledBy="opencodex-oauth-success-title" initialFocus="first">
+      <Sheet open={oauthSuccess !== null} onDismiss={() => setOauthSuccess(null)} centeredAlways labelledBy="opencodex-oauth-success-title" initialFocus="first">
         <div className="multi-model-modal">
           <div className="multi-model-modal-head"><div><span className="multi-model-label">连接完成</span><h2 id="opencodex-oauth-success-title">OSIRAPI 已授权并同步</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setOauthSuccess(null)}><Icon name="close" /></button></div>
           <div className="multi-model-modal-body"><div className="multi-model-runtime-main"><div className="multi-model-runtime-mark"><Icon name="check" /></div><div><strong>订阅凭据已验证，可以直接使用</strong><span className="multi-model-runtime-meta"><i className="ready" />OpenCodex {oauthSuccess?.serviceState === "ready" ? "已就绪" : "配置已保存"}</span></div></div><div className="multi-model-safe-note"><Icon name="shield" /><span>已创建或复用 Manager 专用订阅 Key；长期 Key 不会回显。</span></div><div className="multi-model-model-list"><div className="multi-model-model-row"><span>已连接路由</span><strong>{oauthSuccess?.routes.length || 0} 条</strong></div><div className="multi-model-model-row"><span>已同步模型</span><strong>{oauthSuccess?.modelCount || 0} 个</strong></div><div className="multi-model-model-row"><span>本机服务</span><strong>127.0.0.1:{oauthSuccess?.port || 10100}</strong></div></div><p className="multi-model-method-hint">请完全退出并重新打开 Codex，让原生模型选择器读取最新目录。</p></div>

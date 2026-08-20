@@ -115,6 +115,14 @@ describe("Codex configuration workbench", () => {
     expect(screen.getByText("尚未安装 OpenCodex")).toBeInTheDocument();
   });
 
+  it("opens the multi-model workspace when the managed OpenCodex state is enabled", async () => {
+    api.openCodexStatus.mockResolvedValue({ enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [{ id: "osirapi-openai", label: "GPT", adapter: "openai-responses", baseUrl: "https://api.osirclaw.com/v1", defaultModel: "gpt-5.6-sol", models: ["gpt-5.6-sol"], enabled: true, apiKeyConfigured: true, availability: "configured", locked: false }], backupAvailable: true, error: null, connectionStatus: "error", account: null });
+    renderConfig();
+
+    expect(await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenCodex 多模型.*当前使用/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("edits Codex behavior from a focused dialog", async () => {
     const user = userEvent.setup();
     renderConfig();

@@ -8,6 +8,7 @@ import type {
   CodexMcpServerInput,
   CodexMcpTransport,
   CodexProviderProfile,
+  OpenCodexStatus,
 } from "../../shared/types";
 import { NavBar, Segmented, Toggle } from "../components";
 import { Icon, type IconName } from "../icons";
@@ -39,6 +40,7 @@ const EMPTY_BASIC: CodexBasicConfigInput = {
 const ZH_COPY = {
   loading: "正在读取 Codex 配置…", connections: "连接与模型", behavior: "Codex 行为", tools: "MCP 与工具", advanced: "高级与恢复",
   currentMode: "当前生效模式", singleMode: "单供应商直连", multiMode: "OpenCodex 多模型", notConfigured: "尚未完成配置",
+  defaultConnection: "Codex 默认",
   available: "可直接使用", needsRestart: "重启 Codex 后生效", connectionError: "配置需要修复", currentPath: "当前调用路径",
   currentModel: "当前模型", currentProvider: "当前供应商", credentials: "API 凭据", configured: "已配置", missing: "未配置",
   mcpCount: "MCP 服务", backup: "配置备份", backupReady: "可恢复", noBackup: "暂无备份",
@@ -72,7 +74,7 @@ const ZH_COPY = {
 type Copy = { [K in keyof typeof ZH_COPY]: string };
 const EN_COPY: Copy = {
   loading: "Reading Codex configuration…", connections: "Connections & models", behavior: "Codex behavior", tools: "MCP & tools", advanced: "Advanced & recovery",
-  currentMode: "Active mode", singleMode: "Single provider", multiMode: "OpenCodex multi-model", notConfigured: "Not configured", available: "Ready to use", needsRestart: "Restart Codex to apply", connectionError: "Configuration needs repair", currentPath: "Request path", currentModel: "Current model", currentProvider: "Current provider", credentials: "API credentials", configured: "Configured", missing: "Missing", mcpCount: "MCP services", backup: "Backup", backupReady: "Available", noBackup: "No backup", manageSingle: "Configure provider", editConnection: "Edit connection", addProvider: "Add provider", rotateKey: "Manage API Key", providerList: "Provider connections", providerListHint: "Select an item to edit. Only the active connection is written to Codex.", recommended: "Recommended", current: "Active", provider: "Provider key", providerPlaceholder: "For example, osir", baseUrl: "Base URL", model: "Model", modelPlaceholder: "For example, gpt-5.6-sol", fetchModels: "Fetch models", modelsFetched: "Fetched {count} models", apiKey: "API Key", apiKeyPlaceholder: "Enter a new API Key", apiKeyHint: "Saved keys are never shown; leave blank to keep the current credential.", showApiKey: "Show the API Key being entered", chooseProvider: "Choose provider", configureConnection: "Configure connection", chooseModel: "Choose model", step: "Step", previous: "Previous", next: "Next", saveAndEnable: "Save and enable", providerSaved: "Single-provider connection saved", connectionHelp: "Required fields are checked before save and the previous configuration is backed up.", behaviorSummary: "Behavior and permission summary", editBehavior: "Edit behavior", reasoning: "Reasoning effort", personality: "Personality", goalMode: "Goal Mode", disableResponseStorage: "Disable response storage", imageGenerationCompatibility: "Third-party image relay mode", imageGenerationCompatibilityHint: "Image requests use the independent image API while chat keeps the normal API Key.", approvalPolicy: "Approval policy", sandboxMode: "Sandbox mode", automatic: "Use Codex default", dangerousCombination: "This combination lets Codex access all system files and run commands without confirmation.", saveBehavior: "Save behavior", behaviorSaved: "Codex behavior saved", mcpServers: "MCP servers", mcpHint: "The list shows status only; add and edit in a focused dialog.", emptyMcp: "No MCP servers configured", addMcp: "Add MCP", editMcp: "Edit MCP", newMcp: "New MCP", name: "Name", namePlaceholder: "For example, context7", transport: "Transport", command: "Command", commandPlaceholder: "For example, npx", args: "Arguments (one per line)", url: "Service URL", enabled: "Enabled", sensitive: "Contains sensitive fields", sensitiveKept: "Hidden environment, header and extension fields are preserved.", saveMcp: "Save MCP", mcpSaved: "MCP configuration saved", imageTool: "Image generation", imageToolHint: "Manage the image model and credential separately from chat.", configureImage: "Configure image generation", imageApiKey: "Image API Key", imageApiKeyPlaceholder: "Enter the independent image API Key", imageModel: "Image model", imageBaseUrl: "Image API Base URL", fetchImageModels: "Fetch image models", imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose", saveImageApiKey: "Save and install skill", deleteImageApiKey: "Delete image API Key", imageSaved: "Image generation configuration saved", diagnostics: "Configuration diagnostics", configFile: "Configuration file", openFolder: "Open folder", parseStatus: "TOML status", valid: "Valid", invalid: "The current TOML is invalid. Repair it in the advanced editor.", codexStatus: "Codex status", running: "Running", stopped: "Not running", editRaw: "Edit raw configuration", showSecrets: "Show and edit sensitive values", hiddenHint: "Sensitive values are masked. Enable editing before saving raw TOML.", validate: "Validate TOML", saveRaw: "Save raw configuration", rawDirty: "Raw configuration has unsaved changes", restore: "Restore previous version", restored: "Previous configuration restored; the pre-restore content remains undoable", saveApiKey: "Save API Key", deleteApiKey: "Delete API Key", apiKeySaved: "API Key saved securely", apiKeyDeleted: "API Key deleted", cancel: "Cancel", delete: "Delete", confirmDeleteMcp: "Delete MCP “{name}”?", confirmDeleteApiKey: "Delete the Codex API Key? The active provider may stop working.", confirmDeleteImageKey: "Delete the image API Key? Chat is not affected.", confirmRestore: "Restore the previous configuration? The current version remains undoable.", discardTitle: "Discard unsaved changes?", discardBody: "Changes in this dialog have not been saved. Discarding restores the active configuration.", keepEditing: "Keep editing", discard: "Discard changes", saved: "Configuration saved with a previous-version backup", savedRunning: "Configuration saved; restart Codex to apply it",
+  currentMode: "Active mode", singleMode: "Single provider", multiMode: "OpenCodex multi-model", notConfigured: "Not configured", defaultConnection: "Codex default", available: "Ready to use", needsRestart: "Restart Codex to apply", connectionError: "Configuration needs repair", currentPath: "Request path", currentModel: "Current model", currentProvider: "Current provider", credentials: "API credentials", configured: "Configured", missing: "Missing", mcpCount: "MCP services", backup: "Backup", backupReady: "Available", noBackup: "No backup", manageSingle: "Configure provider", editConnection: "Edit connection", addProvider: "Add provider", rotateKey: "Manage API Key", providerList: "Provider connections", providerListHint: "Select an item to edit. Only the active connection is written to Codex.", recommended: "Recommended", current: "Active", provider: "Provider key", providerPlaceholder: "For example, osir", baseUrl: "Base URL", model: "Model", modelPlaceholder: "For example, gpt-5.6-sol", fetchModels: "Fetch models", modelsFetched: "Fetched {count} models", apiKey: "API Key", apiKeyPlaceholder: "Enter a new API Key", apiKeyHint: "Saved keys are never shown; leave blank to keep the current credential.", showApiKey: "Show the API Key being entered", chooseProvider: "Choose provider", configureConnection: "Configure connection", chooseModel: "Choose model", step: "Step", previous: "Previous", next: "Next", saveAndEnable: "Save and enable", providerSaved: "Single-provider connection saved", connectionHelp: "Required fields are checked before save and the previous configuration is backed up.", behaviorSummary: "Behavior and permission summary", editBehavior: "Edit behavior", reasoning: "Reasoning effort", personality: "Personality", goalMode: "Goal Mode", disableResponseStorage: "Disable response storage", imageGenerationCompatibility: "Third-party image relay mode", imageGenerationCompatibilityHint: "Image requests use the independent image API while chat keeps the normal API Key.", approvalPolicy: "Approval policy", sandboxMode: "Sandbox mode", automatic: "Use Codex default", dangerousCombination: "This combination lets Codex access all system files and run commands without confirmation.", saveBehavior: "Save behavior", behaviorSaved: "Codex behavior saved", mcpServers: "MCP servers", mcpHint: "The list shows status only; add and edit in a focused dialog.", emptyMcp: "No MCP servers configured", addMcp: "Add MCP", editMcp: "Edit MCP", newMcp: "New MCP", name: "Name", namePlaceholder: "For example, context7", transport: "Transport", command: "Command", commandPlaceholder: "For example, npx", args: "Arguments (one per line)", url: "Service URL", enabled: "Enabled", sensitive: "Contains sensitive fields", sensitiveKept: "Hidden environment, header and extension fields are preserved.", saveMcp: "Save MCP", mcpSaved: "MCP configuration saved", imageTool: "Image generation", imageToolHint: "Manage the image model and credential separately from chat.", configureImage: "Configure image generation", imageApiKey: "Image API Key", imageApiKeyPlaceholder: "Enter the independent image API Key", imageModel: "Image model", imageBaseUrl: "Image API Base URL", fetchImageModels: "Fetch image models", imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose", saveImageApiKey: "Save and install skill", deleteImageApiKey: "Delete image API Key", imageSaved: "Image generation configuration saved", diagnostics: "Configuration diagnostics", configFile: "Configuration file", openFolder: "Open folder", parseStatus: "TOML status", valid: "Valid", invalid: "The current TOML is invalid. Repair it in the advanced editor.", codexStatus: "Codex status", running: "Running", stopped: "Not running", editRaw: "Edit raw configuration", showSecrets: "Show and edit sensitive values", hiddenHint: "Sensitive values are masked. Enable editing before saving raw TOML.", validate: "Validate TOML", saveRaw: "Save raw configuration", rawDirty: "Raw configuration has unsaved changes", restore: "Restore previous version", restored: "Previous configuration restored; the pre-restore content remains undoable", saveApiKey: "Save API Key", deleteApiKey: "Delete API Key", apiKeySaved: "API Key saved securely", apiKeyDeleted: "API Key deleted", cancel: "Cancel", delete: "Delete", confirmDeleteMcp: "Delete MCP “{name}”?", confirmDeleteApiKey: "Delete the Codex API Key? The active provider may stop working.", confirmDeleteImageKey: "Delete the image API Key? Chat is not affected.", confirmRestore: "Restore the previous configuration? The current version remains undoable.", discardTitle: "Discard unsaved changes?", discardBody: "Changes in this dialog have not been saved. Discarding restores the active configuration.", keepEditing: "Keep editing", discard: "Discard changes", saved: "Configuration saved with a previous-version backup", savedRunning: "Configuration saved; restart Codex to apply it",
 };
 
 function basicFromReport(report: CodexConfigReport): CodexBasicConfigInput {
@@ -111,6 +113,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [report, setReport] = useState<CodexConfigReport | null>(null);
+  const [openCodex, setOpenCodex] = useState<OpenCodexStatus | null>(null);
   const [basic, setBasic] = useState<CodexBasicConfigInput>(EMPTY_BASIC);
   const [dialogBaseline, setDialogBaseline] = useState({ provider: EMPTY_BASIC, behavior: EMPTY_BASIC, imageModel: "gpt-image-2", imageBaseUrl: "", raw: "", mcp: "" });
   const [providerStep, setProviderStep] = useState(1);
@@ -148,6 +151,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       applyReport(await managerApi.codexConfigGet());
+      try { setOpenCodex(await managerApi.openCodexStatus()); } catch { /* OpenCodex may not exist yet. */ }
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -156,6 +160,10 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   }, [applyReport]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (openCodex?.enabled) setConnectionView("multi");
+  }, [openCodex?.enabled]);
 
   const runReport = async (kind: string, action: () => Promise<CodexConfigReport>, success: string) => {
     setBusy(kind);
@@ -191,12 +199,12 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const locked = Boolean(busy);
   const modelsReady = modelsBaseUrl === basic.baseUrl && models.length > 0;
   const dangerousCombination = basic.approvalPolicy === "never" && basic.sandboxMode === "danger-full-access";
-  const multiActive = Boolean(report?.provider === "opencodex" || report?.openCodex?.enabled);
-  const singleReady = Boolean(report?.provider && report.provider !== "opencodex" && report.model && report.baseUrl && report.apiKeyConfigured);
+  const multiActive = Boolean(report?.provider === "opencodex" || report?.openCodex?.enabled || openCodex?.enabled);
+  const singleReady = Boolean(!multiActive && report?.model && report.apiKeyConfigured);
   const effectiveMode = multiActive ? "multi" : singleReady ? "single" : "none";
   const modeLabel = effectiveMode === "multi" ? copy.multiMode : effectiveMode === "single" ? copy.singleMode : copy.notConfigured;
-  const statusTone = report?.parseError ? "error" : report?.codexRunning ? "warn" : effectiveMode === "none" ? "neutral" : "ok";
-  const statusLabel = report?.parseError ? copy.connectionError : report?.codexRunning ? copy.needsRestart : effectiveMode === "none" ? copy.notConfigured : copy.available;
+  const statusTone = report?.parseError ? "error" : effectiveMode === "none" ? "neutral" : "ok";
+  const statusLabel = report?.parseError ? copy.connectionError : effectiveMode === "none" ? copy.notConfigured : copy.available;
   const callPath = effectiveMode === "multi" ? "Codex → OpenCodex → Provider" : effectiveMode === "single" ? "Codex → " + (report?.provider || "Provider") : "Codex → —";
   const modules = useMemo(() => [
     { key: "connections", label: copy.connections },
@@ -313,18 +321,17 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                 <div className="config-mode-mark"><Icon name={effectiveMode === "multi" ? "grid" : "sliders"} /></div>
                 <div className="config-overview-copy">
                   <span className="config-eyebrow">{copy.currentMode}</span>
-                  <div className="config-overview-title"><h1>{modeLabel}</h1><StatusBadge tone={statusTone} icon={statusTone === "error" ? "alert" : statusTone === "warn" ? "refresh" : statusTone === "ok" ? "check" : "info"}>{statusLabel}</StatusBadge></div>
+                  <div className="config-overview-title"><h1>{modeLabel}</h1><StatusBadge tone={statusTone} icon={statusTone === "error" ? "alert" : statusTone === "ok" ? "check" : "info"}>{statusLabel}</StatusBadge></div>
                   <span className="config-call-path"><Icon name="arrowUp" />{copy.currentPath}：{callPath}</span>
                 </div>
               </div>
               <div className="config-overview-metrics">
-                <SummaryItem label={copy.currentModel} value={effectiveMode === "multi" ? report.openCodex?.routes.find((route) => route.locked)?.defaultModel || report.model || "—" : report.model || "—"} />
+                <SummaryItem label={copy.currentModel} value={effectiveMode === "multi" ? openCodex?.routes.find((route) => route.locked)?.defaultModel || report.model || "—" : report.model || "—"} />
                 <SummaryItem label={copy.credentials} value={report.apiKeyConfigured || effectiveMode === "multi" ? copy.configured : copy.missing} />
                 <SummaryItem label={copy.mcpCount} value={report.mcpServers.filter((server) => server.enabled).length} hint={"/ " + report.mcpServers.length} />
                 <SummaryItem label={copy.backup} value={report.backupAvailable ? copy.backupReady : copy.noBackup} />
               </div>
             </section>
-            {report.codexRunning ? <div className="banner warn" role="status"><Icon name="alert" /><span>{copy.needsRestart}</span></div> : null}
             {report.parseError ? <button className="banner err config-error-jump" type="button" onClick={() => { setModule("advanced"); openRaw(); }}><Icon name="alert" /><span>{copy.invalid}</span><Icon name="chevron" /></button> : null}
             <Segmented items={modules} value={module} onChange={(next) => setModule(next as ConfigModule)} ariaLabel={t("nav.config")} className="config-module-tabs" />
             {module === "connections" ? (
@@ -334,10 +341,10 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                     <span className="config-mode-option-icon"><Icon name="sliders" /></span><span><strong>{copy.singleMode}</strong><small>{report.provider && report.provider !== "opencodex" ? report.provider + " · " + report.model : copy.notConfigured}</small></span>{effectiveMode === "single" ? <span className="config-current-dot">{copy.current}</span> : null}
                   </button>
                   <button className={"config-mode-option" + (connectionView === "multi" ? " active" : "")} type="button" aria-pressed={connectionView === "multi"} onClick={() => setConnectionView("multi")}>
-                    <span className="config-mode-option-icon"><Icon name="grid" /></span><span><strong>{copy.multiMode}</strong><small>{report.openCodex?.installed ? "OpenCodex " + (report.openCodex.version || "") + " · " + report.openCodex.modelCount + " models" : copy.notConfigured}</small></span>{effectiveMode === "multi" ? <span className="config-current-dot">{copy.current}</span> : null}
+                    <span className="config-mode-option-icon"><Icon name="grid" /></span><span><strong>{copy.multiMode}</strong><small>{openCodex?.installed ? "OpenCodex " + (openCodex.version || "") + " · " + openCodex.modelCount + " models" : copy.notConfigured}</small></span>{effectiveMode === "multi" ? <span className="config-current-dot">{copy.current}</span> : null}
                   </button>
                 </div>
-                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype />}
+                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={setOpenCodex} />}
               </section>
             ) : null}
             {module === "behavior" ? <BehaviorView report={report} copy={copy} onEdit={openBehavior} /> : null}

@@ -4430,6 +4430,29 @@ button.config-resource-row:hover {
 .sheet-frame.is-closing {
   animation: sheet-sink 0.24s var(--ease-out) forwards;
 }
+.scrim.sheet-centered,
+.quit-scrim.sheet-centered {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+.sheet-frame.sheet-centered {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: min(560px, 100%);
+  max-height: min(88%, calc(100% - 2 * var(--space-md)));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  animation: modal-pop 0.26s var(--ease-sheet) both;
+}
+.sheet-frame.sheet-centered::after {
+  display: none;
+}
+.sheet-frame.sheet-centered.is-closing {
+  animation: modal-pop-out 0.2s var(--ease-out) forwards;
+}
 /* Expanded workbench: an opted-in Sheet (theme details) becomes a centered
    modal instead of a bottom sheet. The compact popover keeps the sheet form. */
 :root[data-window-mode="expanded"] .scrim.sheet-centerable {
@@ -4477,6 +4500,10 @@ button.config-resource-row:hover {
   .sheet-frame.is-closing,
   :root[data-window-mode="expanded"] .sheet-frame.sheet-centerable,
   :root[data-window-mode="expanded"] .sheet-frame.sheet-centerable.is-closing {
+    animation: none;
+  }
+  .sheet-frame.sheet-centered,
+  .sheet-frame.sheet-centered.is-closing {
     animation: none;
   }
 }
