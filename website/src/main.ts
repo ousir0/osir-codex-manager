@@ -7,6 +7,15 @@ const applyLang = (next: Lang) => {
   lang = next;
   localStorage.setItem("cam-site-lang", next);
   document.documentElement.lang = next === "zh" ? "zh-CN" : "en";
+  document.title = next === "zh"
+    ? "Codex Manager | 安装、配置和更新 Codex"
+    : "Codex Manager | Install, configure, and update Codex";
+  const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (description) {
+    description.content = next === "zh"
+      ? "Codex Manager 是官方 Codex 桌面应用的本地管理器，支持 macOS、Windows、API 配置、OpenCodex 多模型、主题和自动更新。"
+      : "Codex Manager is a local manager for the official Codex desktop app, with macOS and Windows installers, API configuration, OpenCodex multi-model routing, themes, and self-update.";
+  }
   document.querySelectorAll<HTMLElement>("[data-zh][data-en]").forEach((el) => {
     el.innerHTML = el.dataset[next] || "";
   });

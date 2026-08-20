@@ -12,7 +12,7 @@
 - 云端有版本化安装包、latest.json 和 updater 签名；
 - 发布工作流负责构建、签名、生成清单、上传和公开回读校验；
 - “关于”页可以手动检查并安装 Manager 更新；
-- 当前主更新地址是 https://app.osirclaw.com/manager/latest.json，实测版本为 0.5.5。
+- 当前主更新地址是 https://app.osirclaw.com/manager/latest.json；GitHub 正式发布已到 v0.5.6。
 
 未完成：
 
@@ -48,7 +48,7 @@
 
 ### 云端版本管理
 
-当前主地址返回 0.5.5，包含 macOS arm64、macOS Intel、Windows x64、Windows ARM64。安装包位于按版本隔离的路径，例如 /manager/0.5.5/...；latest.json 位于固定根地址，客户端只需要轮询一个 URL。
+当前 GitHub 正式发布 v0.5.6 包含 macOS arm64、macOS Intel、Windows x64、Windows ARM64。安装包位于按版本隔离的路径，例如 /manager/0.5.6/...；latest.json 位于固定根地址，客户端只需要轮询一个 URL。网站镜像 promotion 仍需配置对象存储凭据。
 
 旧文档中的 codexapp.awai.cc 不是当前客户端配置的主地址，日常发布应以 app.osirclaw.com 为准。
 
@@ -100,7 +100,7 @@
 
 ### 不改版本号重复打包
 
-当前 0.5.5 → 修改代码 → 仍构建 0.5.5。
+当前 0.5.6 → 修改代码 → 仍构建 0.5.6。
 
 不应这样发布。更新器会把它视为同一版本，云端版本对象也按不可覆盖设计。
 

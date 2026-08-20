@@ -26,6 +26,16 @@ npm run images     # assets/raw/*.png → public/img/*.{avif,webp} 多分辨率 
   (子集按实际用字收集,缺字会回退到系统字体)。
 - 真实 logo 来自两个仓库的 `assets/logo.png`,缩放为 192px 后自托管。
 
+## 信息架构
+
+首页以用户任务为主线：产品能力、下载、用户手册、OSIR API 和 GitHub。
+
+- Manager 官网：安装、更新、配置、多模型和主题；
+- OSIR API 官网：API Key、控制台、模型市场、价格和 API 文档；
+- GitHub：源码、精确版本资产和问题反馈。
+
+官网首页的正式下载入口当前指向 GitHub Release v0.5.6，因为对象存储镜像 promotion 仍需单独配置凭据。镜像恢复后，再把下载链接切回 app.osirclaw.com 的最新通道。
+
 ## i18n
 
 - 默认 `zh-CN`(HTML 静态文案即中文,SEO 友好);`en` 在运行时通过 `data-i18n` 替换。
