@@ -1798,11 +1798,67 @@ fn write_codex_proxy_config(
 }
 
 fn catalog_has_models(path: &Path) -> bool {
+    catalog_model_slugs(path).is_some_and(|models| !models.is_empty())
+}
+
+fn catalog_model_slugs(path: &Path) -> Option<BTreeSet<String>> {
     fs::read(path)
         .ok()
         .and_then(|raw| serde_json::from_slice::<JsonValue>(&raw).ok())
         .and_then(|value| value.get("models").and_then(JsonValue::as_array).cloned())
-        .is_some_and(|models| !models.is_empty())
+        .map(|models| {
+            models
+                .into_iter()
+                .filter_map(|model| model.get("slug").and_then(JsonValue::as_str).map(str::to_string))
+                .collect()
+        })
+}
+
+fn catalog_contains_enabled_routes(path: &Path, routes: &[OpenCodexRouteInput]) -> bool {
+    let Some(actual) = catalog_model_slugs(path) else {
+        return false;
+    };
+    routes
+        .iter()
+        .filter(|route| route.enabled)
+        .flat_map(|route| route.models.iter().map(move |model| format!("{}/{}", route.id, model)))
+        .all(|slug| actual.contains(&slug))
+}
+
+fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppError> {
+    let state = effective_state(paths)?;
+    let config = load_config(&paths.opencodex_config)?;
+    let managed_provider_ids = if state.managed_provider_ids.is_empty() {
+        let models = config
+            .get("customModels")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        inferred_managed_provider_ids(&config, &models)
+    } else {
+        state.managed_provider_ids.clone()
+    };
+    let Some(default_route) = inferred_default_route(&config, &managed_provider_ids) else {
+        return Ok(());
+    };
+    let provider_id = if state.codex_provider_id.is_empty() {
+        DEFAULT_PROVIDER_ID
+    } else {
+        state.codex_provider_id.as_str()
+    };
+    let port = config
+        .get("port")
+        .and_then(JsonValue::as_u64)
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(state.port.max(1));
+    write_codex_proxy_config(
+        &paths.codex_config,
+        &paths.catalog,
+        provider_id,
+        port,
+        &default_route,
+    )
 }
 
 fn validate_candidate(path: &Path, candidate: &JsonValue) -> Result<(), AppError> {
@@ -1848,10 +1904,15 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         let _ = restore();
         return Err(error);
     }
-    if !catalog_has_models(&paths.catalog) {
+    if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
         let _ = restore();
-        return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录；已恢复原配置".to_string()));
+        return Err(AppError::Engine("OpenCodex 同步完成但模型目录不完整；已恢复原配置".to_string()));
     }
+    // Codex observes config.toml, not the generated catalog file. The first
+    // config write above can therefore race ahead of `ocx sync` and make the
+    // picker cache only the default model. Rewrite the same binding after the
+    // complete catalog exists so a running Codex reloads every synced model.
+    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
     let enabled_state = ManagedState {
         enabled: true,
         port: input.port,
@@ -1872,7 +1933,12 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
     ocx_output(&["sync"])?;
-    status()
+    let paths = integration_paths()?;
+    if !catalog_has_models(&paths.catalog) {
+        return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
+    }
+    refresh_codex_catalog_binding(&paths)?;
+    status_at(&paths)
 }
 
 pub fn restore() -> Result<OpenCodexStatus, AppError> {
@@ -1914,8 +1980,9 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_opencodex_config, component_target_for, decrypt_bundle, extract_osir_ticket, inferred_default_route,
-        inferred_managed_provider_ids, pkce_challenge, validate_input, wait_for_oauth_callback,
+        build_opencodex_config, catalog_contains_enabled_routes, component_target_for, decrypt_bundle,
+        extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
+        validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
@@ -1930,6 +1997,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
+    use uuid::Uuid;
 
     fn input() -> OpenCodexConfigInput {
         OpenCodexConfigInput {
@@ -2005,6 +2073,51 @@ mod tests {
         assert!(models.iter().any(|model| model["provider"] == "keep"));
         assert!(models.iter().any(|model| model["provider"] == "osir-gpt"));
         assert!(!models.iter().any(|model| model["provider"] == "old"));
+    }
+
+    #[test]
+    fn requires_every_enabled_route_model_in_the_generated_catalog() {
+        let root = std::env::temp_dir().join(format!("opencodex-catalog-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        let routes = vec![
+            OpenCodexRouteInput {
+                id: "osirapi-openai".to_string(),
+                label: "GPT".to_string(),
+                adapter: "openai-responses".to_string(),
+                base_url: "https://api.osirclaw.com/v1".to_string(),
+                api_key: Some("secret".to_string()),
+                models: vec!["gpt-5.6".to_string(), "gpt-5.6-sol".to_string()],
+                default_model: "gpt-5.6-sol".to_string(),
+                enabled: true,
+            },
+            OpenCodexRouteInput {
+                id: "disabled".to_string(),
+                label: "Disabled".to_string(),
+                adapter: "openai-responses".to_string(),
+                base_url: "https://api.osirclaw.com/v1".to_string(),
+                api_key: None,
+                models: vec!["ignored".to_string()],
+                default_model: "ignored".to_string(),
+                enabled: false,
+            },
+        ];
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":[{"slug":"osirapi-openai/gpt-5.6-sol"}]})).unwrap(),
+        )
+        .unwrap();
+        assert!(!catalog_contains_enabled_routes(&catalog, &routes));
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":[
+                {"slug":"osirapi-openai/gpt-5.6"},
+                {"slug":"osirapi-openai/gpt-5.6-sol"}
+            ]})).unwrap(),
+        )
+        .unwrap();
+        assert!(catalog_contains_enabled_routes(&catalog, &routes));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
