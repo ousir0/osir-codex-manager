@@ -356,9 +356,8 @@ fn component_target_for(os: &str, arch: &str) -> Option<&'static str> {
 }
 
 fn component_target() -> Result<&'static str, AppError> {
-    component_target_for(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
-        AppError::UnsupportedPlatform
-    })
+    component_target_for(std::env::consts::OS, std::env::consts::ARCH)
+        .ok_or(AppError::UnsupportedPlatform)
 }
 
 fn managed_component_roots() -> Vec<PathBuf> {
