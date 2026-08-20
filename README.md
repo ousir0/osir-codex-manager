@@ -270,8 +270,9 @@ installation, and keeps API credentials and user content on the local machine.
 
 ## Download & verify
 
-Use the [latest GitHub Release](https://github.com/ousir0/osir-codex-manager/releases/latest)
-for the public release record, or the fixed OSIR mirror links:
+Use the [GitHub Release v0.5.6](https://github.com/ousir0/osir-codex-manager/releases/tag/v0.5.6)
+for the current verified packages. The website mirror will return to the latest channel after
+object-storage promotion is configured:
 
 | Platform | Mirror |
 |---|---|
