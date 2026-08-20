@@ -5,7 +5,6 @@ import type { OpenCodexConfigInput, OpenCodexStatus } from "../../shared/types";
 import { Sheet } from "../Sheet";
 import { Icon } from "../icons";
 
-type SetupState = "ready" | "connecting";
 type ConnectionMode = "osir" | "manual" | null;
 
 const ROUTES = [
@@ -17,7 +16,6 @@ const ROUTES = [
 const STEPS = ["检测环境", "连接供应商", "同步模型", "完成"];
 
 export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (status: OpenCodexStatus) => void } = {}) {
-  const [setupState, setSetupState] = useState<SetupState>("ready");
   const [notice, setNotice] = useState("正在检测 OpenCodex 和本机配置…");
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(null);
   const [oauthSuccess, setOauthSuccess] = useState<OpenCodexStatus | null>(null);
@@ -128,10 +126,8 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
         return next;
       }, "OpenCodex 已启动；请继续配置供应商。");
     }
-    setSetupState("connecting");
     setConnectionMode("osir");
     setNotice("连接方式已打开；请在浏览器中完成 OSIRAPI 登录授权。");
-    window.setTimeout(() => setSetupState("ready"), 500);
   };
 
   const connectOsirOAuth = async () => {
@@ -249,9 +245,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
           <div className="multi-model-kicker"><span className="multi-model-kicker-dot" />OPENCODEX / MULTI-MODEL<span className="multi-model-prototype-chip">可操作预览</span></div>
           <h1>把所有模型，装进 Codex 选择器。</h1>
           <p>用一个简单的连接流程，把 GPT、Claude、Grok 和其他供应商的模型放进 Codex 的原生选择器。</p>
-          <div className="multi-model-hero-actions">
-            {connectionStatus === "connected" ? <div className="multi-model-connection-state connected"><span className="multi-model-state-dot" />OSIRAPI 已连接 <small>{account?.displayName || account?.email || "订阅账户"}</small></div> : connectionStatus === "error" ? <button className="btn primary multi-model-primary" type="button" disabled={Boolean(busy)} onClick={connect}><Icon name="refresh" />重新连接</button> : connectionStatus === "signedOut" ? <button className="btn primary multi-model-primary" type="button" disabled={Boolean(busy)} onClick={connect}><Icon name="globe" />重新登录 OSIRAPI</button> : <button className="btn primary multi-model-primary" type="button" disabled={Boolean(busy)} onClick={connect}><Icon name={busy === "install" || setupState === "connecting" ? "loader" : "globe"} />{!installed ? "安装多模型组件" : setupState === "connecting" ? "正在准备连接…" : "连接 OSIRAPI"}</button>}
-          </div>
+          <div className="multi-model-hero-actions" aria-hidden="true" />
         </div>
         <div className="multi-model-orbit" aria-hidden="true"><div className="multi-model-orbit-ring ring-one" /><div className="multi-model-orbit-ring ring-two" /><div className="multi-model-orbit-core"><span className="multi-model-core-mark">C</span><span>CODEX</span></div><span className="multi-model-orbit-node node-gpt">G</span><span className="multi-model-orbit-node node-claude">C</span><span className="multi-model-orbit-node node-grok">X</span></div>
       </div>
@@ -259,7 +253,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
       <div className="multi-model-notice" role="status"><Icon name="info" /><span>{notice}</span></div>
 
       <section className={"multi-model-account-card status-" + connectionStatus} aria-label="OSIRAPI 连接状态">
-        <div className="multi-model-account-status"><span className="multi-model-account-icon"><Icon name={connectionStatus === "connected" ? "check" : connectionStatus === "error" ? "alert" : "globe"} /></span><div><span className="multi-model-label">OSIRAPI 连接状态</span><strong>{connectionStatus === "connected" ? "已连接，可使用订阅模型" : connectionStatus === "error" ? "连接异常，需要重新检查" : connectionStatus === "signedOut" ? "已退出连接" : "尚未连接"}</strong><span className="multi-model-account-subline">{connectionStatus === "connected" ? "浏览器授权、订阅 Key 和本地模型目录均已同步" : connectionStatus === "error" ? "OpenCodex 或模型目录当前不可用" : connectionStatus === "signedOut" ? "本机仍保留历史配置，重新登录后可恢复" : "连接后会自动读取用户与订阅信息"}</span></div></div>
+        <div className="multi-model-account-status"><span className="multi-model-account-icon"><Icon name={connectionStatus === "connected" ? "check" : connectionStatus === "error" ? "alert" : "globe"} /></span><div><span className="multi-model-label">OSIRAPI 连接状态</span><strong>{connectionStatus === "connected" ? "已连接，可使用订阅模型" : connectionStatus === "error" ? "连接异常，需要重新检查" : connectionStatus === "signedOut" ? "已退出连接" : "尚未连接"}</strong><span className="multi-model-account-subline">{connectionStatus === "connected" ? "浏览器授权、订阅 Key 和本地模型目录均已同步" : connectionStatus === "error" ? "OpenCodex 或模型目录当前不可用" : connectionStatus === "signedOut" ? "本机仍保留历史配置，重新登录后可恢复" : "连接后会自动读取用户与订阅信息"}</span></div><button className="btn primary compact multi-model-account-connect" type="button" disabled={Boolean(busy)} onClick={() => connectionStatus === "connected" ? setConnectionMode("osir") : connect()}><Icon name={busy ? "loader" : connectionStatus === "connected" ? "sliders" : connectionStatus === "error" ? "refresh" : "globe"} />{connectionStatus === "connected" ? "管理连接" : connectionStatus === "error" ? "重新连接" : connectionStatus === "signedOut" ? "重新登录" : !installed ? "安装并连接" : "连接 OSIRAPI"}</button></div>
         {account ? <div className="multi-model-account-details"><div><span>用户</span><strong>{account.displayName || account.email || "OSIRAPI 用户"}</strong></div><div><span>订阅套餐</span><strong>{activeSubscription?.groupName || "有效订阅"}</strong></div><div><span>月度剩余</span><strong>{activeSubscription && activeSubscription.monthlyLimitUsd > 0 ? formatUsd(activeSubscription.monthlyRemainingUsd) : "按订阅额度"}</strong></div><div><span>余额</span><strong>{formatUsd(account.balance)}</strong></div></div> : null}
         {account && activeSubscription ? <div className="multi-model-account-progress"><span>本月用量 {formatUsd(activeSubscription.monthlyUsedUsd)} / {activeSubscription.monthlyLimitUsd > 0 ? formatUsd(activeSubscription.monthlyLimitUsd) : "不限额"}</span><span>{activeSubscription.daysRemaining} 天后到期</span><div><i style={{ width: String(activeSubscription.monthlyLimitUsd > 0 ? Math.min(100, Math.max(0, activeSubscription.monthlyUsedUsd / activeSubscription.monthlyLimitUsd * 100)) : 0) + "%" }} /></div></div> : null}
         {connectionStatus === "connected" ? <div className="multi-model-account-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void disconnectOsir()}>{busy === "disconnect" ? "退出中…" : "退出 OSIRAPI 连接"}</button></div> : null}

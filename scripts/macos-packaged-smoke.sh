@@ -420,12 +420,15 @@ wait_for_window_state "$PID" visible true || fail "single-instance" "second laun
 [[ "$(process_count)" == "1" ]] || fail "single-instance" "hidden-state relaunch left more than one process"
 end_stage
 
-stage "close" "Exercise Cmd+W close interception after frontend readiness"
+stage "close" "Exercise Cmd+W hide-to-status-bar behavior after frontend readiness"
 send_command_shortcut "$PID" "w" || fail "close" "Cmd+W injection failed"
 wait_for_log "window close requested label=main" || fail "close" "window CloseRequested was not observed"
-wait_for_log_count "shell event emitted kind=confirm-quit" 1 || fail "close" "close confirmation event was not delivered"
-kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of waiting for close confirmation"
-send_escape "$PID" || fail "close" "could not dismiss close confirmation"
+wait_for_log "window hidden to macOS status bar" || fail "close" "window was not hidden to the macOS status bar"
+wait_for_window_state "$PID" visible false || fail "close" "Cmd+W did not hide the main window"
+kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of staying resident"
+launch_app
+wait_for_log_count "single-instance activation requested" 3 || fail "close" "status-bar resident app did not restore on relaunch"
+wait_for_window_state "$PID" visible true || fail "close" "resident app did not restore the hidden window"
 end_stage
 
 stage "quit" "Exercise Cmd+Q accelerator and the native menu Quit item"
@@ -441,4 +444,4 @@ wait_for_log_count "shell event emitted kind=confirm-quit" 3 || fail "quit" "men
 kill -0 "$PID" 2>/dev/null || fail "quit" "menu Quit bypassed the confirmation guard"
 end_stage
 
-echo "macOS packaged smoke passed: bundle → locale/menu → IPC/CSP → single-instance restore → close → Cmd+Q/menu Quit"
+echo "macOS packaged smoke passed: bundle → locale/menu → IPC/CSP → single-instance restore → Cmd+W resident hide → Cmd+Q/menu Quit"

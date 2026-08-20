@@ -5730,8 +5730,8 @@ button.config-resource-row:hover {
 }
 .multi-model-account-card {
   display: grid;
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 13px 15px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: linear-gradient(135deg, color-mix(in oklch, var(--surface-top) 88%, var(--accent-tint)), var(--surface));
@@ -5741,6 +5741,23 @@ button.config-resource-row:hover {
 .multi-model-account-card.status-error { border-color: color-mix(in oklch, #f59e0b 48%, var(--line)); }
 .multi-model-account-card.status-signedOut { opacity: .82; }
 .multi-model-account-status { display: flex; align-items: center; gap: 11px; }
+.multi-model-account-status > .multi-model-account-connect {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-status {
+  min-height: 38px;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-subline {
+  display: none;
+}
+.multi-model-account-card:not(.status-connected) {
+  gap: 0;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-icon {
+  width: 30px;
+  height: 30px;
+}
 .multi-model-account-status > div { display: grid; gap: 3px; min-width: 0; }
 .multi-model-account-status strong { font-size: 14px; letter-spacing: -.01em; }
 .multi-model-account-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: var(--accent-tint); color: var(--accent); }
