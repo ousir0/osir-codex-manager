@@ -8,6 +8,10 @@ mod state;
 
 use std::sync::atomic::Ordering;
 
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+#[cfg(target_os = "macos")]
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::webview::PageLoadEvent;
 use tauri::{Emitter, Manager, RunEvent, UserAttentionType, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -138,6 +142,108 @@ fn restore_main_window(app: &tauri::AppHandle, reason: &str) {
         request_main_window_attention(app, reason);
     }
     log::info!("main window restored reason={reason} focused={focused} degraded={degraded}");
+}
+
+#[cfg(target_os = "macos")]
+fn tray_status_text() -> (String, String, String) {
+    match crate::app::opencodex::status() {
+        Ok(status) if status.connection_status == "connected" => {
+            let plan = status
+                .account
+                .as_ref()
+                .and_then(|account| account.subscriptions.first())
+                .and_then(|subscription| subscription.group_name.clone())
+                .unwrap_or_else(|| "已连接".to_string());
+            let remaining = status
+                .account
+                .as_ref()
+                .and_then(|account| account.subscriptions.first())
+                .map(|subscription| format!("${:.2}", subscription.monthly_remaining_usd))
+                .unwrap_or_else(|| "额度未知".to_string());
+            ("● 已连接".to_string(), plan, format!("本月剩余 {remaining}"))
+        }
+        Ok(status) if status.connection_status == "signedOut" => ("○ 已退出".to_string(), "需要重新登录".to_string(), "".to_string()),
+        Ok(status) if status.installed => ("△ 连接异常".to_string(), "OpenCodex 已安装".to_string(), status.error.unwrap_or_else(|| "请打开管理器检查".to_string())),
+        _ => ("○ 未连接".to_string(), "OpenCodex 未连接".to_string(), "点击打开管理器".to_string()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn refresh_macos_tray_status<R: tauri::Runtime>(
+    tray: &tauri::tray::TrayIcon<R>,
+    status_item: &tauri::menu::MenuItem<R>,
+    plan_item: &tauri::menu::MenuItem<R>,
+    usage_item: &tauri::menu::MenuItem<R>,
+) {
+    let (status, plan, usage) = tray_status_text();
+    let _ = status_item.set_text(status.clone());
+    let _ = plan_item.set_text(format!("套餐：{plan}"));
+    let _ = usage_item.set_text(usage);
+    let _ = tray.set_tooltip(Some(status));
+}
+
+#[cfg(target_os = "macos")]
+fn install_macos_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let status_item = MenuItemBuilder::with_id("cam-tray-status", "○ 未连接")
+        .enabled(false)
+        .build(app)?;
+    let plan_item = MenuItemBuilder::with_id("cam-tray-plan", "套餐：检查中")
+        .enabled(false)
+        .build(app)?;
+    let usage_item = MenuItemBuilder::with_id("cam-tray-usage", "用量：检查中")
+        .enabled(false)
+        .build(app)?;
+    let open_item = MenuItemBuilder::with_id("cam-tray-open", "打开 Codex Manager").build(app)?;
+    let open_codex_item = MenuItemBuilder::with_id("cam-tray-open-codex", "打开 OpenCodex").build(app)?;
+    let quit_item = MenuItemBuilder::with_id("cam-tray-quit", "退出 Codex Manager").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&status_item)
+        .item(&plan_item)
+        .item(&usage_item)
+        .separator()
+        .item(&open_item)
+        .item(&open_codex_item)
+        .separator()
+        .item(&quit_item)
+        .build()?;
+    let status_for_click = status_item.clone();
+    let plan_for_click = plan_item.clone();
+    let usage_for_click = usage_item.clone();
+    let tray_builder = TrayIconBuilder::with_id("cam-status");
+    let tray_builder = if let Some(icon) = app.default_window_icon().cloned() {
+        tray_builder.icon(icon).icon_as_template(true)
+    } else {
+        tray_builder
+    };
+    let tray = tray_builder
+        .title("●")
+        .tooltip("Codex Manager")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(move |app, event| match event.id().0.as_str() {
+            "cam-tray-open" => restore_main_window(app, "tray-open"),
+            "cam-tray-open-codex" => {
+                restore_main_window(app, "tray-open-codex");
+                if let Ok(status) = crate::app::opencodex::status() {
+                    let _ = crate::commands::open_url(format!("http://127.0.0.1:{}", status.port));
+                }
+            }
+            "cam-tray-quit" => {
+                let policy = quit_policy_for(app);
+                if apply_quit_policy(app, &policy) {
+                    app.exit(0);
+                }
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(move |tray, event| {
+            if matches!(event, TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }) {
+                refresh_macos_tray_status(tray, &status_for_click, &plan_for_click, &usage_for_click);
+            }
+        })
+        .build(app)?;
+    refresh_macos_tray_status(&tray, &status_item, &plan_item, &usage_item);
+    Ok(())
 }
 
 fn emit_shell_event(app: &tauri::AppHandle, event: &ShellEvent) {
@@ -794,6 +900,8 @@ pub fn run() {
             commands::opencodex_remove_model,
             commands::opencodex_check_route,
             commands::opencodex_connect_osir,
+            commands::opencodex_connect_osir_oauth,
+            commands::opencodex_disconnect_osir,
             commands::opencodex_save,
             commands::opencodex_sync,
             commands::opencodex_restore,
@@ -840,6 +948,8 @@ pub fn run() {
             build_main_window(app)?;
             #[cfg(target_os = "macos")]
             install_macos_menu(app.handle(), NativeLocale::En)?;
+            #[cfg(target_os = "macos")]
+            install_macos_tray(app.handle())?;
             log::info!(
                 "Codex Manager v{} starting (os={}, arch={})",
                 app.package_info().version,
@@ -1003,9 +1113,11 @@ pub fn run() {
                 "cam-close" => {
                     log::info!("menu close requested id=cam-close");
                     if let Some(window) = app.get_webview_window("main") {
-                        if let Err(error) = window.close() {
+                        if let Err(error) = window.hide() {
                             log::warn!("menu close failed error={error}");
                             request_main_window_attention(app, "menu-close-failed");
+                        } else {
+                            log::info!("window hidden to macOS status bar");
                         }
                     } else {
                         log::error!("menu close failed error=window-missing");
@@ -1014,19 +1126,29 @@ pub fn run() {
                 _ => {}
             }
         })
-        // A normal "open it when you need it" app — NOT a menu-bar resident.
-        // Closing the window quits the process so nothing lingers in the
-        // background; the Dock icon is the only entry point, and login launch is
-        // an explicit, off-by-default opt-in (see Settings).
-        //
-        // The window has no system chrome, so every window-close path — the
-        // in-app ✕, Alt+F4, the macOS window close — arrives here. Policy is
-        // phase-aware: point-of-no-return install steps block quit; otherwise
-        // the confirm_close setting may raise a dialog.
+        // macOS keeps the manager resident behind the status-bar icon when the
+        // main window is closed. The explicit Quit menu item still uses the
+        // phase-aware exit policy and is the only normal path that terminates
+        // the process. Other platforms retain the existing close policy.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle();
                 log::info!("window close requested label={}", window.label());
+                #[cfg(target_os = "macos")]
+                if !app
+                    .state::<state::ManagerState>()
+                    .force_quit
+                    .load(Ordering::SeqCst)
+                {
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        log::warn!("window hide failed error={error}");
+                        request_main_window_attention(app, "window-hide-failed");
+                    } else {
+                        log::info!("window hidden to macOS status bar");
+                    }
+                    return;
+                }
                 let policy = quit_policy_for(app);
                 if apply_quit_policy(app, &policy) {
                     app.exit(0);
@@ -1040,6 +1162,12 @@ pub fn run() {
         // Cmd+Q (and any other app-level quit) lands as ExitRequested rather than
         // a window CloseRequested — gate it with the same phase-aware policy.
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { has_visible_windows, .. } = &event {
+                log::info!("macOS app reopen requested has_visible_windows={has_visible_windows}");
+                restore_main_window(app, "dock-reopen");
+                return;
+            }
             if let RunEvent::ExitRequested { api, .. } = event {
                 log::info!("application exit requested");
                 let policy = quit_policy_for(app);

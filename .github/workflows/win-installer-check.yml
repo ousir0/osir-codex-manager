@@ -116,9 +116,35 @@ jobs:
         env:
           AUTHENTICODE_MODE: ${{ vars.AUTHENTICODE_REQUIRED == 'true' && 'required' || 'optional' }}
         run: |
+          $runId = [guid]::NewGuid().ToString("N")
+          $cleanHome = Join-Path $env:RUNNER_TEMP "cam-clean-home-$runId"
+          $cleanLocalAppData = Join-Path $cleanHome "AppData\Local"
+          $cleanRoamingAppData = Join-Path $cleanHome "AppData\Roaming"
+          $cleanCodexHome = Join-Path $cleanHome ".codex"
+          $cleanSmokeData = Join-Path $env:TEMP "osir-codex-manager-smoke-$runId"
+          New-Item -ItemType Directory -Force -Path $cleanLocalAppData, $cleanRoamingAppData, $cleanCodexHome, $cleanSmokeData | Out-Null
+          $env:USERPROFILE = $cleanHome
+          $env:LOCALAPPDATA = $cleanLocalAppData
+          $env:APPDATA = $cleanRoamingAppData
+          $env:CODEX_HOME = $cleanCodexHome
+          $env:CAM_PACKAGED_SMOKE_RUN = $runId
+          $env:CAM_PACKAGED_SMOKE_DATA_DIR = $cleanSmokeData
+          Write-Host "[clean-env] USERPROFILE=$env:USERPROFILE"
+          Write-Host "[clean-env] LOCALAPPDATA=$env:LOCALAPPDATA"
+          Write-Host "[clean-env] CODEX_HOME=$env:CODEX_HOME"
           & .\scripts\windows-packaged-smoke.ps1 `
             -Installer "${{ steps.artifact.outputs.installer }}" `
             -AuthenticodeMode $env:AUTHENTICODE_MODE
+          if (Test-Path -LiteralPath (Join-Path $cleanLocalAppData "Codex Manager")) {
+            throw "[clean-env] install directory still exists after uninstall"
+          }
+          if (Test-Path -LiteralPath $cleanSmokeData) {
+            Remove-Item -LiteralPath $cleanSmokeData -Recurse -Force -ErrorAction Stop
+          }
+          if (Test-Path -LiteralPath $cleanHome) {
+            Remove-Item -LiteralPath $cleanHome -Recurse -Force -ErrorAction Stop
+          }
+          Write-Host "[clean-env] clean user environment lifecycle passed"
 
       # Upload even when smoke fails so the built installer can be inspected.
       # Still requires the build/locate steps to have produced a setup.exe.
@@ -126,6 +152,6 @@ jobs:
         if: ${{ always() && steps.artifact.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
-          name: nsis-installer
+          name: windows-x64-test-installer
           path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
           if-no-files-found: error

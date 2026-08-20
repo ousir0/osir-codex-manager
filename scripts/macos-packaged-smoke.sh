@@ -220,6 +220,25 @@ end run
 APPLESCRIPT
 }
 
+window_visible() {
+  local pid=$1
+  osascript - "$pid" <<'APPLESCRIPT'
+on run argv
+  set targetPid to (item 1 of argv) as integer
+  tell application "System Events"
+    tell first application process whose unix id is targetPid
+      if not (exists window 1) then return false
+      try
+        return value of attribute "AXVisible" of window 1
+      on error
+        return true
+      end try
+    end tell
+  end tell
+end run
+APPLESCRIPT
+}
+
 assert_native_menu() {
   local pid=$1
   osascript - "$pid" "Codex Manager" "$EDIT_MENU" "$WINDOW_MENU" "$QUIT_ITEM" <<'APPLESCRIPT'
@@ -268,6 +287,8 @@ wait_for_window_state() {
     local actual=""
     if [[ "$probe" == "minimized" ]]; then
       actual=$(window_minimized "$pid" 2>/dev/null || true)
+    elif [[ "$probe" == "window" ]]; then
+      actual=$(window_visible "$pid" 2>/dev/null || true)
     else
       actual=$(process_visible "$pid" 2>/dev/null || true)
     fi
@@ -420,25 +441,27 @@ wait_for_window_state "$PID" visible true || fail "single-instance" "second laun
 [[ "$(process_count)" == "1" ]] || fail "single-instance" "hidden-state relaunch left more than one process"
 end_stage
 
-stage "close" "Exercise Cmd+W close interception after frontend readiness"
+stage "close" "Exercise Cmd+W hide-to-status-bar behavior after frontend readiness"
 send_command_shortcut "$PID" "w" || fail "close" "Cmd+W injection failed"
-wait_for_log "window close requested label=main" || fail "close" "window CloseRequested was not observed"
-wait_for_log_count "shell event emitted kind=confirm-quit" 1 || fail "close" "close confirmation event was not delivered"
-kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of waiting for close confirmation"
-send_escape "$PID" || fail "close" "could not dismiss close confirmation"
+wait_for_log "menu close requested id=cam-close" || fail "close" "Cmd+W did not route through the native close menu item"
+wait_for_log "window hidden to macOS status bar" || fail "close" "window was not hidden to the macOS status bar"
+kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of staying resident"
+launch_app
+wait_for_log_count "single-instance activation requested" 3 || fail "close" "status-bar resident app did not restore on relaunch"
+wait_for_window_state "$PID" window true || fail "close" "resident app did not restore the hidden window"
 end_stage
 
 stage "quit" "Exercise Cmd+Q accelerator and the native menu Quit item"
 send_command_shortcut "$PID" "q" || fail "quit" "Cmd+Q injection failed"
 wait_for_log_count "menu quit requested id=cam-quit" 1 || fail "quit" "Cmd+Q did not route through custom menu handler"
-wait_for_log_count "shell event emitted kind=confirm-quit" 2 || fail "quit" "Cmd+Q did not deliver a confirmation event"
+wait_for_log_count "shell event emitted kind=confirm-quit" 1 || fail "quit" "Cmd+Q did not deliver a confirmation event"
 kill -0 "$PID" 2>/dev/null || fail "quit" "Cmd+Q bypassed the confirmation guard"
 send_escape "$PID" || fail "quit" "could not dismiss Cmd+Q confirmation"
 
 click_quit_menu "$PID" || fail "quit" "native Quit menu click failed"
 wait_for_log_count "menu quit requested id=cam-quit" 2 || fail "quit" "menu click did not route through custom menu handler"
-wait_for_log_count "shell event emitted kind=confirm-quit" 3 || fail "quit" "menu Quit did not deliver a confirmation event"
+wait_for_log_count "shell event emitted kind=confirm-quit" 2 || fail "quit" "menu Quit did not deliver a confirmation event"
 kill -0 "$PID" 2>/dev/null || fail "quit" "menu Quit bypassed the confirmation guard"
 end_stage
 
-echo "macOS packaged smoke passed: bundle → locale/menu → IPC/CSP → single-instance restore → close → Cmd+Q/menu Quit"
+echo "macOS packaged smoke passed: bundle → locale/menu → IPC/CSP → single-instance restore → Cmd+W resident hide → Cmd+Q/menu Quit"

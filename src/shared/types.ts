@@ -748,6 +748,39 @@ export interface OpenCodexStatus {
   routes: OpenCodexRoute[];
   backupAvailable: boolean;
   error: string | null;
+  connectionStatus: "notConnected" | "connected" | "error" | "signedOut";
+  account: OpenCodexAccountSummary | null;
+  environment?: OpenCodexEnvironmentStatus;
+}
+
+export interface OpenCodexEnvironmentStatus {
+  platform: string;
+  architecture: string;
+  supported: boolean;
+  runtimeState: "managed" | "privateNpm" | "system" | "node" | "missing" | "unsupported";
+  installStrategy: "reuse" | "managedComponent" | "privateNpm" | "unavailable";
+  nodeVersion: string | null;
+  npmAvailable: boolean;
+  detail: string;
+}
+
+export interface OpenCodexAccountSummary {
+  userId: number;
+  displayName?: string | null;
+  email?: string | null;
+  balance: number;
+  subscriptions: OpenCodexSubscriptionSummary[];
+}
+
+export interface OpenCodexSubscriptionSummary {
+  id: number;
+  groupName?: string | null;
+  status: string;
+  expiresAt?: string | null;
+  daysRemaining: number;
+  monthlyUsedUsd: number;
+  monthlyLimitUsd: number;
+  monthlyRemainingUsd: number;
 }
 
 export interface OpenCodexRouteInput {

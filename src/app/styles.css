@@ -3315,6 +3315,701 @@ button.row.danger:hover {
   }
 }
 
+/* ── Unified configuration workbench ───────────────────────────────────── */
+.config-workbench-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.config-workbench-top {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 10px;
+  padding: 10px 14px 0;
+}
+.config-workbench {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 12px 14px 24px;
+  overflow-y: auto;
+}
+.config-workbench > * {
+  min-width: 0;
+}
+.config-overview {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid color-mix(in oklch, var(--accent) 25%, var(--line));
+  border-radius: var(--r-xl);
+  background:
+    radial-gradient(circle at 92% 12%, color-mix(in oklch, var(--accent) 14%, transparent), transparent 38%),
+    linear-gradient(135deg, var(--surface-top), var(--surface));
+  box-shadow: var(--elev-2);
+}
+.config-overview::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.11;
+  background-image:
+    linear-gradient(color-mix(in oklch, var(--accent) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--accent) 22%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(100deg, transparent 20%, black);
+}
+.config-overview-main,
+.config-overview-metrics {
+  position: relative;
+  z-index: 1;
+}
+.config-overview-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.config-mode-mark {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--accent) 34%, var(--line));
+  border-radius: 15px;
+  background: color-mix(in oklch, var(--accent) 12%, var(--surface-2));
+  color: var(--accent-deep);
+  box-shadow: var(--elev-1);
+}
+.config-mode-mark svg {
+  width: 20px;
+  height: 20px;
+}
+.config-overview-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+.config-overview-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.config-overview-title h1 {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 28px);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+.config-call-path {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-call-path svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+.config-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.config-summary-item {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-height: 62px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in oklch, var(--line) 80%, transparent);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface-2) 82%, transparent);
+}
+.config-summary-item > span {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 700;
+}
+.config-summary-item > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-summary-item > small {
+  color: var(--text-faint);
+  font-size: 9.5px;
+}
+.config-status-badge {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.config-status-badge svg {
+  width: 13px;
+  height: 13px;
+}
+.config-status-badge.ok {
+  border-color: color-mix(in oklch, var(--success) 32%, var(--line));
+  background: var(--success-tint);
+  color: var(--success-deep);
+}
+.config-status-badge.warn {
+  border-color: color-mix(in oklch, var(--amber) 36%, var(--line));
+  background: var(--amber-tint);
+  color: var(--amber-deep);
+}
+.config-status-badge.error {
+  border-color: color-mix(in oklch, var(--danger) 32%, var(--line));
+  background: var(--danger-tint);
+  color: var(--danger-deep);
+}
+.config-module-tabs {
+  width: 100%;
+}
+.config-module-tabs-frame {
+  min-width: 0;
+  padding-bottom: 1px;
+}
+.config-module-panel {
+  width: min(1120px, 100%);
+  margin-inline: auto;
+  display: grid;
+  align-content: start;
+  gap: 13px;
+  min-width: 0;
+}
+.config-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.config-mode-option {
+  position: relative;
+  min-width: 0;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+.config-mode-option:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--accent) 38%, var(--line));
+}
+.config-mode-option.active {
+  border-color: color-mix(in oklch, var(--accent) 54%, var(--line));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 14%, transparent);
+}
+.config-mode-option-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+}
+.config-mode-option.active .config-mode-option-icon {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+.config-mode-option > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+.config-mode-option strong,
+.config-mode-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-mode-option strong {
+  font-size: var(--fs-sm);
+}
+.config-mode-option small {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.config-current-dot {
+  position: absolute;
+  top: 8px;
+  right: 9px;
+  color: var(--accent-deep);
+  font-size: 9px;
+  font-weight: 800;
+}
+.config-connection-layout,
+.config-tools-grid {
+  display: grid;
+  gap: 12px;
+}
+.config-feature-card,
+.config-list-card {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--surface-top), var(--surface));
+  box-shadow: var(--elev-1);
+}
+.config-card-head {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.config-card-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.config-card-head h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-lg);
+  letter-spacing: -0.02em;
+}
+.config-card-head p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.config-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.config-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+.config-resource-list {
+  display: grid;
+  gap: 7px;
+}
+.config-resource-row {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: start;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease), transform 0.14s var(--ease);
+}
+button.config-resource-row {
+  cursor: pointer;
+}
+button.config-resource-row:hover,
+.config-resource-row.active {
+  border-color: color-mix(in oklch, var(--accent) 40%, var(--line));
+  background: color-mix(in oklch, var(--accent) 7%, var(--surface-2));
+}
+button.config-resource-row:hover {
+  transform: translateY(-1px);
+}
+.config-resource-row.static {
+  padding-right: 7px;
+}
+.config-resource-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+.config-resource-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-family: var(--mono);
+  font-weight: 800;
+}
+.config-resource-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+.config-resource-copy strong,
+.config-resource-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-resource-copy strong {
+  font-size: var(--fs-sm);
+}
+.config-resource-copy span {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.config-feature-grid-six {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.config-tool-card {
+  align-self: start;
+}
+.config-diagnostic-list {
+  display: grid;
+  border-block: 1px solid var(--line);
+}
+.config-diagnostic-list > div {
+  min-width: 0;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(92px, 0.35fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+}
+.config-diagnostic-list > div + div {
+  border-top: 1px solid var(--line);
+}
+.config-diagnostic-list span {
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+.config-diagnostic-list strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-dialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  min-height: 0;
+  text-align: start;
+}
+.config-dialog-head {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.config-dialog-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.config-dialog-head h2,
+.config-confirm-dialog h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-h2);
+  letter-spacing: -0.025em;
+}
+.config-dialog-body {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.config-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+.config-dialog-form {
+  display: grid;
+  gap: 11px;
+}
+.config-dialog-form.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.config-dialog-intro {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  line-height: 1.55;
+}
+.config-step-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.config-step-track span {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--line-2);
+}
+.config-step-track span.active {
+  background: var(--accent);
+}
+.config-provider-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.config-provider-choice {
+  position: relative;
+  min-width: 0;
+  min-height: 122px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: start;
+}
+.config-provider-choice.active,
+.config-provider-choice:hover {
+  border-color: color-mix(in oklch, var(--accent) 50%, var(--line));
+  background: color-mix(in oklch, var(--accent) 8%, var(--surface-2));
+}
+.config-provider-choice > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-family: var(--mono);
+  font-weight: 800;
+}
+.config-provider-choice strong,
+.config-provider-choice small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-provider-choice small {
+  color: var(--text-faint);
+  font-size: 9.5px;
+}
+.config-provider-choice em {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  color: var(--accent-deep);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+.config-connection-preview {
+  display: grid;
+  gap: 5px;
+  padding: 11px;
+  border-left: 2px solid var(--accent);
+  background: var(--accent-tint);
+}
+.config-connection-preview span,
+.config-connection-preview small {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.config-connection-preview strong {
+  overflow-wrap: anywhere;
+  font-size: var(--fs-label);
+}
+.config-dialog-switches {
+  display: grid;
+  border-block: 1px solid var(--line);
+}
+.config-dialog-switches > div,
+.config-inline-switch {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 2px;
+}
+.config-dialog-switches > div + div {
+  border-top: 1px solid var(--line);
+}
+.config-dialog-switches > div > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.config-dialog-switches small {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.config-credential-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.config-confirm-dialog {
+  display: grid;
+  gap: 13px;
+  text-align: start;
+}
+.config-confirm-dialog p {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  line-height: 1.55;
+}
+.config-confirm-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+.config-confirm-icon.danger {
+  background: var(--danger-tint);
+  color: var(--danger-deep);
+}
+:root[data-window-mode="expanded"] .config-workbench {
+  gap: 16px;
+  padding: 20px 24px 32px;
+}
+:root[data-window-mode="expanded"] .config-workbench-top {
+  gap: 12px;
+  padding: 18px 24px 0;
+}
+:root[data-window-mode="expanded"] .config-overview {
+  grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+  align-items: center;
+  padding: 21px 22px;
+}
+:root[data-window-mode="expanded"] .config-overview-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+:root[data-window-mode="expanded"] .config-connection-layout,
+:root[data-window-mode="expanded"] .config-tools-grid {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+}
+:root[data-window-mode="expanded"] .config-feature-grid-six {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+:root[data-window-mode="expanded"] .sheet-frame.sheet-centerable:has(.config-dialog.wide) {
+  width: min(760px, 100%);
+  max-height: min(90%, calc(100% - 2 * var(--space-md)));
+}
+:root[data-window-mode="expanded"] .sheet-frame.sheet-centerable:has(.config-editor) {
+  width: min(900px, 100%);
+}
+@media (max-width: 560px) {
+  .config-mode-switch,
+  .config-feature-grid,
+  .config-dialog-form.two-columns,
+  .config-provider-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .config-overview-title,
+  .config-card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .config-card-head .btn,
+  .config-card-head .config-status-badge {
+    align-self: flex-start;
+  }
+  .config-diagnostic-list > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .config-diagnostic-list > div > span {
+    grid-column: 1 / -1;
+  }
+  .config-dialog-actions .btn,
+  .config-card-actions .btn {
+    flex: 1 1 auto;
+  }
+  .config-resource-row .tag {
+    display: none;
+  }
+}
+
 /* ── Banner / note ───────────────────────────────────────────────────────── */
 .banner {
   display: flex;
@@ -3758,6 +4453,29 @@ button.row.danger:hover {
 .sheet-frame.is-closing {
   animation: sheet-sink 0.24s var(--ease-out) forwards;
 }
+.scrim.sheet-centered,
+.quit-scrim.sheet-centered {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+.sheet-frame.sheet-centered {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: min(560px, 100%);
+  max-height: min(88%, calc(100% - 2 * var(--space-md)));
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xl);
+  animation: modal-pop 0.26s var(--ease-sheet) both;
+}
+.sheet-frame.sheet-centered::after {
+  display: none;
+}
+.sheet-frame.sheet-centered.is-closing {
+  animation: modal-pop-out 0.2s var(--ease-out) forwards;
+}
 /* Expanded workbench: an opted-in Sheet (theme details) becomes a centered
    modal instead of a bottom sheet. The compact popover keeps the sheet form. */
 :root[data-window-mode="expanded"] .scrim.sheet-centerable {
@@ -3805,6 +4523,10 @@ button.row.danger:hover {
   .sheet-frame.is-closing,
   :root[data-window-mode="expanded"] .sheet-frame.sheet-centerable,
   :root[data-window-mode="expanded"] .sheet-frame.sheet-centerable.is-closing {
+    animation: none;
+  }
+  .sheet-frame.sheet-centered,
+  .sheet-frame.sheet-centered.is-closing {
     animation: none;
   }
 }
@@ -5029,10 +5751,123 @@ button.row.danger:hover {
   color: var(--text-soft);
   font-size: var(--fs-caption);
 }
+.multi-model-account-card {
+  display: grid;
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: linear-gradient(135deg, color-mix(in oklch, var(--surface-top) 88%, var(--accent-tint)), var(--surface));
+  box-shadow: var(--elev-1);
+}
+.multi-model-account-card.status-connected { border-color: color-mix(in oklch, var(--success) 42%, var(--line)); }
+.multi-model-account-card.status-error { border-color: color-mix(in oklch, #f59e0b 48%, var(--line)); }
+.multi-model-account-card.status-signedOut { opacity: .82; }
+.multi-model-account-status { display: flex; align-items: center; gap: 11px; }
+.multi-model-account-status > .multi-model-account-connect {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-status {
+  min-height: 38px;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-subline {
+  display: none;
+}
+.multi-model-account-card:not(.status-connected) {
+  gap: 0;
+}
+.multi-model-account-card:not(.status-connected) .multi-model-account-icon {
+  width: 30px;
+  height: 30px;
+}
+.multi-model-account-status > div { display: grid; gap: 3px; min-width: 0; }
+.multi-model-account-status strong { font-size: 14px; letter-spacing: -.01em; }
+.multi-model-account-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: var(--accent-tint); color: var(--accent); }
+.status-connected .multi-model-account-icon { background: color-mix(in oklch, var(--success) 15%, transparent); color: var(--success); }
+.status-error .multi-model-account-icon { background: color-mix(in oklch, #f59e0b 15%, transparent); color: #d97706; }
+.multi-model-account-subline { color: var(--text-faint); font-size: 11px; line-height: 1.45; }
+.multi-model-account-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.multi-model-account-details > div { display: grid; gap: 4px; min-width: 0; padding: 10px; border-radius: 11px; background: color-mix(in oklch, var(--surface-2) 78%, transparent); }
+.multi-model-account-details span { color: var(--text-faint); font-size: 10px; }
+.multi-model-account-details strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.multi-model-account-progress { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; color: var(--text-soft); font-size: 10.5px; }
+.multi-model-account-progress > div { grid-column: 1 / -1; height: 5px; overflow: hidden; border-radius: 99px; background: var(--line); }
+.multi-model-account-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--success)); }
+.multi-model-connection-state { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 7px 11px; border: 1px solid color-mix(in oklch, var(--success) 36%, var(--line)); border-radius: 999px; color: var(--success); background: color-mix(in oklch, var(--success) 9%, transparent); font-size: 12px; font-weight: 750; }
+.multi-model-connection-state small { color: var(--text-faint); font-weight: 500; }
+.multi-model-state-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in oklch, currentColor 15%, transparent); }
 .multi-model-notice svg {
   width: 15px;
   height: 15px;
   color: var(--accent);
+}
+.manager-update-toast {
+  position: fixed;
+  z-index: 80;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, var(--line));
+  border-radius: 13px;
+  background: var(--surface-top);
+  box-shadow: var(--elev-3);
+  color: var(--text-soft);
+  font-size: 11px;
+}
+.manager-update-toast button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.manager-update-version {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.multi-model-environment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface-2) 78%, transparent);
+}
+.multi-model-environment > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.multi-model-environment strong {
+  font-size: 12px;
+}
+.multi-model-environment > div > span:last-child {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.multi-model-environment-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #b45309;
+  background: color-mix(in oklch, #f59e0b 14%, transparent);
+  font-size: 10px;
+  font-weight: 750;
+}
+.multi-model-environment-badge.ready {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 13%, transparent);
 }
 .multi-model-steps {
   display: grid;

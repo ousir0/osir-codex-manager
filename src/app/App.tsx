@@ -13,6 +13,7 @@ import { About } from "./views/About";
 import { Uninstall } from "./views/Uninstall";
 import { CodexConfig } from "./views/CodexConfig";
 import { CodexThemes } from "./views/CodexThemes";
+import { ManagerUpdateProvider } from "./ManagerUpdateProvider";
 
 type View = "home" | "settings" | "about" | "uninstall" | "config" | "themes";
 
@@ -133,7 +134,9 @@ export function App() {
       <I18nProvider>
         <WindowModeProvider>
           <ErrorBoundary>
-            <Shell />
+            <ManagerUpdateProvider>
+              <Shell />
+            </ManagerUpdateProvider>
           </ErrorBoundary>
           <QuitConfirm />
         </WindowModeProvider>

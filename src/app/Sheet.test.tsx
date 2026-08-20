@@ -92,4 +92,16 @@ describe("Sheet", () => {
     expect(screen.getByRole("dialog", { name: "Danger zone" })).toBeInTheDocument();
     onError.mockRestore();
   });
+
+  it("can opt into a centered modal in compact windows", () => {
+    render(
+      <Sheet open centeredAlways labelledBy="centered-title" onDismiss={() => {}}>
+        <h3 id="centered-title">Centered</h3>
+      </Sheet>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Centered" });
+    expect(dialog.parentElement).toHaveClass("sheet-centered");
+    expect(dialog.parentElement?.parentElement).toHaveClass("sheet-centered");
+  });
 });

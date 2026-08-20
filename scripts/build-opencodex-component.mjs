@@ -23,6 +23,8 @@ const nodeArchives = {
   "darwin-x64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-darwin-x64.tar.gz`,
   "windows-x64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-win-x64.zip`,
   "windows-arm64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-win-arm64.zip`,
+  "linux-x64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-x64.tar.gz`,
+  "linux-arm64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-linux-arm64.tar.gz`,
 };
 
 if (!nodeArchives[target]) throw new Error(`unsupported component target: ${target}`);
@@ -62,7 +64,7 @@ if (target.startsWith("windows-")) {
 
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 const installArgs = ["install", "--prefix", packageRoot, "--omit=dev", `@bitkyc08/opencodex@${version}`];
-const targetOs = target.startsWith("windows-") ? "win32" : "darwin";
+const targetOs = target.startsWith("windows-") ? "win32" : target.startsWith("linux-") ? "linux" : "darwin";
 const targetCpu = target.endsWith("arm64") ? "arm64" : "x64";
 installArgs.push("--os=" + targetOs, "--cpu=" + targetCpu);
 run(npm, installArgs, { env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" } });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,23 +13,24 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
   return {
     ...actual,
     managerApi: {
+      ...actual.managerApi,
       codexConfigGet: vi.fn(),
       codexConfigFetchModels: vi.fn(),
+      codexConfigFetchImageModels: vi.fn(),
       codexConfigValidate: vi.fn(),
       codexConfigSaveRaw: vi.fn(),
       codexConfigSaveBasic: vi.fn(),
       codexConfigSetApiKey: vi.fn(),
       codexConfigDeleteApiKey: vi.fn(),
+      codexConfigSetImageGenerationApiKey: vi.fn(),
+      codexConfigDeleteImageGenerationApiKey: vi.fn(),
       codexConfigUpsertMcp: vi.fn(),
       codexConfigDeleteMcp: vi.fn(),
       codexConfigRestoreBackup: vi.fn(),
       openCodexStatus: vi.fn(),
       openCodexInstall: vi.fn(),
       openCodexStart: vi.fn(),
-      openCodexConnectOsir: vi.fn(),
-      openCodexSave: vi.fn(),
-      openCodexSync: vi.fn(),
-      openCodexRestore: vi.fn(),
+      openCodexConnectOsirOAuth: vi.fn(),
       openCodexHome: vi.fn(),
     },
   };
@@ -56,305 +57,203 @@ API_KEY = "secret-value"
   return {
     path: "C:\\Users\\wei\\.codex\\config.toml",
     authPath: "C:\\Users\\wei\\.codex\\auth.json",
-    exists: true,
-    raw,
-    redactedRaw: raw.replace("secret-value", "********"),
-    parseError: null,
-    model: "gpt-5",
-    provider: "custom",
-    baseUrl: "https://old.example/v1",
-    reasoningEffort: "high",
-    personality: "pragmatic",
-    approvalPolicy: "never",
-    sandboxMode: "danger-full-access",
-    disableResponseStorage: true,
-    goalMode: true,
-    providers: [
-      {
-        id: "custom",
-        name: "Custom",
-        baseUrl: "https://old.example/v1",
-        wireApi: "responses",
-      },
-    ],
-    mcpServers: [
-      {
-        name: "demo",
-        enabled: true,
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "demo"],
-        url: null,
-        hasSensitiveValues: true,
-      },
-    ],
-    backupAvailable: true,
-    apiKeyConfigured: true,
-    authError: null,
-    codexRunning: false,
+    exists: true, raw, redactedRaw: raw.replace("secret-value", "********"), parseError: null,
+    model: "gpt-5", provider: "custom", baseUrl: "https://old.example/v1", reasoningEffort: "high", personality: "pragmatic", approvalPolicy: "never", sandboxMode: "danger-full-access", disableResponseStorage: true, goalMode: true,
+    providers: [{ id: "custom", name: "Custom", baseUrl: "https://old.example/v1", wireApi: "responses" }],
+    mcpServers: [{ name: "demo", enabled: true, transport: "stdio", command: "npx", args: ["-y", "demo"], url: null, hasSensitiveValues: true }],
+    backupAvailable: true, apiKeyConfigured: true, authError: null, codexRunning: false, imageGenerationApiKeyConfigured: false,
     ...overrides,
   };
 }
 
 function renderConfig() {
-  return render(
-    <ThemeProvider>
-      <I18nProvider>
-        <CodexConfig onBack={vi.fn()} />
-      </I18nProvider>
-    </ThemeProvider>,
-  );
+  return render(<ThemeProvider><I18nProvider><CodexConfig onBack={vi.fn()} /></I18nProvider></ThemeProvider>);
 }
 
-describe("Codex configuration manager", () => {
+describe("Codex configuration workbench", () => {
   beforeEach(() => {
     localStorage.setItem("cam.lang", "zh-CN");
     vi.clearAllMocks();
     api.codexConfigGet.mockResolvedValue(config());
     api.codexConfigFetchModels.mockResolvedValue(["gpt-5.6-sol", "gpt-5.6-terra"]);
+    api.codexConfigFetchImageModels.mockResolvedValue(["gpt-image-2"]);
     api.codexConfigValidate.mockResolvedValue({ valid: true, error: null });
+    api.codexConfigSaveBasic.mockImplementation(async (input) => config({ ...input }));
     api.codexConfigSaveRaw.mockImplementation(async (raw) => config({ raw, redactedRaw: raw }));
-    api.codexConfigSaveBasic.mockImplementation(async (input) =>
-      config({
-        model: input.model,
-        provider: input.provider,
-        baseUrl: input.baseUrl,
-        reasoningEffort: input.reasoningEffort,
-        personality: input.personality,
-        approvalPolicy: input.approvalPolicy,
-        sandboxMode: input.sandboxMode,
-        disableResponseStorage: input.disableResponseStorage,
-        goalMode: input.goalMode,
-      }),
-    );
     api.codexConfigSetApiKey.mockResolvedValue(config({ apiKeyConfigured: true }));
     api.codexConfigDeleteApiKey.mockResolvedValue(config({ apiKeyConfigured: false }));
+    api.codexConfigSetImageGenerationApiKey.mockResolvedValue(config({ imageGenerationApiKeyConfigured: true }));
+    api.codexConfigDeleteImageGenerationApiKey.mockResolvedValue(config({ imageGenerationApiKeyConfigured: false }));
     api.codexConfigUpsertMcp.mockResolvedValue(config());
     api.codexConfigDeleteMcp.mockResolvedValue(config({ mcpServers: [] }));
     api.codexConfigRestoreBackup.mockResolvedValue(config());
-    api.openCodexStatus.mockResolvedValue({
-      enabled: false,
-      installed: false,
-      version: null,
-      port: 10100,
-      serviceState: "missing",
-      codexProviderId: "opencodex",
-      configPath: "~/.opencodex/config.json",
-      catalogPath: "~/.codex/opencodex-catalog.json",
-      modelCount: 0,
-      routes: [],
-      backupAvailable: false,
-      error: null,
-    });
-    api.openCodexInstall.mockResolvedValue({
-      enabled: false,
-      installed: true,
-      version: "2.22.0",
-      port: 10100,
-      serviceState: "stopped",
-      codexProviderId: "opencodex",
-      configPath: "~/.opencodex/config.json",
-      catalogPath: "~/.codex/opencodex-catalog.json",
-      modelCount: 0,
-      routes: [],
-      backupAvailable: true,
-      error: null,
-    });
+    api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null });
+    api.openCodexInstall.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
     api.openCodexHome.mockResolvedValue();
   });
 
-  it("fills the OSIR provider preset and saves it as structured config", async () => {
+  it("shows a status-first overview and edits a provider in a dialog", async () => {
     const user = userEvent.setup();
     renderConfig();
-
-    await screen.findByDisplayValue("gpt-5");
-    await user.click(screen.getByRole("button", { name: /OSIR.*推荐/ }));
-
-    expect(screen.getByDisplayValue("osir")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://api.osirclaw.com/v1")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /保存基础配置/ }));
-
-    await waitFor(() =>
-      expect(api.codexConfigSaveBasic).toHaveBeenCalledWith({
-        model: "gpt-5",
-        provider: "osir",
-        baseUrl: "https://api.osirclaw.com/v1",
-        reasoningEffort: "high",
-        personality: "pragmatic",
-        approvalPolicy: "never",
-        sandboxMode: "danger-full-access",
-        disableResponseStorage: true,
-        goalMode: true,
-        imageGenerationCompatibility: false,
-      }),
-    );
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    expect(screen.getByText("当前调用路径：Codex → custom")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /OOSIR.*推荐/ }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "配置连接" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "下一步" }));
+    expect(screen.getByRole("textbox", { name: "模型" })).toHaveValue("gpt-5");
+    await user.click(screen.getByRole("button", { name: "保存并启用" }));
+    await waitFor(() => expect(api.codexConfigSaveBasic).toHaveBeenCalledWith(expect.objectContaining({ provider: "osir", baseUrl: "https://api.osirclaw.com/v1" })));
   });
 
-  it("lists multiple providers and switches the active draft without deleting the others", async () => {
-    const user = userEvent.setup();
-    api.codexConfigGet.mockResolvedValue(
-      config({
-        providers: [
-          {
-            id: "custom",
-            name: "Custom",
-            baseUrl: "https://old.example/v1",
-            wireApi: "responses",
-          },
-          {
-            id: "backup",
-            name: "Backup",
-            baseUrl: "https://backup.example/v1",
-            wireApi: "chat",
-          },
-        ],
-      }),
-    );
-    renderConfig();
-
-    await screen.findByDisplayValue("gpt-5");
-    expect(screen.getByText("已配置供应商")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Backup.*backup.*https:\/\/backup\.example/ }));
-    expect(screen.getByDisplayValue("backup")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("https://backup.example/v1")).toBeInTheDocument();
-  });
-
-  it("opens the multi-model workbench and starts the component install flow", async () => {
+  it("keeps OpenCodex as a separate connection workspace", async () => {
     const user = userEvent.setup();
     renderConfig();
-
-    await screen.findByDisplayValue("gpt-5");
-    await user.click(screen.getByText("多模型", { exact: true }));
-    expect(screen.getByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
+    expect(await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
     expect(screen.getByText("尚未安装 OpenCodex")).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "安装多模型组件" }));
+  it("prepares OpenCodex before opening a manual provider on a clean machine", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
+    await user.click(screen.getByRole("button", { name: /手动添加供应商/ }));
     await waitFor(() => expect(api.openCodexInstall).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("heading", { name: "手动添加供应商" })).toBeInTheDocument();
   });
 
-  it("allows saving while Codex is running and explains that restart is required", async () => {
-    const user = userEvent.setup();
-    api.codexConfigGet.mockResolvedValue(config({ codexRunning: true }));
-    api.codexConfigSaveBasic.mockImplementation(async (input) =>
-      config({ ...input, codexRunning: true }),
-    );
-    renderConfig();
-
-    const model = await screen.findByDisplayValue("gpt-5");
-    expect(screen.getByRole("status")).toHaveTextContent(/修改可以保存/);
-    expect(model).not.toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /保存基础配置/ }));
-
-    await waitFor(() => expect(api.codexConfigSaveBasic).toHaveBeenCalledOnce());
-    expect(screen.getByText("配置已保存；重启 Codex 后生效")).toBeInTheDocument();
-  });
-
-  it("keeps OSIR as the single recommended provider and places providers beside details", async () => {
-    renderConfig();
-    await screen.findByDisplayValue("gpt-5");
-
-    expect(screen.getByRole("button", { name: /OSIR.*推荐/ })).toBeInTheDocument();
-    expect(screen.getByText("推荐供应商")).toBeInTheDocument();
-    expect(screen.getByLabelText("已配置供应商")).toBeInTheDocument();
-    expect(screen.getByLabelText("当前供应商详情")).toBeInTheDocument();
-  });
-
-  it("fetches models from the selected provider and keeps the model editable", async () => {
+  it("shows the detected platform and automatic install strategy", async () => {
+    api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null, environment: { platform: "windows", architecture: "x86_64", supported: true, runtimeState: "missing", installStrategy: "managedComponent", nodeVersion: null, npmAvailable: false, detail: "可自动准备私有运行时" } });
     const user = userEvent.setup();
     renderConfig();
-
-    const model = await screen.findByLabelText("模型");
-    expect(model.tagName).toBe("INPUT");
-    await user.click(screen.getByRole("button", { name: "获取模型" }));
-    await waitFor(() =>
-      expect(api.codexConfigFetchModels).toHaveBeenCalledWith("https://old.example/v1"),
-    );
-    expect(screen.getByText("已获取 2 个模型")).toBeInTheDocument();
-
-    const modelSelect = screen.getByRole("combobox", { name: "模型" });
-    expect(modelSelect).toHaveValue("gpt-5");
-    await user.selectOptions(modelSelect, "gpt-5.6-sol");
-    expect(modelSelect).toHaveValue("gpt-5.6-sol");
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
+    expect(await screen.findByText("环境检测 · windows / x86_64")).toBeInTheDocument();
+    expect(screen.getByText("将下载当前平台自带运行时")).toBeInTheDocument();
   });
 
-  it("warns before saving the unrestricted no-approval combination", async () => {
+  it("opens the multi-model workspace when the managed OpenCodex state is enabled", async () => {
+    api.openCodexStatus.mockResolvedValue({ enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [{ id: "osirapi-openai", label: "GPT", adapter: "openai-responses", baseUrl: "https://api.osirclaw.com/v1", defaultModel: "gpt-5.6-sol", models: ["gpt-5.6-sol"], enabled: true, apiKeyConfigured: true, availability: "configured", locked: false }], backupAvailable: true, error: null, connectionStatus: "error", account: null });
     renderConfig();
-    await screen.findByDisplayValue("gpt-5");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/无需确认访问系统全部文件/);
+    expect(await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenCodex 多模型.*当前使用/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("masks raw secrets until the user explicitly reveals them", async () => {
+  it("edits Codex behavior from a focused dialog", async () => {
     const user = userEvent.setup();
     renderConfig();
-    await screen.findByDisplayValue("gpt-5");
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: "Codex 行为" }));
+    await user.click(screen.getByRole("button", { name: "编辑行为设置" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "推理等级" }), "medium");
+    await user.click(screen.getByRole("button", { name: "保存行为设置" }));
+    await waitFor(() => expect(api.codexConfigSaveBasic).toHaveBeenCalledWith(expect.objectContaining({ reasoningEffort: "medium" })));
+  });
 
-    await user.click(screen.getByRole("radio", { name: "高级" }));
+  it("manages MCP from a list and opens the editor as a dialog", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: /MCP 与工具/ }));
+    const panel = screen.getByRole("region", { name: "MCP 与工具" });
+    await user.click(within(panel).getAllByRole("button", { name: /demo/ })[0]);
+    expect(screen.getByRole("heading", { name: "demo" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await user.click(within(panel).getByRole("switch", { name: "启用 demo" }));
+    await waitFor(() => expect(api.codexConfigUpsertMcp).toHaveBeenCalledWith(expect.objectContaining({ originalName: "demo", enabled: false })));
+  });
+
+  it("keeps raw configuration masked until explicitly enabled", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: "高级与恢复" }));
+    await user.click(screen.getByRole("button", { name: "编辑原始配置" }));
     const editor = screen.getByRole("textbox", { name: "config.toml" });
     expect(editor).toHaveAttribute("readonly");
-    expect((editor as HTMLTextAreaElement).value).toContain("********");
-    expect((editor as HTMLTextAreaElement).value).not.toContain("secret-value");
-
-    await user.click(screen.getByRole("switch", { name: "显示敏感值" }));
+    expect(editor).not.toHaveValue(expect.stringContaining("secret-value"));
+    await user.click(screen.getByRole("switch", { name: "显示并编辑敏感值" }));
     expect(editor).not.toHaveAttribute("readonly");
     expect((editor as HTMLTextAreaElement).value).toContain("secret-value");
-  });
-
-  it("never refills a saved API Key and masks newly entered credentials", async () => {
-    const user = userEvent.setup();
-    renderConfig();
-    await screen.findByDisplayValue("gpt-5");
-
-    const input = screen.getByLabelText("API Key");
-    expect(input).toHaveAttribute("type", "password");
-    expect(input).toHaveValue("");
-    expect(screen.getByText("已配置")).toBeInTheDocument();
-
-    await user.type(input, "sk-new-secret");
-    await user.click(screen.getByRole("switch", { name: "显示正在输入的 API Key" }));
-    expect(input).toHaveAttribute("type", "text");
-    await user.click(screen.getByRole("button", { name: "保存 API Key" }));
-
-    await waitFor(() =>
-      expect(api.codexConfigSetApiKey).toHaveBeenCalledWith("sk-new-secret"),
-    );
-    expect(input).toHaveValue("");
-    expect(input).toHaveAttribute("type", "password");
   });
 
   it("requires confirmation before deleting the API Key", async () => {
     const user = userEvent.setup();
     renderConfig();
-    await screen.findByDisplayValue("gpt-5");
-
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: "管理 API Key" }));
     await user.click(screen.getByRole("button", { name: "删除 API Key" }));
     expect(api.codexConfigDeleteApiKey).not.toHaveBeenCalled();
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/从 auth\.json 删除/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "删除 API Key" });
+    expect(within(dialog).getByText(/确认删除 Codex API Key/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "删除 API Key" }));
-
     await waitFor(() => expect(api.codexConfigDeleteApiKey).toHaveBeenCalledOnce());
   });
 
-  it("sends a narrow MCP toggle update with the existing command fields", async () => {
+  it("opens an existing provider with its values in the connection dialog", async () => {
     const user = userEvent.setup();
     renderConfig();
-    await screen.findByDisplayValue("gpt-5");
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OOSIR.*推荐/ }));
+    expect(screen.getByRole("heading", { name: "配置连接" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("osir")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://api.osirclaw.com/v1")).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("radio", { name: "MCP (1)" }));
-    const panel = screen.getByRole("region", { name: "MCP" });
-    await user.click(within(panel).getByRole("switch"));
+  it("explains the restart requirement when Codex is running", async () => {
+    const user = userEvent.setup();
+    api.codexConfigGet.mockResolvedValue(config({ codexRunning: true }));
+    api.codexConfigSaveBasic.mockImplementation(async (input) => config({ ...input, codexRunning: true }));
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: "Codex 行为" }));
+    await user.click(screen.getByRole("button", { name: "编辑行为设置" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "推理等级" }), "medium");
+    await user.click(screen.getByRole("button", { name: "保存行为设置" }));
+    await waitFor(() => expect(screen.getByText("配置已保存；重启 Codex 后生效")).toBeInTheDocument());
+  });
 
-    await waitFor(() =>
-      expect(api.codexConfigUpsertMcp).toHaveBeenCalledWith({
-        originalName: "demo",
-        name: "demo",
-        enabled: false,
-        transport: "stdio",
-        command: "npx",
-        args: ["-y", "demo"],
-        url: null,
-      }),
-    );
+  it("never fills a saved credential and only reveals a newly entered key", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: "管理 API Key" }));
+    const input = screen.getByLabelText("API Key");
+    expect(input).toHaveValue("");
+    expect(input).toHaveAttribute("type", "password");
+    fireEvent.change(input, { target: { value: "sk-new-secret" } });
+    await user.click(screen.getByRole("switch", { name: "显示正在输入的 API Key" }));
+    expect(input).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "保存 API Key" }));
+    await waitFor(() => expect(api.codexConfigSetApiKey).toHaveBeenCalledWith("sk-new-secret"));
+  });
+
+  it("protects unsaved behavior edits before closing the dialog", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: "Codex 行为" }));
+    await user.click(screen.getByRole("button", { name: "编辑行为设置" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "推理等级" }), "medium");
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.getByRole("heading", { name: "放弃未保存的修改？" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "放弃修改" }));
+    await user.click(screen.getByRole("button", { name: "编辑行为设置" }));
+    expect(screen.getByRole("combobox", { name: "推理等级" })).toHaveValue("high");
+  });
+
+  it("opens image generation as an independent tool dialog", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("radio", { name: /MCP 与工具/ }));
+    await user.click(screen.getByRole("button", { name: "配置图片生成" }));
+    expect(screen.getByRole("heading", { name: "配置图片生成" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("gpt-image-2")).toBeInTheDocument();
   });
 });

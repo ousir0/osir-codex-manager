@@ -21,6 +21,7 @@ export function Sheet({
   describedBy,
   initialFocus = "dismiss",
   centeredInExpanded = false,
+  centeredAlways = false,
   children,
 }: {
   open: boolean;
@@ -33,6 +34,8 @@ export function Sheet({
   /** In the expanded workbench, render as a centered modal instead of a bottom
    *  sheet. Ignored in compact mode (always a sheet there). */
   centeredInExpanded?: boolean;
+  /** Render as a centered modal in both compact and expanded windows. */
+  centeredAlways?: boolean;
   children: ReactNode;
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -95,7 +98,7 @@ export function Sheet({
     // chrome, not a control.
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
     <div
-      className={`${scrimClass}${centeredInExpanded ? " sheet-centerable" : ""}${closing ? " is-closing" : ""}`}
+      className={`${scrimClass}${centeredInExpanded ? " sheet-centerable" : ""}${centeredAlways ? " sheet-centered" : ""}${closing ? " is-closing" : ""}`}
       onClick={dismiss}
     >
       {/* onClick here is pure event plumbing — it stops a click INSIDE the sheet
@@ -103,7 +106,7 @@ export function Sheet({
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
       <div
         ref={frameRef}
-        className={`sheet-frame${centeredInExpanded ? " sheet-centerable" : ""}${closing ? " is-closing" : ""}`}
+        className={`sheet-frame${centeredInExpanded ? " sheet-centerable" : ""}${centeredAlways ? " sheet-centered" : ""}${closing ? " is-closing" : ""}`}
         onClick={(event) => event.stopPropagation()}
       >
         <div
