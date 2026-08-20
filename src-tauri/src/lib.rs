@@ -1116,6 +1116,8 @@ pub fn run() {
                         if let Err(error) = window.hide() {
                             log::warn!("menu close failed error={error}");
                             request_main_window_attention(app, "menu-close-failed");
+                        } else {
+                            log::info!("window hidden to macOS status bar");
                         }
                     } else {
                         log::error!("menu close failed error=window-missing");
