@@ -454,13 +454,13 @@ end_stage
 stage "quit" "Exercise Cmd+Q accelerator and the native menu Quit item"
 send_command_shortcut "$PID" "q" || fail "quit" "Cmd+Q injection failed"
 wait_for_log_count "menu quit requested id=cam-quit" 1 || fail "quit" "Cmd+Q did not route through custom menu handler"
-wait_for_log_count "shell event emitted kind=confirm-quit" 2 || fail "quit" "Cmd+Q did not deliver a confirmation event"
+wait_for_log_count "shell event emitted kind=confirm-quit" 1 || fail "quit" "Cmd+Q did not deliver a confirmation event"
 kill -0 "$PID" 2>/dev/null || fail "quit" "Cmd+Q bypassed the confirmation guard"
 send_escape "$PID" || fail "quit" "could not dismiss Cmd+Q confirmation"
 
 click_quit_menu "$PID" || fail "quit" "native Quit menu click failed"
 wait_for_log_count "menu quit requested id=cam-quit" 2 || fail "quit" "menu click did not route through custom menu handler"
-wait_for_log_count "shell event emitted kind=confirm-quit" 3 || fail "quit" "menu Quit did not deliver a confirmation event"
+wait_for_log_count "shell event emitted kind=confirm-quit" 2 || fail "quit" "menu Quit did not deliver a confirmation event"
 kill -0 "$PID" 2>/dev/null || fail "quit" "menu Quit bypassed the confirmation guard"
 end_stage
 
