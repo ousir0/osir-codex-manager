@@ -220,6 +220,25 @@ end run
 APPLESCRIPT
 }
 
+window_visible() {
+  local pid=$1
+  osascript - "$pid" <<'APPLESCRIPT'
+on run argv
+  set targetPid to (item 1 of argv) as integer
+  tell application "System Events"
+    tell first application process whose unix id is targetPid
+      if not (exists window 1) then return false
+      try
+        return value of attribute "AXVisible" of window 1
+      on error
+        return true
+      end try
+    end tell
+  end tell
+end run
+APPLESCRIPT
+}
+
 assert_native_menu() {
   local pid=$1
   osascript - "$pid" "Codex Manager" "$EDIT_MENU" "$WINDOW_MENU" "$QUIT_ITEM" <<'APPLESCRIPT'
@@ -268,6 +287,8 @@ wait_for_window_state() {
     local actual=""
     if [[ "$probe" == "minimized" ]]; then
       actual=$(window_minimized "$pid" 2>/dev/null || true)
+    elif [[ "$probe" == "window" ]]; then
+      actual=$(window_visible "$pid" 2>/dev/null || true)
     else
       actual=$(process_visible "$pid" 2>/dev/null || true)
     fi
@@ -424,11 +445,11 @@ stage "close" "Exercise Cmd+W hide-to-status-bar behavior after frontend readine
 send_command_shortcut "$PID" "w" || fail "close" "Cmd+W injection failed"
 wait_for_log "menu close requested id=cam-close" || fail "close" "Cmd+W did not route through the native close menu item"
 wait_for_log "window hidden to macOS status bar" || fail "close" "window was not hidden to the macOS status bar"
-wait_for_window_state "$PID" visible false || fail "close" "Cmd+W did not hide the main window"
+wait_for_window_state "$PID" window false || fail "close" "Cmd+W did not hide the main window"
 kill -0 "$PID" 2>/dev/null || fail "close" "process exited instead of staying resident"
 launch_app
 wait_for_log_count "single-instance activation requested" 3 || fail "close" "status-bar resident app did not restore on relaunch"
-wait_for_window_state "$PID" visible true || fail "close" "resident app did not restore the hidden window"
+wait_for_window_state "$PID" window true || fail "close" "resident app did not restore the hidden window"
 end_stage
 
 stage "quit" "Exercise Cmd+Q accelerator and the native menu Quit item"
