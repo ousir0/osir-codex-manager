@@ -135,12 +135,10 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
     setOauthError(null);
     try {
       const next = await managerApi.openCodexConnectOsirOAuth();
-      if (next.connectionStatus !== "connected" || !next.account) {
-        throw new Error(
-          "OSIRAPI 授权已完成，但账户信息没有返回到本地。请重新连接；如果仍失败，请检查 OSIRAPI 桌面兑换接口。",
-        );
-      }
       setStatus(next);
+      if (next.connectionStatus !== "connected" || !next.account) {
+        throw new Error(next.error || "OSIRAPI 授权已完成，但本机服务、账户或默认模型路由验证未通过。请按提示重试。");
+      }
       setNotice("OSIRAPI 已授权，账户与模型状态已同步。");
       setConnectionMode(null);
       setOauthSuccess(next);
@@ -149,6 +147,18 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
     } finally {
       setBusy(null);
     }
+  };
+
+  const openManualConnection = async () => {
+    setCustomEnabled(true);
+    if (!status?.installed) {
+      const next = await run("install", () => managerApi.openCodexInstall(), "OpenCodex 已安装；可以添加自定义供应商。");
+      if (!next) return;
+    } else if (status.serviceState !== "ready") {
+      const next = await run("start", () => managerApi.openCodexStart(), "OpenCodex 已启动；可以添加自定义供应商。");
+      if (!next) return;
+    }
+    setConnectionMode("manual");
   };
 
   const displayRoutes = status?.routes.length
@@ -169,9 +179,21 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
   const canSave = osirReady || customReady;
   const stageIndex = !status || !installed ? 0 : !status.enabled ? 1 : status.modelCount === 0 ? 2 : 3;
   const connectionStatus = status?.connectionStatus || "notConnected";
+  const environment = status?.environment;
   const account = status?.account;
   const activeSubscription = account?.subscriptions?.[0];
   const formatUsd = (value: number) => `$${value.toFixed(2)}`;
+  const environmentLabel = environment?.runtimeState === "managed"
+    ? "已发现 Manager 自带运行时"
+    : environment?.runtimeState === "system"
+      ? "已发现系统 OpenCodex"
+      : environment?.installStrategy === "privateNpm"
+        ? "将复用本机 Node/npm（安装到 Manager 私有目录）"
+        : environment?.installStrategy === "managedComponent"
+          ? "将下载当前平台自带运行时"
+          : environment?.runtimeState === "unsupported"
+            ? "当前系统或 CPU 暂无可用安装包"
+            : "等待环境检测";
 
   const selectCurrentRoute = async () => {
     if (!status?.enabled) {
@@ -245,15 +267,18 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
           <div className="multi-model-kicker"><span className="multi-model-kicker-dot" />OPENCODEX / MULTI-MODEL<span className="multi-model-prototype-chip">可操作预览</span></div>
           <h1>把所有模型，装进 Codex 选择器。</h1>
           <p>用一个简单的连接流程，把 GPT、Claude、Grok 和其他供应商的模型放进 Codex 的原生选择器。</p>
-          <div className="multi-model-hero-actions" aria-hidden="true" />
+          <div className="multi-model-hero-actions">
+            {connectionStatus === "connected" ? <div className="multi-model-connection-state connected"><span className="multi-model-state-dot" />OSIRAPI 已连接 <small>{account?.displayName || account?.email || "订阅账户"}</small></div> : <button className="btn primary multi-model-primary" type="button" disabled={Boolean(busy)} onClick={connect}><Icon name={busy === "install" ? "loader" : connectionStatus === "error" ? "refresh" : "globe"} />{!installed ? "安装多模型组件" : connectionStatus === "error" ? "重新连接" : connectionStatus === "signedOut" ? "重新登录 OSIRAPI" : "连接 OSIRAPI"}</button>}
+          </div>
         </div>
         <div className="multi-model-orbit" aria-hidden="true"><div className="multi-model-orbit-ring ring-one" /><div className="multi-model-orbit-ring ring-two" /><div className="multi-model-orbit-core"><span className="multi-model-core-mark">C</span><span>CODEX</span></div><span className="multi-model-orbit-node node-gpt">G</span><span className="multi-model-orbit-node node-claude">C</span><span className="multi-model-orbit-node node-grok">X</span></div>
       </div>
 
       <div className="multi-model-notice" role="status"><Icon name="info" /><span>{notice}</span></div>
+      {environment ? <section className="multi-model-environment" aria-label="OpenCodex 环境检测"><div><span className="multi-model-label">环境检测 · {environment.platform} / {environment.architecture}</span><strong>{environmentLabel}</strong><span>{environment.detail}</span></div><span className={environment.supported ? "multi-model-environment-badge ready" : "multi-model-environment-badge"}>{environment.supported ? "支持" : "需处理"}</span></section> : null}
 
       <section className={"multi-model-account-card status-" + connectionStatus} aria-label="OSIRAPI 连接状态">
-        <div className="multi-model-account-status"><span className="multi-model-account-icon"><Icon name={connectionStatus === "connected" ? "check" : connectionStatus === "error" ? "alert" : "globe"} /></span><div><span className="multi-model-label">OSIRAPI 连接状态</span><strong>{connectionStatus === "connected" ? "已连接，可使用订阅模型" : connectionStatus === "error" ? "连接异常，需要重新检查" : connectionStatus === "signedOut" ? "已退出连接" : "尚未连接"}</strong><span className="multi-model-account-subline">{connectionStatus === "connected" ? "浏览器授权、订阅 Key 和本地模型目录均已同步" : connectionStatus === "error" ? "OpenCodex 或模型目录当前不可用" : connectionStatus === "signedOut" ? "本机仍保留历史配置，重新登录后可恢复" : "连接后会自动读取用户与订阅信息"}</span></div><button className="btn primary compact multi-model-account-connect" type="button" disabled={Boolean(busy)} onClick={() => connectionStatus === "connected" ? setConnectionMode("osir") : connect()}><Icon name={busy ? "loader" : connectionStatus === "connected" ? "sliders" : connectionStatus === "error" ? "refresh" : "globe"} />{connectionStatus === "connected" ? "管理连接" : connectionStatus === "error" ? "重新连接" : connectionStatus === "signedOut" ? "重新登录" : !installed ? "安装并连接" : "连接 OSIRAPI"}</button></div>
+        <div className="multi-model-account-status"><span className="multi-model-account-icon"><Icon name={connectionStatus === "connected" ? "check" : connectionStatus === "error" ? "alert" : "globe"} /></span><div><span className="multi-model-label">OSIRAPI 连接状态</span><strong>{connectionStatus === "connected" ? "已连接，可使用订阅模型" : connectionStatus === "error" ? "连接异常，需要重新检查" : connectionStatus === "signedOut" ? "已退出连接" : "尚未连接"}</strong><span className="multi-model-account-subline">{connectionStatus === "connected" ? "浏览器授权、订阅 Key 和本地模型目录均已同步" : connectionStatus === "error" ? "OpenCodex 或模型目录当前不可用" : connectionStatus === "signedOut" ? "本机仍保留历史配置，重新登录后可恢复" : "连接后会自动读取用户与订阅信息"}</span></div>{connectionStatus === "connected" ? <button className="btn ghost compact multi-model-account-connect" type="button" disabled={Boolean(busy)} onClick={() => setConnectionMode("osir")}><Icon name={busy ? "loader" : "sliders"} />管理连接</button> : null}</div>
         {account ? <div className="multi-model-account-details"><div><span>用户</span><strong>{account.displayName || account.email || "OSIRAPI 用户"}</strong></div><div><span>订阅套餐</span><strong>{activeSubscription?.groupName || "有效订阅"}</strong></div><div><span>月度剩余</span><strong>{activeSubscription && activeSubscription.monthlyLimitUsd > 0 ? formatUsd(activeSubscription.monthlyRemainingUsd) : "按订阅额度"}</strong></div><div><span>余额</span><strong>{formatUsd(account.balance)}</strong></div></div> : null}
         {account && activeSubscription ? <div className="multi-model-account-progress"><span>本月用量 {formatUsd(activeSubscription.monthlyUsedUsd)} / {activeSubscription.monthlyLimitUsd > 0 ? formatUsd(activeSubscription.monthlyLimitUsd) : "不限额"}</span><span>{activeSubscription.daysRemaining} 天后到期</span><div><i style={{ width: String(activeSubscription.monthlyLimitUsd > 0 ? Math.min(100, Math.max(0, activeSubscription.monthlyUsedUsd / activeSubscription.monthlyLimitUsd * 100)) : 0) + "%" }} /></div></div> : null}
         {connectionStatus === "connected" ? <div className="multi-model-account-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void disconnectOsir()}>{busy === "disconnect" ? "退出中…" : "退出 OSIRAPI 连接"}</button></div> : null}
@@ -268,7 +293,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
           <div className="multi-model-panel-head"><div><span className="multi-model-label">从这里开始</span><h2>一次连接，自动准备好</h2></div><span className="multi-model-panel-index">01</span></div>
           <div className="multi-model-methods" role="list" aria-label="模型连接方式">
             <button className="multi-model-connection-card featured" type="button" disabled={Boolean(busy)} onClick={() => { setConnectionMode("osir"); connect(); }}><span className="multi-model-connection-icon"><Icon name="globe" /></span><span className="multi-model-connection-copy"><strong>{installed ? "连接 OSIRAPI" : "安装并连接 OSIRAPI"}</strong><span>授权后自动导入多供应商模型</span></span><span className="multi-model-card-arrow">↗</span></button>
-            <button className="multi-model-connection-card" type="button" disabled={Boolean(busy)} onClick={() => { setCustomEnabled(true); setConnectionMode("manual"); }}><span className="multi-model-connection-icon quiet"><Icon name="plus" /></span><span className="multi-model-connection-copy"><strong>手动添加供应商</strong><span>自定义 Base URL、模型和 API Key</span></span><span className="multi-model-card-arrow">→</span></button>
+            <button className="multi-model-connection-card" type="button" disabled={Boolean(busy)} onClick={() => void openManualConnection()}><span className="multi-model-connection-icon quiet"><Icon name="plus" /></span><span className="multi-model-connection-copy"><strong>手动添加供应商</strong><span>自动准备环境后，自定义 Base URL、模型和 API Key</span></span><span className="multi-model-card-arrow">→</span></button>
           </div>
           <div className="multi-model-safe-note"><Icon name="shield" /><span>浏览器授权使用短时 PKCE 校验；长期模型 Key 不会出现在网页、链接或日志中。</span></div>
         </section>

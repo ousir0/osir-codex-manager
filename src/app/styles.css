@@ -3316,11 +3316,27 @@ button.row.danger:hover {
 }
 
 /* ── Unified configuration workbench ───────────────────────────────────── */
+.config-workbench-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.config-workbench-top {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 10px;
+  padding: 10px 14px 0;
+}
 .config-workbench {
+  flex: 1;
+  min-height: 0;
   display: grid;
   align-content: start;
   gap: 14px;
-  padding: 14px 14px 24px;
+  padding: 12px 14px 24px;
+  overflow-y: auto;
 }
 .config-workbench > * {
   min-width: 0;
@@ -3480,12 +3496,15 @@ button.row.danger:hover {
   color: var(--danger-deep);
 }
 .config-module-tabs {
-  position: sticky;
-  z-index: 5;
-  top: 0;
-  box-shadow: 0 8px 22px -18px var(--shadow-3);
+  width: 100%;
+}
+.config-module-tabs-frame {
+  min-width: 0;
+  padding-bottom: 1px;
 }
 .config-module-panel {
+  width: min(1120px, 100%);
+  margin-inline: auto;
   display: grid;
   align-content: start;
   gap: 13px;
@@ -3933,6 +3952,10 @@ button.config-resource-row:hover {
 :root[data-window-mode="expanded"] .config-workbench {
   gap: 16px;
   padding: 20px 24px 32px;
+}
+:root[data-window-mode="expanded"] .config-workbench-top {
+  gap: 12px;
+  padding: 18px 24px 0;
 }
 :root[data-window-mode="expanded"] .config-overview {
   grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
@@ -5778,6 +5801,73 @@ button.config-resource-row:hover {
   width: 15px;
   height: 15px;
   color: var(--accent);
+}
+.manager-update-toast {
+  position: fixed;
+  z-index: 80;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, var(--line));
+  border-radius: 13px;
+  background: var(--surface-top);
+  box-shadow: var(--elev-3);
+  color: var(--text-soft);
+  font-size: 11px;
+}
+.manager-update-toast button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+.manager-update-version {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.multi-model-environment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface-2) 78%, transparent);
+}
+.multi-model-environment > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.multi-model-environment strong {
+  font-size: 12px;
+}
+.multi-model-environment > div > span:last-child {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.multi-model-environment-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #b45309;
+  background: color-mix(in oklch, #f59e0b 14%, transparent);
+  font-size: 10px;
+  font-weight: 750;
+}
+.multi-model-environment-badge.ready {
+  color: var(--success);
+  background: color-mix(in oklch, var(--success) 13%, transparent);
 }
 .multi-model-steps {
   display: grid;

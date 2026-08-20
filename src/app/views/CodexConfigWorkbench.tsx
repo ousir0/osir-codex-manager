@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { errorMessage, managerApi } from "../../services/managerApi";
 import type {
@@ -132,6 +132,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const applyReport = useCallback((next: CodexConfigReport) => {
     setReport(next);
@@ -164,6 +165,10 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     if (openCodex?.enabled) setConnectionView("multi");
   }, [openCodex?.enabled]);
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [module, connectionView]);
 
   const runReport = async (kind: string, action: () => Promise<CodexConfigReport>, success: string) => {
     setBusy(kind);
@@ -310,7 +315,8 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   return (
     <div className="pop config-pop">
       <NavBar title={t("nav.config")} onBack={onBack} />
-      <div className="scroll scroll-wide view config-workbench">
+      <div className="config-workbench-shell">
+        <div className="config-workbench-top">
         {busy === "load" && !report ? <div className="banner info" role="status"><Icon name="loader" /><span>{copy.loading}</span></div> : null}
         {error ? <div className="banner err" role="alert"><Icon name="alert" /><span>{error}</span></div> : null}
         {notice ? <div className="banner ok" role="status"><Icon name="check" /><span>{notice}</span></div> : null}
@@ -333,7 +339,13 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
               </div>
             </section>
             {report.parseError ? <button className="banner err config-error-jump" type="button" onClick={() => { setModule("advanced"); openRaw(); }}><Icon name="alert" /><span>{copy.invalid}</span><Icon name="chevron" /></button> : null}
-            <Segmented items={modules} value={module} onChange={(next) => setModule(next as ConfigModule)} ariaLabel={t("nav.config")} className="config-module-tabs" />
+            <div className="config-module-tabs-frame"><Segmented items={modules} value={module} onChange={(next) => setModule(next as ConfigModule)} ariaLabel={t("nav.config")} className="config-module-tabs" /></div>
+          </>
+        ) : null}
+        </div>
+        <div ref={contentRef} className="scroll scroll-wide view config-workbench">
+        {report ? (
+          <>
             {module === "connections" ? (
               <section className="config-module-panel" aria-label={copy.connections}>
                 <div className="config-mode-switch" role="group" aria-label={copy.connections}>
@@ -352,6 +364,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
             {module === "advanced" ? <AdvancedView report={report} copy={copy} onRaw={openRaw} onRestore={() => setConfirm({ kind: "restore" })} /> : null}
           </>
         ) : null}
+        </div>
       </div>
       {confirm === null ? <>
         <ProviderDialog open={dialog === "provider"} copy={copy} report={report} providers={providerProfiles} basic={basic} setBasic={setBasic} step={providerStep} setStep={setProviderStep} apiKey={providerApiKey} setApiKey={setProviderApiKey} models={models} modelsReady={modelsReady} busy={busy} locked={locked} onFetch={fetchModels} onSave={saveProvider} onDismiss={requestDialogDismiss} />

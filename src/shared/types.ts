@@ -750,6 +750,18 @@ export interface OpenCodexStatus {
   error: string | null;
   connectionStatus: "notConnected" | "connected" | "error" | "signedOut";
   account: OpenCodexAccountSummary | null;
+  environment?: OpenCodexEnvironmentStatus;
+}
+
+export interface OpenCodexEnvironmentStatus {
+  platform: string;
+  architecture: string;
+  supported: boolean;
+  runtimeState: "managed" | "privateNpm" | "system" | "node" | "missing" | "unsupported";
+  installStrategy: "reuse" | "managedComponent" | "privateNpm" | "unavailable";
+  nodeVersion: string | null;
+  npmAvailable: boolean;
+  detail: string;
 }
 
 export interface OpenCodexAccountSummary {

@@ -1160,6 +1160,12 @@ pub fn run() {
         // Cmd+Q (and any other app-level quit) lands as ExitRequested rather than
         // a window CloseRequested — gate it with the same phase-aware policy.
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { has_visible_windows, .. } = &event {
+                log::info!("macOS app reopen requested has_visible_windows={has_visible_windows}");
+                restore_main_window(app, "dock-reopen");
+                return;
+            }
             if let RunEvent::ExitRequested { api, .. } = event {
                 log::info!("application exit requested");
                 let policy = quit_policy_for(app);

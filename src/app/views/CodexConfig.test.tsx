@@ -88,7 +88,7 @@ describe("Codex configuration workbench", () => {
     api.codexConfigDeleteMcp.mockResolvedValue(config({ mcpServers: [] }));
     api.codexConfigRestoreBackup.mockResolvedValue(config());
     api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null });
-    api.openCodexInstall.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "stopped", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
+    api.openCodexInstall.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
     api.openCodexHome.mockResolvedValue();
   });
 
@@ -113,6 +113,26 @@ describe("Codex configuration workbench", () => {
     await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
     expect(await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
     expect(screen.getByText("尚未安装 OpenCodex")).toBeInTheDocument();
+  });
+
+  it("prepares OpenCodex before opening a manual provider on a clean machine", async () => {
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
+    await user.click(screen.getByRole("button", { name: /手动添加供应商/ }));
+    await waitFor(() => expect(api.openCodexInstall).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("heading", { name: "手动添加供应商" })).toBeInTheDocument();
+  });
+
+  it("shows the detected platform and automatic install strategy", async () => {
+    api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null, environment: { platform: "windows", architecture: "x86_64", supported: true, runtimeState: "missing", installStrategy: "managedComponent", nodeVersion: null, npmAvailable: false, detail: "可自动准备私有运行时" } });
+    const user = userEvent.setup();
+    renderConfig();
+    await screen.findByRole("heading", { name: "单供应商直连" });
+    await user.click(screen.getByRole("button", { name: /OpenCodex 多模型/ }));
+    expect(await screen.findByText("环境检测 · windows / x86_64")).toBeInTheDocument();
+    expect(screen.getByText("将下载当前平台自带运行时")).toBeInTheDocument();
   });
 
   it("opens the multi-model workspace when the managed OpenCodex state is enabled", async () => {

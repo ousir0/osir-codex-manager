@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -39,6 +39,7 @@ use crate::errors::AppError;
 const DEFAULT_PORT: u16 = 10100;
 const DEFAULT_PROVIDER_ID: &str = "opencodex";
 const DEFAULT_VERSION: &str = "2.22.0";
+const MANAGED_NODE_VERSION: &str = "22.19.0";
 const COMPONENT_MANIFEST_URL: &str = "https://app.osirclaw.com/components/opencodex/index.json";
 const COMPONENT_MANIFEST_FALLBACK_URL: &str = "https://raw.githubusercontent.com/ousir0/osir-codex-manager/main/components/opencodex/index.json";
 const OSIRAPI_DESKTOP_CONNECT_URL: &str = "https://osirclaw.com/codex-manager/connect";
@@ -65,6 +66,20 @@ pub struct OpenCodexStatus {
     pub error: Option<String>,
     pub connection_status: String,
     pub account: Option<OpenCodexAccountSummary>,
+    pub environment: OpenCodexEnvironmentStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodexEnvironmentStatus {
+    pub platform: String,
+    pub architecture: String,
+    pub supported: bool,
+    pub runtime_state: String,
+    pub install_strategy: String,
+    pub node_version: Option<String>,
+    pub npm_available: bool,
+    pub detail: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -218,10 +233,13 @@ struct ComponentTarget {
     url: String,
     github_url: String,
     sha256: String,
+    #[serde(default)]
+    bytes: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ComponentManifest {
+    version: String,
     targets: BTreeMap<String, ComponentTarget>,
 }
 
@@ -325,33 +343,174 @@ fn load_config(path: &Path) -> Result<JsonMap<String, JsonValue>, AppError> {
         .ok_or_else(|| AppError::Engine("OpenCodex 配置顶层必须是对象".to_string()))
 }
 
-fn component_target() -> &'static str {
-    match (cfg!(target_os = "windows"), cfg!(target_arch = "aarch64")) {
-        (true, true) => "windows-arm64",
-        (true, false) => "windows-x64",
-        (false, true) => "darwin-arm64",
-        (false, false) => "darwin-x64",
+fn component_target_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("macos", "aarch64" | "arm64") => Some("darwin-arm64"),
+        ("macos", "x86_64" | "amd64" | "x64") => Some("darwin-x64"),
+        ("windows", "aarch64" | "arm64") => Some("windows-arm64"),
+        ("windows", "x86_64" | "amd64" | "x64") => Some("windows-x64"),
+        ("linux", "aarch64" | "arm64") => Some("linux-arm64"),
+        ("linux", "x86_64" | "amd64" | "x64") => Some("linux-x64"),
+        _ => None,
     }
 }
 
-fn managed_component_root() -> Option<PathBuf> {
-    paths::data_dir().map(|dir| dir.join("opencodex").join("components").join(DEFAULT_VERSION).join(component_target()))
+fn component_target() -> Result<&'static str, AppError> {
+    component_target_for(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
+        AppError::UnsupportedPlatform
+    })
+}
+
+fn managed_component_roots() -> Vec<PathBuf> {
+    let Some(data_dir) = paths::data_dir() else { return Vec::new() };
+    let Ok(target) = component_target() else { return Vec::new() };
+    let components = data_dir.join("opencodex").join("components");
+    vec![
+        components.join("current").join(target),
+        components.join(DEFAULT_VERSION).join(target),
+    ]
+}
+
+fn managed_component_invocation() -> Option<(String, Vec<String>)> {
+    managed_component_roots().into_iter().find_map(|root| {
+        let node = root.join(if cfg!(target_os = "windows") { "runtime/node.exe" } else { "runtime/bin/node" });
+        let launcher = root.join("opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
+        (node.is_file() && launcher.is_file())
+            .then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
+    })
+}
+
+fn command_version(program: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    String::from_utf8(output.stdout).ok().map(|value| value.trim().trim_start_matches('v').to_string()).filter(|value| !value.is_empty())
+}
+
+fn executable_candidates(name: &str) -> Vec<PathBuf> {
+    let mut candidates = vec![PathBuf::from(name)];
+    let home = BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
+    if cfg!(target_os = "windows") {
+        for root in [std::env::var_os("APPDATA"), std::env::var_os("NVM_HOME"), std::env::var_os("ProgramFiles")]
+            .into_iter()
+            .flatten()
+        {
+            let root = PathBuf::from(root);
+            candidates.push(root.join(name));
+            candidates.push(root.join("nodejs").join(name));
+        }
+    } else {
+        for root in ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"] {
+            candidates.push(PathBuf::from(root).join(name));
+        }
+        if let Some(home) = home {
+            for root in [".local/bin", ".volta/bin", ".npm-global/bin"] {
+                candidates.push(home.join(root).join(name));
+            }
+            let nvm_versions = home.join(".nvm/versions/node");
+            if let Ok(entries) = fs::read_dir(nvm_versions) {
+                let mut versions = entries.flatten().map(|entry| entry.path().join("bin").join(name)).collect::<Vec<_>>();
+                versions.sort_by(|left, right| right.cmp(left));
+                candidates.extend(versions);
+            }
+        }
+    }
+    candidates
+}
+
+fn first_command(name: &str, args: &[&str]) -> Option<(PathBuf, String)> {
+    executable_candidates(name).into_iter().find_map(|candidate| {
+        command_version(&candidate, args).map(|version| (candidate, version))
+    })
+}
+
+fn node_version() -> Option<String> {
+    first_command(if cfg!(target_os = "windows") { "node.exe" } else { "node" }, &["--version"]).map(|(_, version)| version)
+}
+
+fn system_node_command() -> Option<(PathBuf, String)> {
+    first_command(if cfg!(target_os = "windows") { "node.exe" } else { "node" }, &["--version"])
+}
+
+fn node_supported(version: &str) -> bool {
+    version.split('.').next().and_then(|value| value.parse::<u32>().ok()).is_some_and(|major| major >= 18)
+}
+
+fn npm_available() -> bool {
+    system_npm_command().is_some()
+}
+
+fn system_npm_command() -> Option<PathBuf> {
+    first_command(if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" }, &["--version"]).map(|(path, _)| path)
+}
+
+fn node_distribution_target_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("macos", "aarch64" | "arm64") => Some("darwin-arm64"),
+        ("macos", "x86_64" | "amd64" | "x64") => Some("darwin-x64"),
+        ("windows", "aarch64" | "arm64") => Some("win-arm64"),
+        ("windows", "x86_64" | "amd64" | "x64") => Some("win-x64"),
+        ("linux", "aarch64" | "arm64") => Some("linux-arm64"),
+        ("linux", "x86_64" | "amd64" | "x64") => Some("linux-x64"),
+        _ => None,
+    }
+}
+
+fn managed_node_root() -> Result<PathBuf, AppError> {
+    let target = node_distribution_target_for(std::env::consts::OS, std::env::consts::ARCH)
+        .ok_or(AppError::UnsupportedPlatform)?;
+    paths::data_dir()
+        .map(|dir| dir.join("opencodex").join("node").join(MANAGED_NODE_VERSION).join(target))
+        .ok_or_else(|| AppError::Internal("无法定位 OpenCodex Node 运行时目录".to_string()))
+}
+
+fn managed_node_executable() -> Option<PathBuf> {
+    let root = managed_node_root().ok()?;
+    let path = root.join(if cfg!(target_os = "windows") { "node.exe" } else { "bin/node" });
+    path.is_file().then_some(path)
+}
+
+fn managed_npm_cli() -> Option<PathBuf> {
+    let root = managed_node_root().ok()?;
+    let path = if cfg!(target_os = "windows") {
+        root.join("node_modules/npm/bin/npm-cli.js")
+    } else {
+        root.join("lib/node_modules/npm/bin/npm-cli.js")
+    };
+    path.is_file().then_some(path)
+}
+
+fn private_npm_invocation() -> Option<(String, Vec<String>)> {
+    let runtime = managed_runtime_dir().ok()?;
+    let launcher = runtime.join("node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
+    if !launcher.is_file() { return None; }
+    if let Some(node) = managed_node_executable() {
+        return Some((node.display().to_string(), vec![launcher.display().to_string()]));
+    }
+    let (node, version) = system_node_command()?;
+    node_supported(&version).then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
+}
+
+fn system_ocx_invocation() -> Option<(String, Vec<String>)> {
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &["ocx.cmd", "opencodex.cmd", "ocx.exe", "opencodex.exe", "ocx", "opencodex"]
+    } else {
+        &["ocx", "opencodex"]
+    };
+    candidates.iter().find_map(|candidate| {
+        first_command(candidate, &["--version"]).map(|(path, _)| (path.display().to_string(), Vec::new()))
+    })
 }
 
 fn ocx_invocation() -> Option<(String, Vec<String>)> {
-    if let Some(root) = managed_component_root() {
-        let node = root.join(if cfg!(target_os = "windows") { "runtime/node.exe" } else { "runtime/bin/node" });
-        let launcher = root.join("opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
-        if node.is_file() && launcher.is_file() {
-            return Some((node.display().to_string(), vec![launcher.display().to_string()]));
-        }
-    }
-    for candidate in if cfg!(target_os = "windows") { ["ocx.cmd", "ocx"] } else { ["ocx", "ocx"] } {
-        if Command::new(candidate).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|status| status.success()) {
-            return Some((candidate.to_string(), Vec::new()));
-        }
-    }
-    None
+    managed_component_invocation()
+        .or_else(private_npm_invocation)
+        .or_else(system_ocx_invocation)
 }
 
 fn ocx_program() -> Option<String> {
@@ -364,12 +523,33 @@ fn component_sha256(path: &Path) -> Result<String, AppError> {
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-fn download_component(url: &str, path: &Path) -> Result<(), AppError> {
-    let output = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "/usr/bin/curl" })
-        .args(["-fsSL", "--proto", "=https", "--max-time", "300", url, "-o", path.to_string_lossy().as_ref()])
-        .output()
+fn download_component(url: &str, path: &Path, expected_bytes: Option<u64>) -> Result<(), AppError> {
+    let parsed = Url::parse(url).map_err(|error| AppError::Engine(format!("OpenCodex 组件地址无效：{error}")))?;
+    if parsed.scheme() != "https" {
+        return Err(AppError::Engine("OpenCodex 组件仅允许通过 HTTPS 下载".to_string()));
+    }
+    let response = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(20))
+        .timeout(Duration::from_secs(300))
+        .build()
+        .map_err(|error| AppError::Internal(format!("初始化 OpenCodex 下载器失败：{error}")))?
+        .get(url)
+        .send()
         .map_err(|error| AppError::Engine(format!("下载 OpenCodex 组件失败：{error}")))?;
-    if !output.status.success() { return Err(AppError::Engine("OpenCodex 组件下载失败，请检查网络后重试".to_string())); }
+    if !response.status().is_success() {
+        return Err(AppError::Engine(format!("OpenCodex 组件下载失败：HTTP {}", response.status())));
+    }
+    const MAX_COMPONENT_BYTES: u64 = 512 * 1024 * 1024;
+    if response.content_length().is_some_and(|size| size > MAX_COMPONENT_BYTES) {
+        return Err(AppError::Engine("OpenCodex 组件大小异常，已停止下载".to_string()));
+    }
+    let mut output = fs::File::create(path).map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载文件失败：{error}")))?;
+    let copied = std::io::copy(&mut response.take(MAX_COMPONENT_BYTES + 1), &mut output)
+        .map_err(|error| AppError::Engine(format!("保存 OpenCodex 组件失败：{error}")))?;
+    if copied > MAX_COMPONENT_BYTES || expected_bytes.is_some_and(|size| size != copied) {
+        let _ = fs::remove_file(path);
+        return Err(AppError::Engine("OpenCodex 组件大小校验失败".to_string()));
+    }
     Ok(())
 }
 
@@ -398,25 +578,113 @@ fn extract_component(zip_path: &Path, destination: &Path) -> Result<(), AppError
     Ok(())
 }
 
+fn stripped_archive_path(path: &Path) -> Result<Option<PathBuf>, AppError> {
+    let components = path.components().collect::<Vec<_>>();
+    if components.len() <= 1 { return Ok(None); }
+    if components.iter().any(|component| !matches!(component, Component::Normal(_))) {
+        return Err(AppError::Engine("Node 运行时压缩包包含不安全路径".to_string()));
+    }
+    Ok(Some(components.iter().skip(1).fold(PathBuf::new(), |mut result, component| {
+        if let Component::Normal(value) = component { result.push(value); }
+        result
+    })))
+}
+
+fn extract_node_archive(archive_path: &Path, destination: &Path) -> Result<(), AppError> {
+    let temp = destination.with_extension(format!("tmp-{}", std::process::id()));
+    if temp.exists() { fs::remove_dir_all(&temp).ok(); }
+    fs::create_dir_all(&temp).map_err(|error| AppError::Internal(format!("创建 Node 运行时目录失败：{error}")))?;
+    if archive_path.extension().and_then(|value| value.to_str()) == Some("zip") {
+        let file = fs::File::open(archive_path).map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
+        let mut archive = ZipArchive::new(file).map_err(|error| AppError::Engine(format!("Node 运行时压缩包无效：{error}")))?;
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
+            let enclosed = entry.enclosed_name().ok_or_else(|| AppError::Engine("Node 运行时包含不安全路径".to_string()))?;
+            let Some(relative) = stripped_archive_path(&enclosed)? else { continue };
+            let target = temp.join(relative);
+            if entry.is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; continue; }
+            if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; }
+            let mut output = fs::File::create(&target).map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
+            std::io::copy(&mut entry, &mut output).map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
+        }
+    } else {
+        let file = fs::File::open(archive_path).map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
+        let decoder = flate2::read::GzDecoder::new(file);
+        let mut archive = tar::Archive::new(decoder);
+        for entry in archive.entries().map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))? {
+            let mut entry = entry.map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
+            if !entry.header().entry_type().is_file() && !entry.header().entry_type().is_dir() { continue; }
+            let path = entry.path().map_err(|error| AppError::Engine(format!("读取 Node 运行时路径失败：{error}")))?;
+            let Some(relative) = stripped_archive_path(&path)? else { continue };
+            let target = temp.join(relative);
+            if entry.header().entry_type().is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; continue; }
+            if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; }
+            entry.unpack(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?;
+        }
+    }
+    if destination.exists() { fs::remove_dir_all(destination).map_err(|error| AppError::Internal(format!("替换 Node 运行时失败：{error}")))?; }
+    if let Some(parent) = destination.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("创建 Node 运行时父目录失败：{error}")))?; }
+    fs::rename(temp, destination).map_err(|error| AppError::Internal(format!("启用 Node 运行时失败：{error}")))?;
+    Ok(())
+}
+
+fn install_managed_node() -> Result<(), AppError> {
+    if managed_node_executable().is_some() && managed_npm_cli().is_some() { return Ok(()); }
+    let target = node_distribution_target_for(std::env::consts::OS, std::env::consts::ARCH).ok_or(AppError::UnsupportedPlatform)?;
+    let extension = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+    let filename = format!("node-v{MANAGED_NODE_VERSION}-{target}.{extension}");
+    let base_url = format!("https://nodejs.org/dist/v{MANAGED_NODE_VERSION}");
+    let data_dir = paths::data_dir().ok_or_else(|| AppError::Internal("无法定位 OpenCodex 下载目录".to_string()))?;
+    let downloads = data_dir.join("opencodex").join("downloads");
+    fs::create_dir_all(&downloads).map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载目录失败：{error}")))?;
+    let checksums = downloads.join(format!("SHASUMS256-{MANAGED_NODE_VERSION}.txt"));
+    download_component(&format!("{base_url}/SHASUMS256.txt"), &checksums, None)?;
+    let checksum_text = fs::read_to_string(&checksums).map_err(|error| AppError::Internal(format!("读取 Node 校验清单失败：{error}")))?;
+    let expected = checksum_text.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let hash = parts.next()?;
+        let name = parts.next()?.trim_start_matches('*');
+        (name == filename).then(|| hash.to_string())
+    }).ok_or_else(|| AppError::Engine(format!("Node 官方校验清单没有 {filename}")))?;
+    let archive = downloads.join(&filename);
+    if !archive.is_file() || component_sha256(&archive).ok().as_deref() != Some(expected.as_str()) {
+        let temp = archive.with_extension(format!("download-{}", std::process::id()));
+        download_component(&format!("{base_url}/{filename}"), &temp, None)?;
+        if component_sha256(&temp)? != expected {
+            fs::remove_file(&temp).ok();
+            return Err(AppError::Engine("Node 运行时 SHA-256 校验失败".to_string()));
+        }
+        fs::rename(temp, &archive).map_err(|error| AppError::Internal(format!("保存 Node 运行时失败：{error}")))?;
+    }
+    let destination = managed_node_root()?;
+    extract_node_archive(&archive, &destination)?;
+    if managed_node_executable().is_none() || managed_npm_cli().is_none() {
+        return Err(AppError::Engine("Node 运行时安装后不完整".to_string()));
+    }
+    Ok(())
+}
+
 fn install_component_from_manifest() -> Result<(), AppError> {
     let data_dir = paths::data_dir().ok_or_else(|| AppError::Internal("无法定位 OpenCodex 组件目录".to_string()))?;
+    let component_target = component_target()?;
     let manifest_path = data_dir.join("opencodex").join("component-manifest.json");
     if let Some(parent) = manifest_path.parent() { fs::create_dir_all(parent).ok(); }
     let manifest_bytes = [COMPONENT_MANIFEST_URL, COMPONENT_MANIFEST_FALLBACK_URL].iter().find_map(|url| {
         let temp = manifest_path.with_extension(format!("download-{}", std::process::id()));
-        if download_component(url, &temp).is_ok() { let bytes = fs::read(&temp).ok(); fs::remove_file(&temp).ok(); bytes } else { None }
+        if download_component(url, &temp, None).is_ok() { let bytes = fs::read(&temp).ok(); fs::remove_file(&temp).ok(); bytes } else { None }
     }).ok_or_else(|| AppError::Engine("暂时无法获取 OpenCodex 组件清单".to_string()))?;
     atomic_file::write_atomic(&manifest_path, &manifest_bytes).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件清单失败：{error}")))?;
     let manifest: ComponentManifest = serde_json::from_slice(&manifest_bytes).map_err(|error| AppError::Engine(format!("OpenCodex 组件清单无效：{error}")))?;
-    let target = manifest.targets.get(component_target()).ok_or_else(|| AppError::Engine("当前平台没有可用的 OpenCodex 组件".to_string()))?;
-    let archive = data_dir.join("opencodex").join(format!("component-{}-{}.zip", component_target(), DEFAULT_VERSION));
+    let target = manifest.targets.get(component_target).ok_or_else(|| AppError::Engine(format!("组件服务尚未发布 {component_target} 的 OpenCodex 包")))?;
+    let archive = data_dir.join("opencodex").join(format!("component-{}-{}.zip", component_target, manifest.version));
     if !archive.is_file() || component_sha256(&archive).ok().as_deref() != Some(target.sha256.as_str()) {
         let temp = archive.with_extension(format!("download-{}", std::process::id()));
-        download_component(&target.url, &temp).or_else(|_| download_component(&target.github_url, &temp))?;
+        download_component(&target.url, &temp, target.bytes)
+            .or_else(|_| download_component(&target.github_url, &temp, target.bytes))?;
         if component_sha256(&temp)? != target.sha256 { fs::remove_file(&temp).ok(); return Err(AppError::Engine("OpenCodex 组件 SHA-256 校验失败".to_string())); }
         fs::rename(temp, &archive).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件失败：{error}")))?;
     }
-    let destination = data_dir.join("opencodex").join("components").join(DEFAULT_VERSION).join(component_target());
+    let destination = data_dir.join("opencodex").join("components").join("current").join(component_target);
     extract_component(&archive, &destination)
 }
 
@@ -495,49 +763,12 @@ fn redeem_ticket(ticket: &str, state: &RedemptionState) -> Result<RedeemResponse
         "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
     }))
     .map_err(|error| AppError::Internal(format!("生成 OSIRAPI 连接请求失败：{error}")))?;
-    let endpoint = "https://api.osirclaw.com/api/v1/codex-install/tickets/redeem";
-    let mut child = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "/usr/bin/curl" })
-        .args([
-            "-sS",
-            "--fail-with-body",
-            "--proto",
-            "=https",
-            "--max-time",
-            "30",
-            "--header",
-            "Content-Type: application/json",
-            "--header",
-            "Cache-Control: no-store",
-            "--data-binary",
-            "@-",
-            endpoint,
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| AppError::Engine(format!("无法连接 OSIRAPI：{error}")))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| AppError::Internal("无法写入 OSIRAPI 连接请求".to_string()))?
-        .write_all(&payload)
-        .map_err(|error| AppError::Internal(format!("写入 OSIRAPI 连接请求失败：{error}")))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|error| AppError::Engine(format!("OSIRAPI 连接失败：{error}")))?;
-    let response = serde_json::from_slice::<JsonValue>(&output.stdout).ok();
-    if !output.status.success() {
-        let message = response
-            .as_ref()
-            .and_then(|body| body.get("message").or_else(|| body.get("error")))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("OSIRAPI 连接码兑换失败");
-        return Err(AppError::Engine(message.to_string()));
-    }
-    let data = response
-        .and_then(|body| body.get("data").cloned().or(Some(body)))
-        .ok_or_else(|| AppError::Engine("OSIRAPI 未返回连接配置".to_string()))?;
+    let response = post_json(
+        "https://api.osirclaw.com/api/v1/codex-install/tickets/redeem",
+        &payload,
+        "OSIRAPI 连接码兑换失败",
+    )?;
+    let data = response.get("data").cloned().unwrap_or(response);
     serde_json::from_value::<RedeemResponse>(data)
         .map_err(|error| AppError::Engine(format!("OSIRAPI 连接配置格式无效：{error}")))
 }
@@ -560,50 +791,45 @@ fn exchange_osir_oauth(
         "platform": format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
     }))
     .map_err(|error| AppError::Internal(format!("生成 OSIRAPI OAuth 请求失败：{error}")))?;
-    let mut child = Command::new(if cfg!(target_os = "windows") { "curl.exe" } else { "/usr/bin/curl" })
-        .args([
-            "-sS",
-            "--fail-with-body",
-            "--proto",
-            "=https",
-            "--max-time",
-            "30",
-            "--header",
-            "Content-Type: application/json",
-            "--header",
-            "Cache-Control: no-store",
-            "--data-binary",
-            "@-",
-            OSIRAPI_DESKTOP_EXCHANGE_URL,
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| AppError::Engine(format!("无法连接 OSIRAPI：{error}")))?;
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| AppError::Internal("无法写入 OSIRAPI OAuth 请求".to_string()))?
-        .write_all(&payload)
-        .map_err(|error| AppError::Internal(format!("写入 OSIRAPI OAuth 请求失败：{error}")))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|error| AppError::Engine(format!("OSIRAPI OAuth 请求失败：{error}")))?;
-    let response = serde_json::from_slice::<JsonValue>(&output.stdout).ok();
-    if !output.status.success() {
-        let message = response
-            .as_ref()
-            .and_then(|body| body.get("message").or_else(|| body.get("error")))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("OSIRAPI OAuth 兑换失败");
-        return Err(AppError::Engine(message.to_string()));
-    }
-    let data = response
-        .and_then(|body| body.get("data").cloned().or(Some(body)))
-        .ok_or_else(|| AppError::Engine("OSIRAPI OAuth 未返回配置".to_string()))?;
+    let response = post_json(
+        OSIRAPI_DESKTOP_EXCHANGE_URL,
+        &payload,
+        "OSIRAPI OAuth 兑换失败",
+    )?;
+    let data = response.get("data").cloned().unwrap_or(response);
     serde_json::from_value::<DesktopExchangeResponse>(data)
         .map_err(|error| AppError::Engine(format!("OSIRAPI OAuth 配置格式无效：{error}")))
+}
+
+fn post_json(endpoint: &str, payload: &[u8], fallback_error: &str) -> Result<JsonValue, AppError> {
+    let parsed = Url::parse(endpoint).map_err(|error| AppError::Internal(format!("OSIRAPI 地址无效：{error}")))?;
+    if parsed.scheme() != "https" {
+        return Err(AppError::Engine("OSIRAPI 请求仅允许通过 HTTPS".to_string()));
+    }
+    let response = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(20))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|error| AppError::Internal(format!("初始化 OSIRAPI 请求失败：{error}")))?
+        .post(endpoint)
+        .header("Content-Type", "application/json")
+        .header("Cache-Control", "no-store")
+        .body(payload.to_vec())
+        .send()
+        .map_err(|error| AppError::Engine(format!("{fallback_error}：{error}")))?;
+    let status = response.status();
+    let body = response
+        .json::<JsonValue>()
+        .map_err(|error| AppError::Engine(format!("{fallback_error}：响应格式无效：{error}")))?;
+    if !status.is_success() {
+        let message = body
+            .get("message")
+            .or_else(|| body.get("error"))
+            .and_then(JsonValue::as_str)
+            .unwrap_or(fallback_error);
+        return Err(AppError::Engine(message.to_string()));
+    }
+    Ok(body)
 }
 
 fn decrypt_bundle(state: &RedemptionState, encrypted: EncryptedBundle) -> Result<CodexInstallPayload, AppError> {
@@ -939,6 +1165,10 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
         .or_else(|| routes.first())
         .map(|route| format!("{}/{}", route.id, route.default_model))
         .ok_or_else(|| AppError::Engine("OSIRAPI 未返回默认模型".to_string()))?;
+    let (default_route_id, default_model) = default_route
+        .split_once('/')
+        .map(|(route, model)| (route.to_string(), model.to_string()))
+        .ok_or_else(|| AppError::Engine("OSIRAPI 默认模型路由格式无效".to_string()))?;
     let configured = save(OpenCodexConfigInput {
         enabled: true,
         port: DEFAULT_PORT,
@@ -956,7 +1186,14 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
             .map_err(|error| AppError::Internal(format!("保存 OSIRAPI 连接状态失败：{error}")))?,
     )?;
     let synced = sync()?;
-    Ok(OpenCodexStatus { error: configured.error.or(synced.error), ..synced })
+    let check = check_route(&default_route_id, &default_model)?;
+    let mut verified = status()?;
+    verified.error = configured.error.or(synced.error);
+    if !check.available {
+        verified.connection_status = "error".to_string();
+        verified.error = Some(format!("模型已同步，但默认路由验证失败：{}", check.detail));
+    }
+    Ok(verified)
 }
 
 pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
@@ -1043,13 +1280,35 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
     if install_component_from_manifest().is_ok() && ocx_program().is_some() {
         return start();
     }
+    let (npm_program, npm_prefix, managed_node_bin) = if let Some(node) = managed_node_executable() {
+        let npm_cli = managed_npm_cli().ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
+        let bin = node.parent().map(Path::to_path_buf);
+        (node, vec![npm_cli.to_string_lossy().to_string()], bin)
+    } else if node_version().as_deref().is_some_and(node_supported) && npm_available() {
+        (system_npm_command().ok_or_else(|| AppError::Engine("未找到可用 npm".to_string()))?, Vec::new(), None)
+    } else {
+        install_managed_node()?;
+        let node = managed_node_executable().ok_or_else(|| AppError::Engine("Node 运行时安装后不可用".to_string()))?;
+        let npm_cli = managed_npm_cli().ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
+        let bin = node.parent().map(Path::to_path_buf);
+        (node, vec![npm_cli.to_string_lossy().to_string()], bin)
+    };
     let runtime = managed_runtime_dir()?;
     fs::create_dir_all(&runtime)
         .map_err(|error| AppError::Internal(format!("创建 OpenCodex 组件目录失败：{error}")))?;
     let prefix = runtime.to_string_lossy().to_string();
     let package = format!("@bitkyc08/opencodex@{DEFAULT_VERSION}");
-    let output = Command::new(if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" })
-        .args(["install", "--prefix", &prefix, "--no-save", &package])
+    let mut args = npm_prefix;
+    args.extend(["install".to_string(), "--prefix".to_string(), prefix, "--no-save".to_string(), package]);
+    let mut command = Command::new(&npm_program);
+    command.args(args);
+    if let Some(bin) = managed_node_bin {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        if let Ok(path) = std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&inherited))) {
+            command.env("PATH", path);
+        }
+    }
+    let output = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1071,7 +1330,15 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
 
 pub fn start() -> Result<OpenCodexStatus, AppError> {
     ocx_output(&["service"])?;
-    status()
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let current = status()?;
+        if current.service_state == "ready" { return Ok(current); }
+        if std::time::Instant::now() >= deadline {
+            return Err(AppError::Engine(current.error.unwrap_or_else(|| "OpenCodex 服务启动超时，请稍后重试".to_string())));
+        }
+        thread::sleep(Duration::from_millis(300));
+    }
 }
 
 fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
@@ -1304,6 +1571,15 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     } else if state.connection.is_some() {
         if service_state == "ready" && !routes.is_empty() { "connected" } else { "error" }
     } else if state.enabled { "error" } else { "notConnected" }.to_string();
+    let platform = std::env::consts::OS.to_string();
+    let architecture = std::env::consts::ARCH.to_string();
+    let supported = component_target_for(&platform, &architecture).is_some();
+    let managed = managed_component_invocation().is_some();
+    let private = private_npm_invocation().is_some();
+    let system = system_ocx_invocation().is_some();
+    let system_node = node_version();
+    let runtime_state = if managed { "managed" } else if private { "privateNpm" } else if system { "system" } else if system_node.as_deref().is_some_and(node_supported) { "node" } else if supported { "missing" } else { "unsupported" };
+    let install_strategy = if managed || system { "reuse" } else if supported { "managedComponent" } else if system_node.as_deref().is_some_and(node_supported) && npm_available() { "privateNpm" } else { "unavailable" };
     Ok(OpenCodexStatus {
         enabled: state.enabled,
         installed,
@@ -1320,6 +1596,16 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         error,
         connection_status,
         account: state.connection,
+        environment: OpenCodexEnvironmentStatus {
+            platform,
+            architecture,
+            supported,
+            runtime_state: runtime_state.to_string(),
+            install_strategy: install_strategy.to_string(),
+            node_version: system_node,
+            npm_available: npm_available(),
+            detail: if managed { "已发现 Manager 自带运行时" } else if system { "已发现系统 OpenCodex" } else if supported { "可下载当前平台的自带运行时" } else { "当前系统或 CPU 暂无可用安装包" }.to_string(),
+        },
     })
 }
 
@@ -1629,9 +1915,9 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_opencodex_config, decrypt_bundle, extract_osir_ticket, inferred_default_route,
+        build_opencodex_config, component_target_for, decrypt_bundle, extract_osir_ticket, inferred_default_route,
         inferred_managed_provider_ids, pkce_challenge, validate_input, wait_for_oauth_callback,
-        CodexInstallPayload,
+        node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
@@ -1670,6 +1956,32 @@ mod tests {
         let mut value = input();
         value.default_route = "osir-gpt/gpt-5.6-terra".to_string();
         assert!(validate_input(&value).is_err());
+    }
+
+    #[test]
+    fn maps_supported_platforms_without_cross_platform_fallbacks() {
+        assert_eq!(component_target_for("macos", "aarch64"), Some("darwin-arm64"));
+        assert_eq!(component_target_for("windows", "x86_64"), Some("windows-x64"));
+        assert_eq!(component_target_for("linux", "aarch64"), Some("linux-arm64"));
+        assert_eq!(component_target_for("freebsd", "x86_64"), None);
+        assert_eq!(node_distribution_target_for("linux", "x86_64"), Some("linux-x64"));
+    }
+
+    #[test]
+    fn accepts_only_node_18_or_newer_for_npm_fallback() {
+        assert!(!node_supported("16.20.2"));
+        assert!(node_supported("18.20.8"));
+        assert!(node_supported("22.19.0"));
+        assert!(!node_supported("not-a-version"));
+    }
+
+    #[test]
+    fn strips_archive_root_and_rejects_unsafe_paths() {
+        assert_eq!(
+            stripped_archive_path(std::path::Path::new("node-v22.19.0/bin/node")).unwrap(),
+            Some(std::path::PathBuf::from("bin/node"))
+        );
+        assert!(stripped_archive_path(std::path::Path::new("../outside")).is_err());
     }
 
     #[test]
