@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TAG="${1:-}"
+REPOSITORY="${GITHUB_REPOSITORY:-ousir0/osir-codex-manager}"
+SITE_DIR="${MANAGER_SITE_DIR:-}"
+
+if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  echo "usage: $0 vX.Y.Z" >&2
+  exit 2
+fi
+[[ -n "${SITE_DIR}" ]] || { echo "MANAGER_SITE_DIR is required" >&2; exit 2; }
+[[ -f "${SITE_DIR}/index.html" ]] || { echo "site index.html missing: ${SITE_DIR}" >&2; exit 2; }
+command -v gh >/dev/null || { echo "gh CLI is required" >&2; exit 2; }
+command -v sha256sum >/dev/null || { echo "sha256sum is required" >&2; exit 2; }
+
+VERSION="${TAG#v}"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/codex-manager-release.XXXXXX")"
+trap 'rm -rf "${WORK}"' EXIT
+DOWNLOAD="${WORK}/download"
+ARTIFACT="${WORK}/artifact"
+mkdir -p "${DOWNLOAD}" "${ARTIFACT}/manager/${VERSION}" "${ARTIFACT}/manager/latest"
+
+read -r IS_DRAFT IS_IMMUTABLE < <(gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,isImmutable --jq '.isDraft, .isImmutable' | paste -sd ' ' -)
+[[ "${IS_DRAFT}" == "false" && "${IS_IMMUTABLE}" == "true" ]] || { echo "release must be published and immutable" >&2; exit 1; }
+gh release download "${TAG}" --repo "${REPOSITORY}" --dir "${DOWNLOAD}" --clobber
+[[ -s "${DOWNLOAD}/latest.json" ]] || { echo "latest.json missing" >&2; exit 1; }
+[[ -s "${DOWNLOAD}/SHA256SUMS" ]] || { echo "SHA256SUMS missing" >&2; exit 1; }
+(cd "${DOWNLOAD}" && sha256sum -c SHA256SUMS)
+
+for asset in "CodexManager_aarch64.dmg" "CodexManager_x86_64.dmg" "CodexManager_${VERSION}_x64-setup.exe" "CodexManager_${VERSION}_arm64-setup.exe"; do
+  [[ -s "${DOWNLOAD}/${asset}" ]] || { echo "required asset missing: ${asset}" >&2; exit 1; }
+  cp "${DOWNLOAD}/${asset}" "${ARTIFACT}/manager/${VERSION}/${asset}"
+  cp "${DOWNLOAD}/${asset}" "${ARTIFACT}/manager/latest/${asset}"
+done
+cp "${DOWNLOAD}/latest.json" "${ARTIFACT}/manager/latest.json"
+printf '%s\n' "${VERSION}" > "${ARTIFACT}/.release-id"
+
+exec "${ROOT}/deploy/app-server/publish-rainyun.sh" "${SITE_DIR}" "${ARTIFACT}" "${VERSION}"
