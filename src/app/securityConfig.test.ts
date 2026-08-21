@@ -54,6 +54,7 @@ describe("desktop trust-boundary config", () => {
       "core:window:allow-scale-factor",
       "dialog:allow-open",
       "process:allow-restart",
+      "deep-link:default",
     ]);
     expect(capability.permissions).not.toContain("core:default");
     expect(capability.permissions).not.toContain("updater:default");

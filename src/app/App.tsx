@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
@@ -14,6 +14,7 @@ import { Uninstall } from "./views/Uninstall";
 import { CodexConfig } from "./views/CodexConfig";
 import { CodexThemes } from "./views/CodexThemes";
 import { ManagerUpdateProvider } from "./ManagerUpdateProvider";
+import { initializeSkinDeepLinks, onSkinDeepLink } from "./deepLinks";
 
 type View = "home" | "settings" | "about" | "uninstall" | "config" | "themes";
 
@@ -34,6 +35,8 @@ function focusPageTarget(root: ParentNode | null) {
 
 function Shell() {
   const [view, setView] = useState<View>("home");
+  const [pendingSkinId, setPendingSkinId] = useState<string | null>(null);
+  const clearPendingSkin = useCallback(() => setPendingSkinId(null), []);
   // Skip the first paint: NavBar / Home already own initial focus; stealing it
   // on mount is noisier than helpful for keyboard users.
   const skipInitialFocus = useRef(true);
@@ -62,6 +65,19 @@ function Shell() {
     });
     return () => window.cancelAnimationFrame(id);
   }, [view]);
+
+  useEffect(() => {
+    let disposePlugin: (() => void) | null = null;
+    const disposeEvent = onSkinDeepLink((id) => {
+      setPendingSkinId(id);
+      setView("themes");
+    });
+    void initializeSkinDeepLinks().then((dispose) => { disposePlugin = dispose; }).catch(() => undefined);
+    return () => {
+      disposeEvent();
+      disposePlugin?.();
+    };
+  }, []);
 
   return (
     <>
@@ -102,7 +118,7 @@ function Shell() {
       ) : null}
       {view === "themes" ? (
         <div data-view="themes" style={{ display: "contents" }}>
-          <CodexThemes onBack={() => setView("settings")} />
+          <CodexThemes onBack={() => setView("settings")} pendingInstallId={pendingSkinId} onPendingInstallHandled={clearPendingSkin} />
         </div>
       ) : null}
       {view === "about" ? (

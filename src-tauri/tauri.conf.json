@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Codex Manager",
   "mainBinaryName": "osir-codex-manager",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "identifier": "com.osir.codexmanager",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -85,6 +85,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["osircodex"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCMzFCRDU1RDJCMTVBRDEKUldUUldySFNWYjB4bTR4YlRmalNIbmQ4RkxYTjBNUHBUZzMvNlM0eU44dGE2TVhKWWNaWksvVzgK",
       "endpoints": [

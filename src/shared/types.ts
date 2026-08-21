@@ -907,6 +907,7 @@ export interface StoreMigrationReport {
 /** One entry of the online skin catalog (GitHub primary, Gitee fallback). */
 export interface CatalogSkin {
   id: string;
+  themeId?: string | null;
   name: string;
   description: string;
   version: string;
@@ -920,9 +921,27 @@ export interface CatalogSkin {
   /** Catalog-relative paths, resolved backend-side against the pinned origin. */
   pack: string;
   preview: string;
+  colors?: Record<string, string>;
+  art?: { focusX?: number; focusY?: number; safeArea?: string; taskMode?: string };
+  previewStyle?: {
+    opacity: number;
+    blur: number;
+    radius: number;
+    borderAlpha: number;
+    shadow: "none" | "soft" | "standard";
+    parts: string[];
+    hover: boolean;
+    focusVisible: boolean;
+  };
   /** Theme category for store grouping (wallpaper/anime/stars/tech/guofeng/games);
    *  absent → grouped under "other". */
   category?: string | null;
+  rightsStatus?: "redistributable" | "source-direct" | "review-required" | "blocked" | null;
+  installable?: boolean;
+  source?: string | null;
+  sourceUrl?: string | null;
+  sourcePackageUrl?: string | null;
+  sourceBase?: string | null;
 }
 
 /** Main-window form factor: `compact` is the fixed 400×640 dashboard,

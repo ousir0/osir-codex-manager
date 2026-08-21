@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { errorMessage, managerApi, SETTINGS_CHANGED_EVENT } from "../../services/managerApi";
 import type {
@@ -71,85 +72,66 @@ function cardPalette(colors: Record<string, string>) {
   };
 }
 
-function ThemeCardArt({ colors }: { colors: Record<string, string> }) {
-  const palette = useMemo(() => cardPalette(colors), [colors]);
-  return (
-    <div className="themecard-art" style={{ background: palette.backdrop }} aria-hidden="true">
-      <span className="tca-side" style={{ background: palette.panel }} />
-      <span className="tca-line" style={{ background: palette.ink, opacity: 0.55 }} />
-      <span className="tca-line tca-line-2" style={{ background: palette.ink, opacity: 0.3 }} />
-      <span className="tca-composer" style={{ borderColor: palette.accent }}>
-        <span className="tca-send" style={{ background: palette.accent }} />
-      </span>
-    </div>
-  );
-}
-
-/** Screenshot cover, lazily delivered as a data URL through the backend.
- *  Clicking a loaded cover opens the lightbox (`onZoom`). */
-function PhotoCover({
+function InterfacePreview({
+  colors,
   load,
-  onZoom,
-  zoomLabel,
-  className = "themecard-art themecard-art-photo",
+  art,
+  previewStyle,
+  className = "themecard-art",
+  mode = "welcome",
   reloadKey = 0,
 }: {
-  load: () => Promise<string | null>;
-  onZoom: (dataUrl: string) => void;
-  zoomLabel: string;
+  colors: Record<string, string>;
+  load?: () => Promise<string | null>;
+  art?: CatalogSkin["art"];
+  previewStyle?: CatalogSkin["previewStyle"];
   className?: string;
-  /** Bump to re-run load() on the same mounted card (e.g. a catalog refresh),
-   *  since load() otherwise only runs once on mount. */
+  mode?: "welcome" | "conversation";
   reloadKey?: number;
 }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const palette = useMemo(() => cardPalette(colors), [colors]);
+  const [background, setBackground] = useState<string | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
   useEffect(() => {
     let cancelled = false;
-    void loadRef
-      .current()
-      .then((url) => {
-        if (!cancelled) setDataUrl(url);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
+    if (!loadRef.current) return undefined;
+    void loadRef.current().then((url) => {
+      if (!cancelled) setBackground(url);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [load, reloadKey]);
+  const style = {
+    "--preview-bg": background ? "url(" + background + ")" : "none",
+    "--preview-backdrop": palette.backdrop,
+    "--preview-panel": palette.panel,
+    "--preview-accent": palette.accent,
+    "--preview-ink": palette.ink,
+    "--preview-focus-x": Math.max(0, Math.min(1, art?.focusX ?? 0.5)) * 100 + "%",
+    "--preview-focus-y": Math.max(0, Math.min(1, art?.focusY ?? 0.5)) * 100 + "%",
+    "--preview-opacity": String(previewStyle?.opacity ?? 1),
+    "--preview-blur": (previewStyle?.blur ?? 0) + "px",
+    "--preview-radius": (previewStyle?.radius ?? 12) + "px",
+    "--preview-border-alpha": String(previewStyle?.borderAlpha ?? 0.14),
+    "--preview-shadow": previewStyle?.shadow === "none" ? "none" : previewStyle?.shadow === "standard" ? "0 12px 28px rgba(0,0,0,.34)" : "0 8px 22px rgba(0,0,0,.22)",
+  } as CSSProperties;
   return (
-    <button
-      type="button"
-      className={className}
-      title={zoomLabel}
-      disabled={!dataUrl}
-      onClick={() => {
-        if (dataUrl) onZoom(dataUrl);
-      }}
-    >
-      {dataUrl ? <img src={dataUrl} alt="" draggable={false} /> : null}
-    </button>
-  );
-}
-
-/** Full-window preview overlay. Click anywhere or press Esc to dismiss. */
-function Lightbox({ src, onClose }: { src: string | null; onClose: () => void }) {
-  useEffect(() => {
-    if (!src) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [src, onClose]);
-  if (!src) return null;
-  return (
-    // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
-    <div className="lightbox" onClick={onClose}>
-      <img src={src} alt="" draggable={false} />
-      <button className="lightbox-close" onClick={onClose} aria-label="close">
-        <Icon name="close" />
-      </button>
+    <div className={"codex-interface-preview " + className} style={style} aria-label="CodeX 应用效果预览">
+      <div className="codex-preview-top"><span className="traffic"><i /><i /><i /></span><span>▣ / ‹ / ›</span></div>
+      <aside className="codex-preview-side">
+        <strong>Codex</strong>
+        <span>✎ 新对话</span><span>‹› 拉取请求</span><span>◷ 定时任务</span><span>✣ 插件</span>
+        <small>项目</small><b>▢ DreamSkin</b><em>给博客挑一套配色</em><em>三道晚餐菜谱</em><em>十月训练计划</em>
+        <span className="codex-preview-settings">⚙ 设置</span>
+      </aside>
+      <main className="codex-preview-main">
+        {mode === "welcome" ? (
+          <><h4>想构建什么？</h4><div className="codex-preview-suggestions"><span>‹›<b>探索并理解代码</b></span><span>✣<b>构建新功能</b></span><span>✎<b>审查代码</b></span><span>⌁<b>修复问题</b></span></div></>
+        ) : (
+          <div className="codex-preview-chat"><small>DreamSkin / src / main.ts</small><p className="user">把主题预览改成应用后的真实界面效果。</p><p>已保留背景、面板、边框和色板，并应用到完整 CodeX 界面。</p><pre>{"+ preview: CodeXInterface\n+ state: applied"}</pre></div>
+        )}
+        <div className="codex-preview-composer"><span>{mode === "welcome" ? "随便说点什么" : "继续对话..."}</span><small>+ / ⚙ 自定义</small><i>↑</i></div>
+      </main>
     </div>
   );
 }
@@ -210,6 +192,13 @@ interface Item {
   origin?: "dev" | "store"; // local only
   installedVersion?: string | null; // store only: version present in the store
   category?: string | null; // store only: theme category for grouping
+  rightsStatus?: CatalogSkin["rightsStatus"];
+  installable?: boolean;
+  source?: string | null;
+  sourceUrl?: string | null;
+  bytes?: number;
+  art?: CatalogSkin["art"];
+  previewStyle?: CatalogSkin["previewStyle"];
 }
 
 function localItem(theme: CodexThemeSummary): Item {
@@ -243,11 +232,18 @@ function storeItem(skin: CatalogSkin, installedVersion: string | null): Item {
     appearance: skin.appearance,
     license: skin.license,
     tags: skin.tags,
-    colors: {},
+    colors: skin.colors ?? {},
     hasPreview: true,
     loadPreview: () => managerApi.codexThemeCatalogPreview(skin.preview, skin.version),
     installedVersion,
     category: skin.category ?? null,
+    rightsStatus: skin.rightsStatus,
+    installable: skin.installable !== false,
+    source: skin.source,
+    sourceUrl: skin.sourceUrl,
+    bytes: skin.bytes,
+    art: skin.art,
+    previewStyle: skin.previewStyle,
   };
 }
 
@@ -310,7 +306,7 @@ function Pagination({
   );
 }
 
-export function CodexThemes({ onBack }: { onBack: () => void }) {
+export function CodexThemes({ onBack, pendingInstallId = null, onPendingInstallHandled }: { onBack: () => void; pendingInstallId?: string | null; onPendingInstallHandled?: () => void }) {
   const { t } = useI18n();
   const [themes, setThemes] = useState<CodexThemeSummary[]>([]);
   const [status, setStatus] = useState<CodexThemeStatusReport | null>(null);
@@ -339,7 +335,6 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
   const [storeNote, setStoreNote] = useState<string | null>(null);
   const [tab, setTab] = useState<GalleryTab>("local");
   const [query, setQuery] = useState("");
-  const [lightbox, setLightbox] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>(() => {
     try {
       return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "card";
@@ -456,7 +451,7 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
 
   const items = useMemo<Item[]>(() => {
     if (tab === "local") return localThemes.map(localItem);
-    return (catalog ?? []).map((skin) => storeItem(skin, storeVersionOf(skin.id)));
+    return (catalog ?? []).map((skin) => storeItem(skin, storeVersionOf(skin.themeId || skin.id)));
   }, [tab, localThemes, catalog, storeVersionOf]);
 
   const searched = useMemo(
@@ -665,6 +660,40 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
   const installOnline = (it: Item) =>
     run(`online:${it.id}`, () => managerApi.codexThemeInstallOnline(it.id));
 
+  useEffect(() => {
+    if (!pendingInstallId || !catalog || busy) return;
+    const skin = catalog.find((entry) => entry.id === pendingInstallId);
+    if (!skin) {
+      setActionError("网页请求安装的 DreamSkin 主题不在受信任目录中。");
+      onPendingInstallHandled?.();
+      return;
+    }
+    let cancelled = false;
+    setTab("store");
+    setQuery(skin.name);
+    setBusy("deep-link:" + skin.id);
+    setActionError(null);
+    void (async () => {
+      try {
+        const installed = await managerApi.codexThemeInstallOnline(skin.id);
+        if (cancelled) return;
+        await managerApi.codexThemeApply(installed.id);
+        if (cancelled) return;
+        await refresh();
+        setTab("local");
+        setQuery(installed.name);
+      } catch (cause) {
+        if (!cancelled) setActionError(errorMessage(cause));
+      } finally {
+        if (!cancelled) {
+          setBusy(null);
+          onPendingInstallHandled?.();
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [pendingInstallId, catalog, busy, onPendingInstallHandled, refresh]);
+
   const saveDevDir = () =>
     run("devdir", async () => {
       const current = settings ?? (await managerApi.getSettings());
@@ -716,6 +745,10 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
     if (it.id === tryingId) out.push({ key: "trying", cls: "tag soon", text: t("themes.trying") });
     if (it.kind === "store" && it.installedVersion === it.version)
       out.push({ key: "inst", cls: "tag ok", text: t("themes.online.installed") });
+    if (it.kind === "store" && it.rightsStatus === "review-required")
+      out.push({ key: "rights", cls: "tag soon", text: "授权待确认", title: "许可证或再分发范围尚未完成核验" });
+    if (it.kind === "store" && it.rightsStatus === "source-direct")
+      out.push({ key: "rights", cls: "tag soon", text: "来源直链", title: "从 DreamSkin 社区来源下载，不复制到 Manager 镜像" });
     if (it.codexVerified)
       out.push({
         key: "cv",
@@ -728,6 +761,7 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
 
   const primary = (it: Item): { label: string; run: () => void } | null => {
     if (it.kind === "store") {
+      if (it.installable === false) return null;
       const upToDate = it.installedVersion === it.version;
       if (upToDate) return null;
       const isUpgrade = it.installedVersion != null && it.installedVersion !== it.version;
@@ -806,18 +840,16 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
       </label>
     ) : null;
 
-  const cover = (it: Item, className?: string) =>
-    it.hasPreview ? (
-      <PhotoCover
-        load={it.loadPreview}
-        onZoom={setLightbox}
-        zoomLabel={t("themes.zoom")}
-        className={className ?? "themecard-art themecard-art-photo"}
-        reloadKey={it.kind === "store" ? catalogEpoch : 0}
-      />
-    ) : (
-      <ThemeCardArt colors={it.colors} />
-    );
+  const cover = (it: Item, className?: string) => (
+    <InterfacePreview
+      colors={it.colors}
+      load={it.hasPreview ? it.loadPreview : undefined}
+      art={it.art}
+      previewStyle={it.previewStyle}
+      className={className ?? "themecard-art"}
+      reloadKey={it.kind === "store" ? catalogEpoch : 0}
+    />
+  );
 
   const renderCard = (it: Item) => (
     <article
@@ -1257,6 +1289,11 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
           <div className="skinlist">{paged.map(renderRow)}</div>
         )}
         <Pagination page={clampedPage} pages={pages} onPage={setPage} label={t} />
+        {tab === "store" ? (
+          <p className="themes-community-notice">
+            DreamSkin 社区资源：主题免费提供，不代表放弃版权；实际使用和再分发范围以原作者许可证为准。如有权利问题，请发送邮件至 dreamskin@osirclaw.com 联系下架。
+          </p>
+        ) : null}
 
         {empty ? (
           <section className="hero" style={{ paddingTop: 24 }}>
@@ -1356,7 +1393,6 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
       <DetailsSheet
         item={detail}
         onClose={() => setDetail(null)}
-        onZoom={setLightbox}
         busy={busy}
         deletable={detail ? deletable(detail) : false}
         primary={detail ? primary(detail) : null}
@@ -1386,7 +1422,6 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
         onDelete={deleteGroup}
         t={t}
       />
-      <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
     </div>
   );
 }
@@ -1395,7 +1430,6 @@ export function CodexThemes({ onBack }: { onBack: () => void }) {
 function DetailsSheet({
   item,
   onClose,
-  onZoom,
   busy,
   deletable,
   primary,
@@ -1404,13 +1438,14 @@ function DetailsSheet({
 }: {
   item: Item | null;
   onClose: () => void;
-  onZoom: (url: string) => void;
   busy: string | null;
   deletable: boolean;
   primary: { label: string; run: () => void } | null;
   onDelete: (id: string) => void;
   t: TFn;
 }) {
+  const [previewMode, setPreviewMode] = useState<"welcome" | "conversation">("welcome");
+  useEffect(() => setPreviewMode("welcome"), [item?.id]);
   const rows = item
     ? ([
         ["themes.detail.id", item.id],
@@ -1419,9 +1454,19 @@ function DetailsSheet({
         ["themes.detail.appearance", item.appearance ?? "—"],
         ["themes.detail.verified", item.codexVerified ?? "—"],
         ["themes.detail.license", item.license ?? "—"],
+        ["themes.detail.source", item.source ?? "DreamSkin 社区"],
+        ["themes.detail.rights", item.rightsStatus === "redistributable" ? "可公开镜像" : item.rightsStatus === "source-direct" ? "来源直链" : "待授权确认"],
+        ["themes.detail.size", item.bytes ? (item.bytes / 1024 / 1024).toFixed(2) + " MB" : "—"],
+        ["themes.detail.sourceUrl", item.sourceUrl ?? "—"],
         ["themes.detail.tags", item.tags.length ? item.tags.join(", ") : "—"],
       ] as const)
     : [];
+  const detailLabel = (key: string) => ({
+    "themes.detail.source": "来源",
+    "themes.detail.rights": "再分发",
+    "themes.detail.size": "包大小",
+    "themes.detail.sourceUrl": "来源页面",
+  }[key] ?? t(key as never));
   return (
     <Sheet
       open={item !== null}
@@ -1432,17 +1477,20 @@ function DetailsSheet({
       {item ? (
         <div className="skin-detail">
           <div className="skin-detail-cover">
-            {item.hasPreview ? (
-              <PhotoCover
-                load={item.loadPreview}
-                onZoom={onZoom}
-                zoomLabel={t("themes.zoom")}
-                className="skin-detail-photo"
-              />
-            ) : (
-              <ThemeCardArt colors={item.colors} />
-            )}
+            <InterfacePreview
+              colors={item.colors}
+              load={item.hasPreview ? item.loadPreview : undefined}
+              art={item.art}
+              previewStyle={item.previewStyle}
+              className="skin-detail-photo"
+              mode={previewMode}
+            />
           </div>
+          <div className="skin-preview-tabs" role="group" aria-label="预览场景">
+            <button type="button" className={previewMode === "welcome" ? "active" : ""} onClick={() => setPreviewMode("welcome")}>欢迎页</button>
+            <button type="button" className={previewMode === "conversation" ? "active" : ""} onClick={() => setPreviewMode("conversation")}>对话页</button>
+          </div>
+          <p className="skin-detail-attribution">来源于 DreamSkin 社区，许可证和再分发范围以原作者声明为准。如有权利问题，请联系下架。</p>
           <h2 className="skin-detail-name" id="skin-detail-title">
             {item.name}
           </h2>
@@ -1450,7 +1498,7 @@ function DetailsSheet({
           <dl className="skin-detail-meta">
             {rows.map(([k, v]) => (
               <div className="skin-detail-row" key={k}>
-                <dt>{t(k)}</dt>
+                <dt>{detailLabel(k)}</dt>
                 <dd className={k === "themes.detail.id" ? "mono" : undefined}>{v}</dd>
               </div>
             ))}

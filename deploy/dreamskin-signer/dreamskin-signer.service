@@ -1,0 +1,19 @@
+[Unit]
+Description=OSIR DreamSkin private object-storage redirect signer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/osir/dreamskin-signer.env
+ExecStart=/usr/bin/python3 /opt/osir-dreamskin-signer/dreamskin_signer.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -555,15 +555,24 @@ pub fn resolve_theme_for_keep(settings: &AppSettings, theme_ref: &str) -> Result
 // caps, and a sha256 gate before anything reaches the importer.
 
 const SKINS_BASES: &[&str] = &[
+    "https://osirvedio.cn-nb1.rains3.com/codex-skins/dreamskin/v1",
     "https://app.osirclaw.com/skins",
+    "https://app.osirclaw.com/skins/dreamskin",
+    "https://api.dreamskin.cc",
 ];
 const CATALOG_MAX_BYTES: &str = "1048576"; // 1 MB index.json cap
 const PACK_MAX_BYTES: &str = "52428800"; // 50 MB archive cap (importer re-checks)
+
+fn default_catalog_installable() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, serde::Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CatalogSkin {
     pub id: String,
+    #[serde(rename = "themeId", default)]
+    pub theme_id: Option<String>,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -592,11 +601,65 @@ pub struct CatalogSkin {
     /// "tech", "guofeng", "games"). Absent → grouped under "other" in the UI.
     #[serde(default)]
     pub category: Option<String>,
-    /// Backend-only origin used to keep package downloads on the catalog's
-    /// successful mirror. Never exposed to the frontend contract.
-    #[serde(skip)]
+    #[serde(default)]
+    pub colors: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub art: Option<CatalogArt>,
+    #[serde(rename = "previewStyle", default)]
+    pub preview_style: Option<CatalogPreviewStyle>,
+    #[serde(default)]
+    pub rights_status: Option<String>,
+    #[serde(default = "default_catalog_installable")]
+    pub installable: bool,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(rename = "sourceUrl", default)]
+    pub source_url: Option<String>,
+    #[serde(rename = "sourcePackageUrl", default)]
+    pub source_package_url: Option<String>,
+    /// Origin used to keep package downloads on the catalog's selected source.
+    #[serde(rename = "sourceBase", default)]
     source_base: String,
 }
+
+#[derive(Debug, Clone, serde::Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogArt {
+    #[serde(default)]
+    pub focus_x: Option<f64>,
+    #[serde(default)]
+    pub focus_y: Option<f64>,
+    #[serde(default)]
+    pub safe_area: Option<String>,
+    #[serde(default)]
+    pub task_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPreviewStyle {
+    #[serde(default = "default_preview_opacity")]
+    pub opacity: f64,
+    #[serde(default)]
+    pub blur: f64,
+    #[serde(default = "default_preview_radius")]
+    pub radius: f64,
+    #[serde(default = "default_preview_border_alpha")]
+    pub border_alpha: f64,
+    #[serde(default = "default_preview_shadow")]
+    pub shadow: String,
+    #[serde(default)]
+    pub parts: Vec<String>,
+    #[serde(default)]
+    pub hover: bool,
+    #[serde(default)]
+    pub focus_visible: bool,
+}
+
+fn default_preview_opacity() -> f64 { 1.0 }
+fn default_preview_radius() -> f64 { 12.0 }
+fn default_preview_border_alpha() -> f64 { 0.14 }
+fn default_preview_shadow() -> String { "soft".to_string() }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct CatalogIndex {
@@ -745,6 +808,9 @@ fn fetch_catalog_from(base: &str) -> Result<Vec<CatalogSkin>, AppError> {
         .into_iter()
         .filter(|s| !s.id.is_empty() && !s.pack.is_empty() && s.sha256.len() == 64)
         .map(|mut skin| {
+            // The catalog may carry a historical sourceBase. The source that
+            // actually served this catalog is the safest first download
+            // mirror, so prefer the pinned base selected by this fetch.
             skin.source_base = base.to_string();
             skin
         })
@@ -755,9 +821,14 @@ fn fetch_catalog_from(base: &str) -> Result<Vec<CatalogSkin>, AppError> {
 
 pub fn fetch_catalog() -> Result<Vec<CatalogSkin>, AppError> {
     let mut failures = Vec::new();
+    let mut merged = std::collections::BTreeMap::new();
     for base in SKINS_BASES {
         match fetch_catalog_from(base) {
-            Ok(skins) => return Ok(skins),
+            Ok(skins) => {
+                for skin in skins {
+                    merged.entry(skin.id.clone()).or_insert(skin);
+                }
+            }
             Err(error) => {
                 log::warn!(
                     "theme catalog source failed base={} error={error}",
@@ -766,6 +837,9 @@ pub fn fetch_catalog() -> Result<Vec<CatalogSkin>, AppError> {
                 failures.push(error.to_string());
             }
         }
+    }
+    if !merged.is_empty() {
+        return Ok(merged.into_values().collect());
     }
     Err(AppError::Engine(format!(
         "所有皮肤目录源均不可用: {}",
@@ -795,7 +869,7 @@ fn preview_cache_path(url: &str, version: &str) -> Option<PathBuf> {
         vsafe
     };
     Some(paths::cache_dir()?.join("catalog-previews").join(format!(
-        "{:016x}-{}.webp",
+        "{:016x}-{}.img",
         crate::app::staging::fnv1a64(url.as_bytes()),
         vsafe
     )))
@@ -803,14 +877,22 @@ fn preview_cache_path(url: &str, version: &str) -> Option<PathBuf> {
 
 /// Cheap structural check that bytes look like a WebP (RIFF container + WEBP
 /// fourcc) — gates what we cache and rejects partial/corrupt hits.
-fn is_webp(bytes: &[u8]) -> bool {
-    bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP"
+fn preview_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else if bytes.len() >= 3 && bytes[0..3] == [0xff, 0xd8, 0xff] {
+        Some("image/jpeg")
+    } else if bytes.len() >= 8 && bytes[0..8] == [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a] {
+        Some("image/png")
+    } else {
+        None
+    }
 }
 
 fn read_cached_preview(url: &str, version: &str) -> Option<Vec<u8>> {
     let path = preview_cache_path(url, version)?;
     let bytes = std::fs::read(&path).ok()?;
-    if is_webp(&bytes) {
+    if preview_mime(&bytes).is_some() {
         Some(bytes)
     } else {
         // A truncated/corrupt entry (e.g. a crash mid-write) would otherwise
@@ -824,7 +906,7 @@ fn write_cached_preview(url: &str, version: &str, bytes: &[u8]) {
     // Only cache plausibly-complete WebP bytes, and write via a temp file +
     // atomic rename so a crash or full disk never leaves a non-empty partial
     // that later reads back as a valid hit.
-    if !is_webp(bytes) {
+    if preview_mime(bytes).is_none() {
         return;
     }
     let Some(path) = preview_cache_path(url, version) else {
@@ -836,7 +918,7 @@ fn write_cached_preview(url: &str, version: &str, bytes: &[u8]) {
     if std::fs::create_dir_all(parent).is_err() {
         return;
     }
-    let tmp = path.with_extension("webp.tmp");
+    let tmp = path.with_extension("img.tmp");
     if std::fs::write(&tmp, bytes).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
     } else {
@@ -857,10 +939,11 @@ pub fn catalog_preview_data_url(preview_rel: &str, version: &str) -> Result<Stri
             None => curl_fetch(&url, "2097152", "15"),
         };
         match fetched {
-            Ok(bytes) if is_webp(&bytes) => {
+            Ok(bytes) if preview_mime(&bytes).is_some() => {
                 write_cached_preview(&url, version, &bytes);
                 return Ok(format!(
-                    "data:image/webp;base64,{}",
+                    "data:{};base64,{}",
+                    preview_mime(&bytes).unwrap_or("image/webp"),
                     base64::engine::general_purpose::STANDARD.encode(bytes)
                 ));
             }
@@ -884,6 +967,11 @@ pub fn install_from_catalog(
         .into_iter()
         .find(|s| s.id == skin_id)
         .ok_or_else(|| AppError::Engine(format!("目录中没有该皮肤: {skin_id}")))?;
+    if !skin.installable {
+        return Err(AppError::Engine(
+            "该 DreamSkin 主题的许可证尚未完成再分发确认，当前只提供预览和来源直链".to_string(),
+        ));
+    }
     let mut source_order = Vec::with_capacity(SKINS_BASES.len());
     if SKINS_BASES.contains(&skin.source_base.as_str()) {
         source_order.push(skin.source_base.as_str());
@@ -1762,7 +1850,7 @@ mod catalog_network_tests {
         let primary = safe_catalog_path(SKINS_BASES[0], "packs/theme-1.0.0.codexskin").unwrap();
         assert_eq!(
             primary,
-            "https://app.osirclaw.com/skins/packs/theme-1.0.0.codexskin"
+            "https://osirvedio.cn-nb1.rains3.com/codex-skins/dreamskin/v1/packs/theme-1.0.0.codexskin"
         );
         assert!(safe_catalog_path(SKINS_BASES[0], "../secret").is_err());
         assert!(safe_catalog_path(SKINS_BASES[0], "https://evil.example/skin").is_err());

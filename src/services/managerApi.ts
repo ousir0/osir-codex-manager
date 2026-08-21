@@ -488,7 +488,7 @@ const FALLBACK_DIAGNOSTICS: Diagnostics = {
 // Browser-preview stand-ins so the OSIR theme gallery can be developed and
 // styled without a Tauri backend.
 const BROWSER_SKIN_CATALOG_BASE =
-  "https://app.osirclaw.com/skins";
+  "https://osirvedio.cn-nb1.rains3.com/codex-skins/dreamskin/v1";
 
 function browserCatalogUrl(relativePath: string): string {
   const safe =
