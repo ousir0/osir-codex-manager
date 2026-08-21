@@ -49,6 +49,27 @@ const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn configure_background_command(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = command;
+}
+
+fn configure_opencodex_environment(command: &mut Command) {
+    if let Ok(paths) = integration_paths() {
+        if let Some(home) = paths.opencodex_config.parent() {
+            command.env("OPENCODEX_HOME", home);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenCodexStatus {
@@ -380,7 +401,10 @@ fn managed_component_invocation() -> Option<(String, Vec<String>)> {
 }
 
 fn command_version(program: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new(program)
+    let mut command = Command::new(program);
+    configure_background_command(&mut command);
+    configure_opencodex_environment(&mut command);
+    let output = command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1300,6 +1324,8 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
     let mut args = npm_prefix;
     args.extend(["install".to_string(), "--prefix".to_string(), prefix, "--no-save".to_string(), package]);
     let mut command = Command::new(&npm_program);
+    configure_background_command(&mut command);
+    configure_opencodex_environment(&mut command);
     command.args(args);
     if let Some(bin) = managed_node_bin {
         let inherited = std::env::var_os("PATH").unwrap_or_default();
@@ -1340,11 +1366,46 @@ pub fn start() -> Result<OpenCodexStatus, AppError> {
     }
 }
 
+fn is_management_not_found(error: &AppError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("management request failed (404)")
+        || message.contains("unknown endpoint: get /api/models")
+}
+
+fn sync_with_service_recovery() -> Result<Vec<u8>, AppError> {
+    match ocx_output(&["sync"]) {
+        Ok(output) => Ok(output),
+        Err(error) if is_management_not_found(&error) => {
+            // A stale OpenCodex process can still own port 10100 after a first
+            // install or component upgrade. Restart once so the current managed
+            // component, rather than the old process, owns the management API.
+            let _ = ocx_output(&["restart"]);
+            let deadline = std::time::Instant::now() + Duration::from_secs(15);
+            loop {
+                if let Ok(current) = status() {
+                    if current.service_state == "ready" {
+                        break;
+                    }
+                }
+                if std::time::Instant::now() >= deadline {
+                    return Err(error);
+                }
+                thread::sleep(Duration::from_millis(300));
+            }
+            ocx_output(&["sync"])
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
     let (program, prefix) = ocx_invocation().ok_or_else(|| {
         AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string())
     })?;
-    let output = Command::new(program)
+    let mut command = Command::new(program);
+    configure_background_command(&mut command);
+    configure_opencodex_environment(&mut command);
+    let output = command
         .args(prefix)
         .args(args)
         .stdin(Stdio::null())
@@ -1691,6 +1752,11 @@ fn build_opencodex_config(
             provider.insert("baseUrl".to_string(), JsonValue::String(route.base_url.clone()));
             provider.insert("label".to_string(), JsonValue::String(route.label.clone()));
             provider.insert("defaultModel".to_string(), JsonValue::String(route.default_model.clone()));
+            // Keep the provider's authoritative model list explicit. OpenCodex
+            // uses it to decode provider/model selectors back to the bare model
+            // id before sending the request upstream. Relying only on
+            // customModels can leave a stale namespaced selector on first boot.
+            provider.insert("models".to_string(), json!(route.models));
             if !route.enabled {
                 provider.insert("disabled".to_string(), JsonValue::Bool(true));
             }
@@ -1932,7 +1998,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
-    ocx_output(&["sync"])?;
+    sync_with_service_recovery()?;
     let paths = integration_paths()?;
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
@@ -2068,6 +2134,10 @@ mod tests {
         let providers = next["providers"].as_object().unwrap();
         assert!(providers.contains_key("keep"));
         assert!(providers.contains_key("osir-gpt"));
+        assert_eq!(
+            providers["osir-gpt"]["models"],
+            json!(["gpt-5.6-sol"])
+        );
         assert!(!providers.contains_key("old"));
         let models = next["customModels"].as_array().unwrap();
         assert!(models.iter().any(|model| model["provider"] == "keep"));
