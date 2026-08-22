@@ -34,7 +34,7 @@ npm run images     # assets/raw/*.png → public/img/*.{avif,webp} 多分辨率 
 - OSIR API 官网：API Key、控制台、模型市场、价格和 API 文档；
 - GitHub：源码、精确版本资产和问题反馈。
 
-官网首页的正式下载入口指向 `app.osirclaw.com/manager/0.5.9` 版本化镜像；Manager 更新清单固定使用 `/manager/latest.json`，由发布目录原子切换推进。
+官网首页的下载入口统一指向 `app.osirclaw.com/manager/latest/` 稳定镜像；Manager 更新清单固定使用 `/manager/latest.json`，由发布目录原子切换推进。官网不再硬编码具体版本号，避免新版本发布后继续指向旧目录。
 
 ## i18n
 
