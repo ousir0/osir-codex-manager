@@ -56,6 +56,8 @@ ssh -o BatchMode=yes "${SSH_TARGET}" "set -eu; \
   test -f '${REMOTE_TMP}/manager/latest/CodexManager_x86_64.dmg'; \
   test -f '${REMOTE_TMP}/manager/latest/CodexManager_${RELEASE_ID}_x64-setup.exe'; \
   test -f '${REMOTE_TMP}/manager/latest/CodexManager_${RELEASE_ID}_arm64-setup.exe'; \
+  test -f '${REMOTE_TMP}/manager/${RELEASE_ID}/SHA256SUMS'; \
+  find '${REMOTE_TMP}/manager/${RELEASE_ID}' -type f -name '*.sig' -print -quit | grep -q .; \
   mkdir -p '${REMOTE_ROOT}/releases'; \
   mv '${REMOTE_TMP}' '${REMOTE_RELEASE}'; \
   find '${REMOTE_RELEASE}' -type d -exec chmod 0755 {} +; \

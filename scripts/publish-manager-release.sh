@@ -29,12 +29,21 @@ gh release download "${TAG}" --repo "${REPOSITORY}" --dir "${DOWNLOAD}" --clobbe
 [[ -s "${DOWNLOAD}/SHA256SUMS" ]] || { echo "SHA256SUMS missing" >&2; exit 1; }
 (cd "${DOWNLOAD}" && sha256sum -c SHA256SUMS)
 
-for asset in "CodexManager_aarch64.dmg" "CodexManager_x86_64.dmg" "CodexManager_${VERSION}_x64-setup.exe" "CodexManager_${VERSION}_arm64-setup.exe"; do
-  [[ -s "${DOWNLOAD}/${asset}" ]] || { echo "required asset missing: ${asset}" >&2; exit 1; }
-  cp "${DOWNLOAD}/${asset}" "${ARTIFACT}/manager/${VERSION}/${asset}"
-  cp "${DOWNLOAD}/${asset}" "${ARTIFACT}/manager/latest/${asset}"
+for asset in "${DOWNLOAD}"/*; do
+  name="$(basename "${asset}")"
+  case "${name}" in
+    latest.json|SHA256SUMS) continue ;;
+  esac
+  [[ -s "${asset}" ]] || { echo "empty release asset: ${name}" >&2; exit 1; }
+  cp "${asset}" "${ARTIFACT}/manager/${VERSION}/${name}"
+  cp "${asset}" "${ARTIFACT}/manager/latest/${name}"
+done
+for required in "CodexManager_aarch64.dmg" "CodexManager_x86_64.dmg" "CodexManager_${VERSION}_x64-setup.exe" "CodexManager_${VERSION}_arm64-setup.exe"; do
+  [[ -s "${ARTIFACT}/manager/${VERSION}/${required}" ]] || { echo "required asset missing: ${required}" >&2; exit 1; }
 done
 cp "${DOWNLOAD}/latest.json" "${ARTIFACT}/manager/latest.json"
+cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/${VERSION}/SHA256SUMS"
+cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/latest/SHA256SUMS"
 printf '%s\n' "${VERSION}" > "${ARTIFACT}/.release-id"
 
 exec "${ROOT}/deploy/app-server/publish-rainyun.sh" "${SITE_DIR}" "${ARTIFACT}" "${VERSION}"
