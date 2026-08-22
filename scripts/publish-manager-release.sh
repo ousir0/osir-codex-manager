@@ -38,6 +38,10 @@ done
 for required in "CodexManager_aarch64.dmg" "CodexManager_x86_64.dmg" "CodexManager_${VERSION}_x64-setup.exe" "CodexManager_${VERSION}_arm64-setup.exe"; do
   [[ -s "${ARTIFACT}/manager/${VERSION}/${required}" ]] || { echo "required asset missing: ${required}" >&2; exit 1; }
 done
+cp "${ARTIFACT}/manager/${VERSION}/CodexManager_${VERSION}_x64-setup.exe" "${ARTIFACT}/manager/latest/CodexManager_x64-setup.exe"
+cp "${ARTIFACT}/manager/${VERSION}/CodexManager_${VERSION}_x64-setup.exe.sig" "${ARTIFACT}/manager/latest/CodexManager_x64-setup.exe.sig"
+cp "${ARTIFACT}/manager/${VERSION}/CodexManager_${VERSION}_arm64-setup.exe" "${ARTIFACT}/manager/latest/CodexManager_arm64-setup.exe"
+cp "${ARTIFACT}/manager/${VERSION}/CodexManager_${VERSION}_arm64-setup.exe.sig" "${ARTIFACT}/manager/latest/CodexManager_arm64-setup.exe.sig"
 cp "${DOWNLOAD}/latest.json" "${ARTIFACT}/manager/latest.json"
 cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/${VERSION}/SHA256SUMS"
 cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/latest/SHA256SUMS"
