@@ -4,14 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${1:-}"
 REPOSITORY="${GITHUB_REPOSITORY:-ousir0/osir-codex-manager}"
-SITE_DIR="${MANAGER_SITE_DIR:-}"
 
 if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
   echo "usage: $0 vX.Y.Z" >&2
   exit 2
 fi
-[[ -n "${SITE_DIR}" ]] || { echo "MANAGER_SITE_DIR is required" >&2; exit 2; }
-[[ -f "${SITE_DIR}/index.html" ]] || { echo "site index.html missing: ${SITE_DIR}" >&2; exit 2; }
 command -v gh >/dev/null || { echo "gh CLI is required" >&2; exit 2; }
 command -v sha256sum >/dev/null || { echo "sha256sum is required" >&2; exit 2; }
 
@@ -46,4 +43,4 @@ cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/${VERSION}/SHA256SUMS"
 cp "${DOWNLOAD}/SHA256SUMS" "${ARTIFACT}/manager/latest/SHA256SUMS"
 printf '%s\n' "${VERSION}" > "${ARTIFACT}/.release-id"
 
-exec "${ROOT}/deploy/app-server/publish-rainyun.sh" "${SITE_DIR}" "${ARTIFACT}" "${VERSION}"
+exec "${ROOT}/deploy/app-server/publish-rainyun.sh" "" "${ARTIFACT}" "${VERSION}"
