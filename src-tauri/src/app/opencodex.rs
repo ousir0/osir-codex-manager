@@ -888,6 +888,37 @@ fn platform_label(platform: &str) -> &str {
     }
 }
 
+fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), AppError> {
+    let required = ["openai", "anthropic", "grok"];
+    if payload.providers.len() != required.len() {
+        return Err(AppError::Engine(format!(
+            "OSIRAPI 返回的订阅路由不完整：需要 GPT、Claude、Grok 三条，实际收到 {} 条",
+            payload.providers.len()
+        )));
+    }
+    let mut platforms = BTreeSet::new();
+    for provider in &payload.providers {
+        if !required.contains(&provider.platform.as_str()) || !platforms.insert(provider.platform.as_str()) {
+            return Err(AppError::Engine("OSIRAPI 返回了重复或未知的订阅平台路由".to_string()));
+        }
+        if provider.api_key.trim().is_empty() || provider.models.is_empty() {
+            return Err(AppError::Engine(format!(
+                "OSIRAPI 的 {} 订阅路由缺少密钥或模型",
+                platform_label(&provider.platform)
+            )));
+        }
+        if provider.adapter.trim() != "openai-responses"
+            || !provider.models.iter().any(|model| model == &provider.recommended_model)
+        {
+            return Err(AppError::Engine(format!(
+                "OSIRAPI 的 {} 订阅路由格式无效",
+                platform_label(&provider.platform)
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn timestamp_marker() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -1164,9 +1195,7 @@ pub fn ensure_ready_for_codex() -> Result<(), AppError> {
 }
 
 fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodexStatus, AppError> {
-    if payload.providers.is_empty() || payload.providers.len() > MAX_ROUTE_COUNT {
-        return Err(AppError::Engine("OSIRAPI 未返回可用多模型路由".to_string()));
-    }
+    validate_codex_install_payload(&payload)?;
     let account = payload.account.clone();
     let routes = payload
         .providers
