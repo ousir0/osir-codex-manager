@@ -1924,6 +1924,36 @@ fn catalog_contains_enabled_routes(path: &Path, routes: &[OpenCodexRouteInput]) 
         .all(|slug| actual.contains(&slug))
 }
 
+fn configured_routes_from_config(
+    config: &JsonMap<String, JsonValue>,
+    managed_provider_ids: &[String],
+) -> Vec<OpenCodexRouteInput> {
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    managed_provider_ids
+        .iter()
+        .filter_map(|id| {
+            let route = route_from_config(id, config, &models, None, &BTreeMap::new())?;
+            if route.models.is_empty() || route.default_model.is_empty() || route.base_url.is_empty() {
+                return None;
+            }
+            Some(OpenCodexRouteInput {
+                id: route.id,
+                label: route.label,
+                adapter: route.adapter,
+                base_url: route.base_url,
+                api_key: None,
+                models: route.models,
+                default_model: route.default_model,
+                enabled: route.enabled,
+            })
+        })
+        .collect()
+}
+
 /// OpenCodex may keep a stale/native catalog when provider discovery is
 /// blocked by local DNS or proxy policy. Preserve the configured route list in
 /// the catalog so the user can still select and use every model returned by
@@ -2012,6 +2042,10 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
     let Some(default_route) = inferred_default_route(&config, &managed_provider_ids) else {
         return Ok(());
     };
+    let configured_routes = configured_routes_from_config(&config, &managed_provider_ids);
+    if !configured_routes.is_empty() {
+        append_configured_models_to_catalog(&paths.catalog, &configured_routes)?;
+    }
     let provider_id = if state.codex_provider_id.is_empty() {
         DEFAULT_PROVIDER_ID
     } else {
@@ -2201,7 +2235,8 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes, component_target_for, decrypt_bundle,
+        append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
+        component_target_for, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
         validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
@@ -2363,6 +2398,18 @@ mod tests {
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
         assert_eq!(value["models"].as_array().unwrap().len(), 2);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rebuilds_catalog_routes_from_saved_config_after_a_later_sync() {
+        let (_, _, routes) = validate_input(&input()).unwrap();
+        let value = build_opencodex_config(JsonMap::new(), &routes, &[], 10100).unwrap();
+        let config = value.as_object().unwrap();
+        let rebuilt = configured_routes_from_config(config, &["osir-gpt".to_string()]);
+        assert_eq!(rebuilt.len(), 1);
+        assert_eq!(rebuilt[0].id, "osir-gpt");
+        assert_eq!(rebuilt[0].models, vec!["gpt-5.6-sol"]);
+        assert!(rebuilt[0].enabled);
     }
 
     #[test]
