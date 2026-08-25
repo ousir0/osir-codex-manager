@@ -346,8 +346,13 @@ mod tests {
         assert!(!built.payload.contains("__CTS_"), "unsubstituted placeholder");
         // The CSS rides as a JSON string literal, so quotes appear escaped.
         assert!(built.payload.contains("--cts-asset-wall: url(\\\"data:image/png;base64,"));
+        assert!(built.payload.contains("background: linear-gradient"));
+        assert!(built.payload.contains("var(--cts-asset-background)"));
         assert!(built.payload.contains("data-cts-layer"));
         assert!(built.payload.contains("main[data-app-shell-main-surface]"));
+        assert!(built.payload.contains("--color-background-elevated-secondary"));
+        assert!(built.payload.contains("main.cts-home-shell"));
+        assert!(built.payload.contains("bg-surface-elevated-secondary"));
         assert!(built.payload.contains("data-cts-main-surface-compat"));
         assert!(built.payload.contains("createComposerOverflowAnnotator"));
         assert!(built.payload.contains("annotateComposerOverflow.invalidate()"));

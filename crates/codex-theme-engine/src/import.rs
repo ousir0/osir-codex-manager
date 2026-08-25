@@ -66,6 +66,41 @@ html.codex-theme-studio :is(button, input, textarea, [contenteditable="true"]):f
 "#
 }
 
+fn dreamskin_fallback_css() -> &'static str {
+    r#"
+html.codex-theme-studio [data-ds-part="root"] { color: var(--ds-theme-color-text) !important; }
+html.codex-theme-studio [data-ds-part="main"] { background-color: var(--ds-theme-color-background) !important; }
+html.codex-theme-studio [data-ds-part="sidebar"] {
+  background-color: color-mix(in srgb, var(--ds-theme-color-panel) 90%, transparent) !important;
+  border-right: 1px solid var(--ds-theme-color-line) !important;
+  backdrop-filter: blur(var(--ds-theme-surface-blur));
+}
+html.codex-theme-studio [data-ds-part="composer"] {
+  background-color: color-mix(in srgb, var(--ds-theme-color-panel-alt) 92%, transparent) !important;
+  border: 1px solid var(--ds-theme-color-line) !important;
+  color: var(--ds-theme-color-text) !important;
+}
+html.codex-theme-studio [data-ds-part="message"] {
+  background-color: color-mix(in srgb, var(--ds-theme-color-panel) 86%, transparent) !important;
+  border: 1px solid var(--ds-theme-color-line) !important;
+  color: var(--ds-theme-color-text) !important;
+}
+html.codex-theme-studio [data-ds-part="dialog"] {
+  background-color: color-mix(in srgb, var(--ds-theme-color-panel-alt) 94%, transparent) !important;
+  border: 1px solid var(--ds-theme-color-line) !important;
+  color: var(--ds-theme-color-text) !important;
+  backdrop-filter: blur(var(--ds-theme-surface-blur));
+}
+html.codex-theme-studio [data-ds-part="composer"] :is(button, [role="button"]):hover {
+  background-color: color-mix(in srgb, var(--ds-theme-color-accent) 18%, transparent) !important;
+}
+html.codex-theme-studio [data-ds-part="composer"] :is(input, textarea, [contenteditable="true"]):focus-visible {
+  outline: 2px solid var(--ds-theme-color-accent) !important;
+  outline-offset: 2px;
+}
+"#
+}
+
 fn fit_dreamskin_background(source: &Path) -> Result<Vec<u8>> {
     let raw = std::fs::read(source).map_err(|e| err(format!("读取 DreamSkin 背景失败: {e}")))?;
     let image = image::load_from_memory(&raw).map_err(|e| err(format!("解码 DreamSkin 背景失败: {e}")))?;
@@ -151,7 +186,14 @@ fn convert_dreamskin_v1(staging: &Path) -> Result<()> {
     });
     let encoded = serde_json::to_vec_pretty(&converted_theme).map_err(|e| err(format!("生成 Manager 主题配置失败: {e}")))?;
     std::fs::write(&theme_path, encoded).map_err(|e| err(format!("写入 Manager 主题配置失败: {e}")))?;
-    std::fs::write(staging.join("theme.css"), dreamskin_css()).map_err(|e| err(format!("写入 Manager 主题样式失败: {e}")))?;
+    let source_css = std::fs::read_to_string(staging.join("theme.css")).unwrap_or_default();
+    let css = format!(
+        "{}\n{}\n{}",
+        dreamskin_css(),
+        dreamskin_fallback_css(),
+        source_css.trim(),
+    );
+    std::fs::write(staging.join("theme.css"), css).map_err(|e| err(format!("写入 Manager 主题样式失败: {e}")))?;
     Ok(())
 }
 
@@ -428,5 +470,9 @@ mod tests {
         assert_eq!(loaded.config.colors.get("panel-alt").map(String::as_str), Some("#202020"));
         assert!(root.join("dream-v1/assets/background.jpg").is_file());
         assert!(root.join("dream-v1/previews/home.jpg").is_file());
+        let css = std::fs::read_to_string(root.join("dream-v1/theme.css")).unwrap();
+        assert!(css.contains("[data-ds-part=\"root\"]"));
+        assert!(css.contains("[data-ds-part=\"message\"]"));
+        assert!(css.contains("--ds-theme-color-accent"));
     }
 }

@@ -26,6 +26,85 @@
     selectComposerSurfaces,
   } = __CTS_COMPOSER_OVERFLOW_HELPERS__;
   const RUNTIME_CSS = `
+html.codex-theme-studio,
+html.codex-theme-studio body {
+  color: var(--cts-color-text) !important;
+}
+html.codex-theme-studio body {
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--cts-color-background) 88%, transparent),
+      color-mix(in srgb, var(--cts-color-background) 48%, transparent)),
+    var(--cts-asset-background) center / cover no-repeat fixed,
+    var(--cts-color-background) !important;
+}
+html.codex-theme-studio .app-theme {
+  background: transparent !important;
+}
+html.codex-theme-studio main[data-app-shell-main-surface],
+html.codex-theme-studio main.main-surface,
+html.codex-theme-studio div.main-surface {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--cts-color-background) 88%, transparent),
+    color-mix(in srgb, var(--cts-color-background) 76%, transparent)),
+    var(--cts-asset-background) center / cover no-repeat,
+    var(--cts-color-background) !important;
+  color: var(--cts-color-text) !important;
+}
+html.codex-theme-studio main.cts-home-shell,
+html.codex-theme-studio main.cts-home-shell.main-surface {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--cts-color-background) 62%, transparent),
+    color-mix(in srgb, var(--cts-color-background) 20%, transparent)),
+    var(--cts-asset-background) center / cover no-repeat,
+    var(--cts-color-background) !important;
+}
+html.codex-theme-studio aside.app-shell-left-panel {
+  background: color-mix(in srgb, var(--cts-color-panel) 90%, transparent) !important;
+  border-right: 1px solid var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+  backdrop-filter: blur(var(--ds-theme-surface-blur, 18px)) saturate(1.08);
+}
+html.codex-theme-studio .composer-surface-chrome,
+html.codex-theme-studio [data-codex-composer],
+html.codex-theme-studio [data-ds-part="composer"] {
+  background: color-mix(in srgb, var(--cts-color-panel-alt) 92%, transparent) !important;
+  border-color: var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--cts-color-background) 45%, transparent) !important;
+}
+html.codex-theme-studio [role="dialog"],
+html.codex-theme-studio [data-radix-popper-content-wrapper] > *,
+html.codex-theme-studio [data-floating-ui-portal] > * {
+  background: color-mix(in srgb, var(--cts-color-panel-alt) 96%, transparent) !important;
+  border-color: var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+  backdrop-filter: blur(var(--ds-theme-surface-blur, 18px));
+}
+html.codex-theme-studio [class*="bg-surface-elevated-secondary"],
+html.codex-theme-studio [class*="bg-surface-elevated-primary"] {
+  background: var(--cts-color-panel-alt) !important;
+  border-color: var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+}
+html.codex-theme-studio [data-ds-part="message"],
+html.codex-theme-studio [data-message-author-role],
+html.codex-theme-studio [data-message-id],
+html.codex-theme-studio [data-testid*="message"] {
+  color: var(--cts-color-text) !important;
+}
+html.codex-theme-studio :is(input, textarea, [contenteditable="true"]) {
+  background-color: color-mix(in srgb, var(--cts-color-panel) 86%, transparent) !important;
+  border-color: var(--cts-color-line) !important;
+  color: var(--cts-color-text) !important;
+}
+html.codex-theme-studio :is(button, [role="button"]):hover {
+  background-color: color-mix(in srgb, var(--cts-color-accent) 16%, transparent) !important;
+}
+html.codex-theme-studio :is(button, input, textarea, [contenteditable="true"]):focus-visible {
+  outline: 2px solid var(--cts-color-accent) !important;
+  outline-offset: 2px;
+}
 html.codex-theme-studio .cts-windows-menu-bar {
   position: absolute !important;
   inset: 0 0 auto 0 !important;
@@ -82,6 +161,10 @@ html.codex-theme-studio .cts-windows-menu-bar [data-cts-menu-region="main"] {
   document.querySelectorAll("[data-cts-glyph]").forEach((node) => node.removeAttribute("data-cts-glyph"));
   document.querySelectorAll("[data-cts-icon]").forEach((node) => node.removeAttribute("data-cts-icon"));
   document.querySelectorAll("[data-cts-logo]").forEach((node) => node.removeAttribute("data-cts-logo"));
+  document.querySelectorAll("[data-cts-ds-part]").forEach((node) => {
+    node.removeAttribute("data-cts-ds-part");
+    node.removeAttribute("data-ds-part");
+  });
   document.querySelectorAll(`[${COMPOSER_OVERFLOW_ATTR}]`)
     .forEach((node) => node.removeAttribute(COMPOSER_OVERFLOW_ATTR));
   document.querySelectorAll(`[${COMPOSER_MODE_ATTR}]`)
@@ -114,6 +197,111 @@ html.codex-theme-studio .cts-windows-menu-bar [data-cts-menu-region="main"] {
 
   const setClass = (node, name, on) => {
     if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
+  };
+
+  // DreamSkin's public Safe CSS contract uses the older `ds-*` token names
+  // and semantic part markers. Codex itself does not expose those markers,
+  // so bridge them to the stable structure we already detect below. This is
+  // deliberately runtime-owned: community CSS can stay portable while the
+  // adapter absorbs Codex DOM drift.
+  const setSemanticPart = (node, part) => {
+    if (!node) return;
+    if (node.getAttribute("data-ds-part") !== part) node.setAttribute("data-ds-part", part);
+    node.setAttribute("data-cts-ds-part", part);
+  };
+
+  const annotateDreamSkinParts = (shellMain) => {
+    document.querySelectorAll("[data-cts-ds-part]").forEach((node) => {
+      node.removeAttribute("data-cts-ds-part");
+      node.removeAttribute("data-ds-part");
+    });
+    setSemanticPart(document.documentElement, "root");
+    setSemanticPart(shellMain, "main");
+    setSemanticPart(document.querySelector(".app-shell-left-panel"), "sidebar");
+    const composer = document.querySelector(".composer-surface-chrome") ||
+      document.querySelector("[data-codex-composer]") ||
+      document.querySelector(".ProseMirror[contenteditable=\"true\"]")?.closest("form, section, div");
+    setSemanticPart(composer, "composer");
+    document.querySelectorAll("[data-message-author-role], [data-message-id], [data-testid*=\"message\"]")
+      .forEach((node) => setSemanticPart(node, "message"));
+    document.querySelectorAll("[role=\"dialog\"]").forEach((node) => setSemanticPart(node, "dialog"));
+  };
+
+  // Codex's own components read these semantic variables directly. Styling
+  // only the shell leaves native popovers, environment panels and controls
+  // on the stock light palette, which is the source of the white islands seen
+  // in community themes. Mirror the skin palette into the current Codex token
+  // layer so native and Safe CSS surfaces share one material system.
+  const applyCodexTokens = () => {
+    const hostVersion = codexVersion();
+    if (!hostVersion || !versionAtLeast(hostVersion, "26.818")) return;
+    const color = (key, fallback) => THEME.colors?.[key] || fallback;
+    const background = color("background", "#11151b");
+    const panel = color("panel", background);
+    const panelAlt = color("panel-alt", panel);
+    const accent = color("accent", "#69a5fa");
+    const text = color("text", "#f4f7fb");
+    const muted = color("muted", text);
+    const line = color("line", "rgba(255,255,255,.18)");
+    const tint = `color-mix(in srgb, ${accent} 16%, transparent)`;
+    const subtle = `color-mix(in srgb, ${panel} 86%, transparent)`;
+    const elevated = `color-mix(in srgb, ${panelAlt} 96%, transparent)`;
+    const tokens = {
+      "--codex-base-accent": accent,
+      "--codex-base-contrast": "45",
+      "--codex-base-ink": text,
+      "--codex-base-surface": background,
+      "--color-accent-blue": accent,
+      "--color-accent-purple": color("secondary", accent),
+      "--color-background-accent": tint,
+      "--color-background-accent-active": tint,
+      "--color-background-accent-hover": `color-mix(in srgb, ${accent} 22%, transparent)`,
+      "--color-background-application-menu": panel,
+      "--color-background-button-primary": accent,
+      "--color-background-button-primary-active": tint,
+      "--color-background-button-primary-hover": `color-mix(in srgb, ${accent} 86%, white)`,
+      "--color-background-button-primary-inactive": panelAlt,
+      "--color-background-button-secondary": subtle,
+      "--color-background-button-secondary-active": tint,
+      "--color-background-button-secondary-hover": tint,
+      "--color-background-button-secondary-inactive": subtle,
+      "--color-background-button-tertiary": "transparent",
+      "--color-background-button-tertiary-active": tint,
+      "--color-background-button-tertiary-hover": tint,
+      "--color-background-control": subtle,
+      "--color-background-control-opaque": panelAlt,
+      "--color-background-editor-opaque": background,
+      "--color-background-elevated-primary": elevated,
+      "--color-background-elevated-primary-opaque": panelAlt,
+      "--color-background-elevated-secondary": elevated,
+      "--color-background-elevated-secondary-opaque": panelAlt,
+      "--color-background-panel": panel,
+      "--color-background-surface": background,
+      "--color-background-surface-under": background,
+      "--color-border": line,
+      "--color-border-application-menu-separator": line,
+      "--color-border-focus": accent,
+      "--color-border-heavy": line,
+      "--color-border-light": `color-mix(in srgb, ${line} 60%, transparent)`,
+      "--color-icon-accent": accent,
+      "--color-icon-primary": text,
+      "--color-icon-secondary": muted,
+      "--color-icon-tertiary": muted,
+      "--color-simple-scrim": `color-mix(in srgb, ${background} 42%, transparent)`,
+      "--color-text-accent": accent,
+      "--color-text-on-accent": background,
+      "--color-text-button-primary": background,
+      "--color-text-button-secondary": text,
+      "--color-text-button-tertiary": muted,
+      "--color-foreground-application-menu": text,
+      "--color-text-foreground": text,
+      "--color-text-foreground-secondary": muted,
+      "--color-text-foreground-tertiary": muted,
+      "--vscode-editor-background": background,
+      "--vscode-sideBar-background": panel,
+      "--vscode-panel-background": panelAlt,
+    };
+    for (const [name, value] of Object.entries(tokens)) setVar(name, value);
   };
 
   // Codex <= 26.715 exposed the content surface as `main.main-surface`.
@@ -455,6 +643,12 @@ html.codex-theme-studio .cts-windows-menu-bar [data-cts-menu-region="main"] {
     setAttr(root, SHELL_ATTR, detectShellMode());
 
     for (const [key, value] of Object.entries(THEME.colors || {})) setVar(`--cts-color-${key}`, value);
+    // Compatibility aliases used by DreamSkin Safe CSS. Keep the aliases
+    // explicit instead of asking each package to ship a client-specific shim.
+    for (const [key, value] of Object.entries(THEME.colors || {})) setVar(`--ds-theme-color-${key}`, value);
+    setVar("--ds-theme-surface-blur", "18px");
+    setVar("--ds-theme-surface-radius", "12px");
+    setVar("--ds-theme-surface-opacity", "0.86");
     for (const [key, value] of Object.entries(THEME.strings || {})) setVar(`--cts-str-${key}`, JSON.stringify(String(value)));
 
     let style = document.getElementById(STYLE_ID);
@@ -470,6 +664,8 @@ html.codex-theme-studio .cts-windows-menu-bar [data-cts-menu-region="main"] {
 
     const shellMain = resolveShellMain();
     integrateWindowsMenu(shellMain);
+    applyCodexTokens();
+    annotateDreamSkinParts(shellMain);
     const home = findHome(state?.homeSticky);
     if (state) state.homeSticky = home;
     for (const candidate of document.querySelectorAll('[role="main"].cts-home')) {

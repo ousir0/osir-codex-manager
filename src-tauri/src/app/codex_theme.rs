@@ -43,6 +43,7 @@ const CDP_WAIT: Duration = Duration::from_secs(45);
 enum NativeSync {
     Hot,
     HotThenFile,
+    CssOnly,
 }
 
 /// New native mutations are refused while an unresolved transaction's
@@ -1303,15 +1304,25 @@ impl ThemeService {
         ensure_no_pending_tx()?;
         let dir = resolve_theme(settings, theme_ref)?;
         let theme = load_theme(&dir).map_err(|e| AppError::Engine(e.to_string()))?;
-        let native = strict_native(&theme)?;
-        // §4 contract gate: both official share strings must derive and
-        // round-trip before anything is written anywhere.
-        codex_theme_engine::codex_theme::verified_share_strings(&native)
-            .map_err(|e| AppError::Engine(e.to_string()))?;
+        let native = match theme.codex_theme.as_ref() {
+            Some(_) => {
+                let parsed = strict_native(&theme)?;
+                // §4 contract gate: both official share strings must derive and
+                // round-trip before anything is written anywhere.
+                codex_theme_engine::codex_theme::verified_share_strings(&parsed)
+                    .map_err(|e| AppError::Engine(e.to_string()))?;
+                Some(parsed)
+            }
+            None => None,
+        };
         let theme_id = theme.config.id.clone();
 
         if codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await {
-            match self.hot_apply_native(&theme_id, &native, false).await {
+            let native_result = match native.as_ref() {
+                Some(native) => self.hot_apply_native(&theme_id, native, false).await,
+                None => Ok(()),
+            };
+            match native_result {
                 Ok(()) => {
                     let handle = self.directive_handle().await;
                     handle
@@ -1324,13 +1335,18 @@ impl ThemeService {
                 }
                 Err(error) => {
                     log::warn!("热应用失败，降级为停机写 config.toml: {error}");
-                    return self
-                        .file_apply_flow(settings, &dir, &theme_id, &native)
-                        .await;
+                    if let Some(native) = native.as_ref() {
+                        return self.file_apply_flow(settings, &dir, &theme_id, native).await;
+                    }
+                    return Err(error);
                 }
             }
         }
-        self.restart_debuggable_and_inject(settings, theme_ref, NativeSync::HotThenFile)
+        self.restart_debuggable_and_inject(
+            settings,
+            theme_ref,
+            if native.is_some() { NativeSync::HotThenFile } else { NativeSync::CssOnly },
+        )
             .await
     }
 
@@ -1355,6 +1371,7 @@ impl ThemeService {
                     .map_err(|e| AppError::Engine(e.to_string()))?;
                 Some(strict)
             }
+            NativeSync::CssOnly => None,
         };
 
         // Plain relaunch into CDP mode — the native layer is synced hot after
@@ -1394,9 +1411,11 @@ impl ThemeService {
         handle
             .send(Some(dir))
             .map_err(|_| AppError::Internal("主题守护未运行".to_string()))?;
-        if matches!(sync, NativeSync::HotThenFile) {
+        if matches!(sync, NativeSync::HotThenFile | NativeSync::CssOnly) {
             self.wait_daemon_theme(&theme_id, Duration::from_secs(30))
                 .await?;
+        }
+        if matches!(sync, NativeSync::HotThenFile) {
             remove_stash();
         }
         Ok(())
