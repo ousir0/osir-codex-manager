@@ -1781,6 +1781,11 @@ fn build_opencodex_config(
             provider.insert("baseUrl".to_string(), JsonValue::String(route.base_url.clone()));
             provider.insert("label".to_string(), JsonValue::String(route.label.clone()));
             provider.insert("defaultModel".to_string(), JsonValue::String(route.default_model.clone()));
+            // OpenCodex 2.22 defaults an untyped provider to its native auth
+            // path. Declare the OSIR route as an API-key provider explicitly;
+            // otherwise a valid gateway key is reported as expired/invalid.
+            provider.insert("authMode".to_string(), JsonValue::String("key".to_string()));
+            provider.insert("apiKeyTransport".to_string(), JsonValue::String("bearer".to_string()));
             // Keep the provider's authoritative model list explicit. OpenCodex
             // uses it to decode provider/model selectors back to the bare model
             // id before sending the request upstream. Relying only on
@@ -2163,6 +2168,8 @@ mod tests {
         let providers = next["providers"].as_object().unwrap();
         assert!(providers.contains_key("keep"));
         assert!(providers.contains_key("osir-gpt"));
+        assert_eq!(providers["osir-gpt"]["authMode"], json!("key"));
+        assert_eq!(providers["osir-gpt"]["apiKeyTransport"], json!("bearer"));
         assert_eq!(
             providers["osir-gpt"]["models"],
             json!(["gpt-5.6-sol"])
