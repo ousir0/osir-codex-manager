@@ -1418,6 +1418,13 @@ export const managerApi = {
     }
     return invoke<CodexConfigReport>("codex_config_get");
   },
+  codexConfigActivateDefault(): Promise<CodexConfigReport> {
+    if (!hasTauriRuntime()) {
+      const report = browserConfigReport({ openCodex: { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), enabled: false }, provider: BROWSER_FALLBACK_CODEX_CONFIG.provider === "opencodex" ? "osir" : BROWSER_FALLBACK_CODEX_CONFIG.provider });
+      return Promise.resolve(report);
+    }
+    return invoke<CodexConfigReport>("codex_config_activate_default");
+  },
   codexConfigFetchModels(baseUrl: string): Promise<string[]> {
     if (!hasTauriRuntime()) {
       return Promise.resolve([...BROWSER_FALLBACK_MODELS]);
@@ -1646,6 +1653,14 @@ export const managerApi = {
       return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
     }
     return invoke<OpenCodexStatus>("opencodex_sync");
+  },
+  openCodexActivateSaved(): Promise<OpenCodexStatus> {
+    if (!hasTauriRuntime()) {
+      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), enabled: true, serviceState: "ready" as const };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return Promise.resolve(status);
+    }
+    return invoke<OpenCodexStatus>("opencodex_activate_saved");
   },
   openCodexRestore(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {

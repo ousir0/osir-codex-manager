@@ -2282,6 +2282,15 @@ pub fn codex_config_get() -> Result<crate::app::codex_config::CodexConfigReport,
 }
 
 #[tauri::command]
+pub fn codex_config_activate_default(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
+    ensure_config_may_write(&state)?;
+    crate::app::codex_config::activate_default(crate::app::codex_theme::codex_running())
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn codex_config_fetch_models(base_url: String) -> Result<Vec<String>, CommandError> {
     tauri::async_runtime::spawn_blocking(move || crate::app::codex_config::fetch_models(&base_url))
         .await
@@ -2539,6 +2548,17 @@ pub async fn opencodex_sync(
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
     tauri::async_runtime::spawn_blocking(crate::app::opencodex::sync)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn opencodex_activate_saved(
+    state: State<'_, ManagerState>,
+) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    ensure_config_may_write(&state)?;
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::activate_saved)
         .await
         .map_err(|error| AppError::Internal(format!("join: {error}")))?
         .map_err(Into::into)

@@ -5,6 +5,13 @@
 
 本手册固定“修改代码 → 测试 → GitHub Release → Rainyun 镜像 → 用户更新”的完整流程。发布必须基于已经提交并推送到 main 的完整 SHA，不能使用未提交工作区。
 
+## 固定升级约定（后续默认遵循）
+
+- Manager 的代码、配置或 OpenCodex 集成有任何修复，都必须提升 Manager 版本号；不能复用旧版本号覆盖发布。
+- 用户侧升级入口是 Manager 内置更新器：发布新版本并推进 `https://app.osirclaw.com/manager/latest.json` 后，用户只需在客户端点击“立即更新”，客户端会校验版本和签名、下载安装并自动重启。
+- 本机直接替换 `/Applications/Codex Manager.app` 只用于开发验收，不作为用户发布方式；正式用户更新必须走版本化 Release + `latest.json`。
+- 发布完成后必须用旧版本客户端验证一次“发现更新 → 点击更新 → 自动重启 → 关于页版本变为目标版本”。
+
 ## 1. 发布前检查
 
     cd /Users/ouwei/codex-app-manager
@@ -118,4 +125,3 @@ Rainyun 镜像失败时，脚本不得切换 current。旧版本目录必须保�
 - [ ] 四个平台下载 URL 返回 200。
 - [ ] 客户端“立即更新”发现并安装目标版本。
 - [ ] 发布 SHA、Run ID、current 和回滚目录已记录。
-

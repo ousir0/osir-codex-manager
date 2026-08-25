@@ -3741,6 +3741,27 @@ button.row.danger:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.config-mode-actions {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px 2px 0;
+}
+.config-restart-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-end: auto;
+  color: var(--amber-deep);
+  font-size: var(--fs-label);
+}
+.config-restart-hint svg {
+  width: 15px;
+  height: 15px;
+}
 .config-mode-option strong {
   font-size: var(--fs-sm);
 }
@@ -3760,6 +3781,76 @@ button.row.danger:hover {
 .config-tools-grid {
   display: grid;
   gap: 12px;
+}
+.config-default-layout {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.config-default-file {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--accent) 7%, var(--surface-2));
+}
+.config-default-file svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  color: var(--accent-deep);
+}
+.config-default-file div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.config-default-file strong,
+.config-default-file span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.config-default-file strong {
+  font-size: var(--fs-sm);
+}
+.config-default-file span {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.config-default-provider-row.selected {
+  border-color: color-mix(in oklch, var(--accent) 44%, var(--line));
+  background: color-mix(in oklch, var(--accent) 9%, var(--surface-2));
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.config-default-detail {
+  align-self: start;
+}
+.config-default-detail-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+  line-height: 1.45;
+}
+.config-default-detail-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--accent-deep);
+}
+.config-default-provider-row > .cam-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--text-faint);
 }
 .config-feature-card,
 .config-list-card {
@@ -4143,6 +4234,10 @@ button.config-resource-row:hover {
 :root[data-window-mode="expanded"] .config-connection-layout,
 :root[data-window-mode="expanded"] .config-tools-grid {
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+}
+:root[data-window-mode="expanded"] .config-default-layout {
+  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.22fr);
+  align-items: start;
 }
 :root[data-window-mode="expanded"] .config-feature-grid-six {
   grid-template-columns: repeat(3, minmax(0, 1fr));

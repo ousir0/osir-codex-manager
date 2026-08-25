@@ -316,6 +316,137 @@ fn integration_paths() -> Result<IntegrationPaths, AppError> {
     })
 }
 
+fn codex_takeover_backup_path(paths: &IntegrationPaths) -> PathBuf {
+    paths
+        .state
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("codex-config.before-opencodex.toml")
+}
+
+fn codex_proxy_provider_is_loopback(path: &Path) -> bool {
+    let Ok(raw) = fs::read_to_string(path) else { return false };
+    let Ok(document) = raw.parse::<DocumentMut>() else { return false };
+    let provider_id = document
+        .get("model_provider")
+        .and_then(Item::as_str)
+        .unwrap_or_default();
+    document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(provider_id))
+        .and_then(Item::as_table)
+        .and_then(|provider| provider.get("base_url"))
+        .and_then(Item::as_str)
+        .is_some_and(|url| {
+            Url::parse(url)
+                .ok()
+                .map(|parsed| {
+                    let is_loopback = parsed
+                        .host_str()
+                        .map(|host| matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1"))
+                        .unwrap_or(false);
+                    is_loopback && parsed.path().ends_with("/v1")
+                })
+                .unwrap_or(false)
+        })
+}
+
+fn should_reconcile_codex_ownership(enabled: bool, codex_is_loopback: bool) -> bool {
+    (!enabled && codex_is_loopback) || (enabled && !codex_is_loopback)
+}
+
+fn preserve_codex_config_before_takeover(
+    paths: &IntegrationPaths,
+    state: &ManagedState,
+) -> Result<(), AppError> {
+    let backup = codex_takeover_backup_path(paths);
+    if backup.is_file() || state.enabled || !paths.codex_config.is_file() {
+        return Ok(());
+    }
+    if codex_proxy_provider_is_loopback(&paths.codex_config) {
+        let previous = atomic_file::backup_path(&paths.codex_config);
+        if previous.is_file() {
+            fs::copy(previous, &backup).map_err(|error| {
+                AppError::Internal(format!("保存已有 Codex 配置备份失败：{error}"))
+            })?;
+        }
+        return Ok(());
+    }
+    let raw = fs::read(&paths.codex_config)
+        .map_err(|error| AppError::Internal(format!("读取接管前 config.toml 失败：{error}")))?;
+    atomic_file::write_atomic(&backup, &raw)
+        .map_err(|error| AppError::Internal(format!("保存接管前 config.toml 备份失败：{error}")))
+}
+
+/// Leave OpenCodex installed, but release ownership of Codex's active provider.
+/// This is used whenever the user switches back to single-provider mode.
+pub fn disable_for_single_provider() -> Result<(), AppError> {
+    let paths = integration_paths()?;
+    let mut state = load_state(&paths.state);
+    let takeover_active = state.enabled || codex_proxy_provider_is_loopback(&paths.codex_config);
+    if !takeover_active {
+        let _ = fs::remove_file(codex_takeover_backup_path(&paths));
+        return Ok(());
+    }
+
+    let backup = codex_takeover_backup_path(&paths);
+    if backup.is_file() {
+        let raw = fs::read(&backup)
+            .map_err(|error| AppError::Internal(format!("读取 OpenCodex 接管备份失败：{error}")))?;
+        String::from_utf8(raw.clone())
+            .map_err(|error| AppError::Engine(format!("OpenCodex 接管备份不是 UTF-8：{error}")))?
+            .parse::<DocumentMut>()
+            .map_err(|error| AppError::Engine(format!("OpenCodex 接管备份无效：{error}")))?;
+        atomic_file::write_atomic(&paths.codex_config, &raw)
+            .map_err(|error| AppError::Internal(format!("恢复单供应商 config.toml 失败：{error}")))?;
+        let _ = fs::remove_file(&backup);
+    } else if codex_proxy_provider_is_loopback(&paths.codex_config) {
+        let raw = fs::read_to_string(&paths.codex_config)
+            .map_err(|error| AppError::Internal(format!("读取本地代理 config.toml 失败：{error}")))?;
+        let mut document = raw
+            .parse::<DocumentMut>()
+            .map_err(|error| AppError::Engine(format!("config.toml 格式错误：{error}")))?;
+        let model = document
+            .get("model")
+            .and_then(Item::as_str)
+            .and_then(|model| model.rsplit('/').next())
+            .filter(|model| !model.is_empty())
+            .unwrap_or("gpt-5.6-sol")
+            .to_string();
+        document["model_provider"] = value("osir");
+        document["model"] = value(model);
+        document.remove("model_catalog_json");
+        if !document.contains_key("model_providers") {
+            document["model_providers"] = toml_edit::table();
+        }
+        let providers = document["model_providers"]
+            .as_table_mut()
+            .ok_or_else(|| AppError::Engine("model_providers 必须是 TOML 表".to_string()))?;
+        let provider = providers
+            .entry("osir")
+            .or_insert_with(|| Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| AppError::Engine("model_providers.osir 必须是 TOML 表".to_string()))?;
+        provider["name"] = value("OSIR");
+        provider["base_url"] = value("https://api.osirclaw.com/v1");
+        provider["wire_api"] = value("responses");
+        provider["requires_openai_auth"] = value(true);
+        atomic_file::write_atomic(&paths.codex_config, document.to_string().as_bytes())
+            .map_err(|error| AppError::Internal(format!("移除本地代理绑定失败：{error}")))?;
+        let _ = fs::remove_file(&backup);
+    }
+
+    state.enabled = false;
+    state.codex_provider_id.clear();
+    write_json(
+        &paths.state,
+        &serde_json::to_value(state)
+            .map_err(|error| AppError::Internal(format!("保存单供应商模式状态失败：{error}")))?,
+    )?;
+    Ok(())
+}
+
 fn checked_id(value: &str, label: &str) -> Result<String, AppError> {
     let trimmed = value.trim();
     if trimmed.is_empty() || trimmed.len() > MAX_ID_LEN {
@@ -1060,6 +1191,9 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
 pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
+    if !state.enabled {
+        return Err(AppError::Engine("OpenCodex 多模型尚未启用，请先保存并同步配置".to_string()));
+    }
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
@@ -1092,6 +1226,9 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
 pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
+    if !state.enabled {
+        return Err(AppError::Engine("OpenCodex 多模型尚未启用，请先保存并同步配置".to_string()));
+    }
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
@@ -1717,6 +1854,13 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
 
 fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let state = effective_state(paths)?;
+    let codex_is_loopback = codex_proxy_provider_is_loopback(&paths.codex_config);
+    if should_reconcile_codex_ownership(state.enabled, codex_is_loopback) {
+        // Reconcile stale ownership left by an older Manager version or an
+        // external edit to config.toml before exposing status to the UI.
+        disable_for_single_provider()?;
+        return status_at(paths);
+    }
     let config = load_config(&paths.opencodex_config).unwrap_or_default();
     let installed = ocx_program().is_some();
     let (service_state, error) = service_state(installed);
@@ -2114,6 +2258,9 @@ fn append_configured_models_to_catalog(
 
 fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppError> {
     let state = effective_state(paths)?;
+    if !state.enabled {
+        return Ok(());
+    }
     let config = load_config(&paths.opencodex_config)?;
     let managed_provider_ids = if state.managed_provider_ids.is_empty() {
         let models = config
@@ -2184,7 +2331,11 @@ fn restore_save_snapshot(
         &paths.state,
         &serde_json::to_value(state)
             .map_err(|error| AppError::Internal(format!("恢复多模型状态失败：{error}")))?,
-    )
+    )?;
+    if !state.enabled {
+        let _ = fs::remove_file(codex_takeover_backup_path(paths));
+    }
+    Ok(())
 }
 
 pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
@@ -2204,6 +2355,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     let config = load_config(&paths.opencodex_config)?;
     let candidate = build_opencodex_config(config, &routes, &prior.managed_provider_ids, input.port)?;
     validate_candidate(&paths.opencodex_config, &candidate)?;
+    preserve_codex_config_before_takeover(&paths, &prior)?;
     write_json(&paths.opencodex_config, &candidate)?;
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
     let state = ManagedState {
@@ -2282,8 +2434,70 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
     status_at(&paths)
 }
 
+/// Activate the last saved OpenCodex routes without asking the user to enter
+/// them again. This is the explicit mode switch from the default config.
+pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
+    if ocx_program().is_none() {
+        return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
+    }
+    let paths = integration_paths()?;
+    let prior = load_state(&paths.state);
+    let config = load_config(&paths.opencodex_config)?;
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let managed_provider_ids = if prior.managed_provider_ids.is_empty() {
+        inferred_managed_provider_ids(&config, &models)
+    } else {
+        prior.managed_provider_ids.clone()
+    };
+    let routes = configured_routes_from_config(&config, &managed_provider_ids);
+    if routes.is_empty() {
+        return Err(AppError::Engine("尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string()));
+    }
+    let default_route = inferred_default_route(&config, &managed_provider_ids)
+        .ok_or_else(|| AppError::Engine("OpenCodex 没有可用的默认模型路由".to_string()))?;
+    let provider_id = if prior.codex_provider_id.is_empty() {
+        DEFAULT_PROVIDER_ID.to_string()
+    } else {
+        prior.codex_provider_id.clone()
+    };
+    let port = config
+        .get("port")
+        .and_then(JsonValue::as_u64)
+        .and_then(|port| u16::try_from(port).ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(if prior.port > 0 { prior.port } else { DEFAULT_PORT });
+    preserve_codex_config_before_takeover(&paths, &prior)?;
+    start()?;
+    sync_with_service_recovery()?;
+    append_configured_models_to_catalog(&paths.catalog, &routes)?;
+    if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
+        return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
+    }
+    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, port, &default_route)?;
+    write_json(
+        &paths.state,
+        &serde_json::to_value(ManagedState {
+            enabled: true,
+            port,
+            codex_provider_id: provider_id,
+            managed_provider_ids,
+            locked_route: prior.locked_route,
+            route_health: prior.route_health,
+            connection: prior.connection,
+            signed_out: prior.signed_out,
+        })
+        .map_err(|error| AppError::Internal(format!("保存 OpenCodex 启用状态失败：{error}")))?,
+    )?;
+    status_at(&paths)
+}
+
 pub fn restore() -> Result<OpenCodexStatus, AppError> {
     let paths = integration_paths()?;
+    let takeover_backup = codex_takeover_backup_path(&paths);
     let restored = [
         (&paths.opencodex_config, "OpenCodex 配置"),
         (&paths.codex_config, "Codex 配置"),
@@ -2296,8 +2510,19 @@ pub fn restore() -> Result<OpenCodexStatus, AppError> {
             .map(|_| ())
     })
     .collect::<Result<Vec<_>, _>>()?;
-    if restored.is_empty() {
+    if restored.is_empty() && !takeover_backup.is_file() {
         return Err(AppError::Engine("没有可恢复的 OpenCodex 配置备份".to_string()));
+    }
+    if takeover_backup.is_file() {
+        let raw = fs::read(&takeover_backup)
+            .map_err(|error| AppError::Internal(format!("读取 Codex 接管备份失败：{error}")))?;
+        String::from_utf8(raw.clone())
+            .map_err(|error| AppError::Engine(format!("Codex 接管备份不是 UTF-8：{error}")))?
+            .parse::<DocumentMut>()
+            .map_err(|error| AppError::Engine(format!("Codex 接管备份无效：{error}")))?;
+        atomic_file::write_atomic(&paths.codex_config, &raw)
+            .map_err(|error| AppError::Internal(format!("恢复 Codex 接管前配置失败：{error}")))?;
+        let _ = fs::remove_file(&takeover_backup);
     }
     let state = JsonValue::Object(JsonMap::new());
     write_json(&paths.state, &state)?;
@@ -2324,7 +2549,7 @@ mod tests {
         append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
         component_target_for, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
-        validate_input, wait_for_oauth_callback,
+        should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
@@ -2365,6 +2590,14 @@ mod tests {
         let mut value = input();
         value.default_route = "osir-gpt/gpt-5.6-terra".to_string();
         assert!(validate_input(&value).is_err());
+    }
+
+    #[test]
+    fn reconciles_only_mismatched_codex_ownership_states() {
+        assert!(!should_reconcile_codex_ownership(false, false));
+        assert!(should_reconcile_codex_ownership(false, true));
+        assert!(should_reconcile_codex_ownership(true, false));
+        assert!(!should_reconcile_codex_ownership(true, true));
     }
 
     #[test]

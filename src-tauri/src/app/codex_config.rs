@@ -575,6 +575,13 @@ pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     report_for_path(&path, codex_running)
 }
 
+/// Switch Codex back to the configuration that was active before OpenCodex
+/// took over. The file remains the single source of truth for default mode.
+pub fn activate_default(codex_running: bool) -> Result<CodexConfigReport, AppError> {
+    crate::app::opencodex::disable_for_single_provider()?;
+    report(codex_running)
+}
+
 pub fn validate(raw: &str) -> CodexConfigValidation {
     match parse_document(raw) {
         Ok(_) => CodexConfigValidation {
@@ -1077,6 +1084,32 @@ fn install_ecommerce_skills(codex_home: &Path) -> Result<(), AppError> {
 }
 
 pub fn save_raw(raw: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
+    let local_provider = raw
+        .parse::<DocumentMut>()
+        .ok()
+        .and_then(|document| {
+            let provider_id = document.get("model_provider").and_then(Item::as_str)?;
+            document
+                .get("model_providers")
+                .and_then(Item::as_table)
+                .and_then(|providers| providers.get(provider_id))
+                .and_then(Item::as_table)
+                .and_then(|provider| provider.get("base_url"))
+                .and_then(Item::as_str)
+                .map(|url| {
+                    url::Url::parse(url)
+                        .ok()
+                        .and_then(|parsed| parsed.host_str().map(|host| host.to_ascii_lowercase()))
+                        .is_some_and(|host| matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1"))
+                })
+        })
+        .unwrap_or(false);
+    if local_provider {
+        return Err(AppError::Engine(
+            "官方 Codex 配置不能写入 OpenCodex 本机地址；请在多模型模式中管理本地路由".to_string(),
+        ));
+    }
+    crate::app::opencodex::disable_for_single_provider()?;
     let path = config_path()?;
     write_verified(&path, raw)?;
     report_for_path(&path, codex_running)
@@ -1213,6 +1246,11 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
                 "Base URL 仅支持 http 或 https".to_string(),
             ));
         }
+        if matches!(parsed.host_str(), Some("localhost" | "127.0.0.1" | "::1")) {
+            return Err(AppError::Engine(
+                "官方 Codex 配置不能使用 OpenCodex 本机地址；请在多模型模式中管理本地路由".to_string(),
+            ));
+        }
     }
     set_or_remove_string(document, "model", &model);
     set_or_remove_string(document, "model_provider", &provider);
@@ -1283,6 +1321,7 @@ pub fn save_basic(
     input: CodexBasicConfigInput,
     codex_running: bool,
 ) -> Result<CodexConfigReport, AppError> {
+    crate::app::opencodex::disable_for_single_provider()?;
     let path = config_path()?;
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
@@ -1606,6 +1645,28 @@ requires_openai_auth = true
             document["features"]["image_generation"].as_bool(),
             Some(true)
         );
+    }
+
+    #[test]
+    fn basic_config_rejects_opencodex_loopback_provider() {
+        let mut document = DocumentMut::new();
+        let result = apply_basic(
+            &mut document,
+            CodexBasicConfigInput {
+                model: "gpt-5.6-sol".to_string(),
+                provider: "opencodex".to_string(),
+                base_url: "http://127.0.0.1:10100/v1".to_string(),
+                reasoning_effort: String::new(),
+                personality: String::new(),
+                approval_policy: String::new(),
+                sandbox_mode: String::new(),
+                disable_response_storage: false,
+                goal_mode: false,
+                image_generation_compatibility: false,
+            },
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("本机地址"));
     }
 
     #[test]

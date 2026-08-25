@@ -19,6 +19,7 @@ import { OpenCodexPrototype } from "./OpenCodexPrototype";
 type ConfigModule = "connections" | "behavior" | "tools" | "advanced";
 type ConnectionView = "single" | "multi";
 type DialogKind = "provider" | "behavior" | "credential" | "image" | "mcp" | "raw";
+type ProviderHealth = "unknown" | "checking" | "connected" | "failed";
 
 interface McpDraft extends CodexMcpServerInput {
   argsText: string;
@@ -29,7 +30,9 @@ type ConfirmState =
   | { kind: "delete-mcp"; name: string }
   | { kind: "delete-api-key" }
   | { kind: "delete-image-api-key" }
-  | { kind: "restore" };
+  | { kind: "restore" }
+  | { kind: "switch-default" }
+  | { kind: "switch-multi" };
 
 const EMPTY_BASIC: CodexBasicConfigInput = {
   model: "gpt-5.6-sol", provider: "", baseUrl: "", reasoningEffort: "",
@@ -39,8 +42,8 @@ const EMPTY_BASIC: CodexBasicConfigInput = {
 
 const ZH_COPY = {
   loading: "正在读取 Codex 配置…", connections: "连接与模型", behavior: "Codex 行为", tools: "MCP 与工具", advanced: "高级与恢复",
-  currentMode: "当前生效模式", singleMode: "单供应商直连", multiMode: "OpenCodex 多模型", notConfigured: "尚未完成配置",
-  defaultConnection: "Codex 默认",
+  currentMode: "当前生效模式", singleMode: "默认配置", multiMode: "OpenCodex 多模型", notConfigured: "尚未完成配置",
+  defaultConnection: "Codex 默认", defaultConfigFile: "默认配置文件", defaultConfigFileHint: "读取当前 Codex 配置文件并直接生效", selectProvider: "选择供应商", switchProvider: "切换为当前供应商", selectedProvider: "选中供应商", providerConnected: "连接成功", providerFailed: "连接失败", providerChecking: "检查中", providerUnknown: "未检查", modeSwitching: "正在切换配置模式…", backToDefault: "切回默认配置", enableDefault: "启用默认配置", enableMulti: "启用 OpenCodex 多模型", confirmDefault: "确认切换到默认配置？", confirmMulti: "确认启用 OpenCodex 多模型？", confirmDefaultBody: "Codex 将恢复 config.toml 中的默认供应商；当前 OpenCodex 配置会保留。", confirmMultiBody: "Codex 将切换到本机 OpenCodex 路由。已有对话数据不会移动或删除。", restartCodex: "重启 Codex", restartHint: "配置已切换；重启 Codex 即可生效。", defaultModeHint: "使用 Codex 配置文件中的供应商链",
   available: "可直接使用", needsRestart: "重启 Codex 后生效", connectionError: "配置需要修复", currentPath: "当前调用路径",
   currentModel: "当前模型", currentProvider: "当前供应商", credentials: "API 凭据", configured: "已配置", missing: "未配置",
   mcpCount: "MCP 服务", backup: "配置备份", backupReady: "可恢复", noBackup: "暂无备份",
@@ -74,7 +77,7 @@ const ZH_COPY = {
 type Copy = { [K in keyof typeof ZH_COPY]: string };
 const EN_COPY: Copy = {
   loading: "Reading Codex configuration…", connections: "Connections & models", behavior: "Codex behavior", tools: "MCP & tools", advanced: "Advanced & recovery",
-  currentMode: "Active mode", singleMode: "Single provider", multiMode: "OpenCodex multi-model", notConfigured: "Not configured", defaultConnection: "Codex default", available: "Ready to use", needsRestart: "Restart Codex to apply", connectionError: "Configuration needs repair", currentPath: "Request path", currentModel: "Current model", currentProvider: "Current provider", credentials: "API credentials", configured: "Configured", missing: "Missing", mcpCount: "MCP services", backup: "Backup", backupReady: "Available", noBackup: "No backup", manageSingle: "Configure provider", editConnection: "Edit connection", addProvider: "Add provider", rotateKey: "Manage API Key", providerList: "Provider connections", providerListHint: "Select an item to edit. Only the active connection is written to Codex.", recommended: "Recommended", current: "Active", provider: "Provider key", providerPlaceholder: "For example, osir", baseUrl: "Base URL", model: "Model", modelPlaceholder: "For example, gpt-5.6-sol", fetchModels: "Fetch models", modelsFetched: "Fetched {count} models", apiKey: "API Key", apiKeyPlaceholder: "Enter a new API Key", apiKeyHint: "Saved keys are never shown; leave blank to keep the current credential.", showApiKey: "Show the API Key being entered", chooseProvider: "Choose provider", configureConnection: "Configure connection", chooseModel: "Choose model", step: "Step", previous: "Previous", next: "Next", saveAndEnable: "Save and enable", providerSaved: "Single-provider connection saved", connectionHelp: "Required fields are checked before save and the previous configuration is backed up.", behaviorSummary: "Behavior and permission summary", editBehavior: "Edit behavior", reasoning: "Reasoning effort", personality: "Personality", goalMode: "Goal Mode", disableResponseStorage: "Disable response storage", imageGenerationCompatibility: "Third-party image relay mode", imageGenerationCompatibilityHint: "Image requests use the independent image API while chat keeps the normal API Key.", approvalPolicy: "Approval policy", sandboxMode: "Sandbox mode", automatic: "Use Codex default", dangerousCombination: "This combination lets Codex access all system files and run commands without confirmation.", saveBehavior: "Save behavior", behaviorSaved: "Codex behavior saved", mcpServers: "MCP servers", mcpHint: "The list shows status only; add and edit in a focused dialog.", emptyMcp: "No MCP servers configured", addMcp: "Add MCP", editMcp: "Edit MCP", newMcp: "New MCP", name: "Name", namePlaceholder: "For example, context7", transport: "Transport", command: "Command", commandPlaceholder: "For example, npx", args: "Arguments (one per line)", url: "Service URL", enabled: "Enabled", sensitive: "Contains sensitive fields", sensitiveKept: "Hidden environment, header and extension fields are preserved.", saveMcp: "Save MCP", mcpSaved: "MCP configuration saved", imageTool: "Image generation", imageToolHint: "Manage the image model and credential separately from chat.", configureImage: "Configure image generation", imageApiKey: "Image API Key", imageApiKeyPlaceholder: "Enter the independent image API Key", imageModel: "Image model", imageBaseUrl: "Image API Base URL", fetchImageModels: "Fetch image models", imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose", saveImageApiKey: "Save and install skill", deleteImageApiKey: "Delete image API Key", imageSaved: "Image generation configuration saved", diagnostics: "Configuration diagnostics", configFile: "Configuration file", openFolder: "Open folder", parseStatus: "TOML status", valid: "Valid", invalid: "The current TOML is invalid. Repair it in the advanced editor.", codexStatus: "Codex status", running: "Running", stopped: "Not running", editRaw: "Edit raw configuration", showSecrets: "Show and edit sensitive values", hiddenHint: "Sensitive values are masked. Enable editing before saving raw TOML.", validate: "Validate TOML", saveRaw: "Save raw configuration", rawDirty: "Raw configuration has unsaved changes", restore: "Restore previous version", restored: "Previous configuration restored; the pre-restore content remains undoable", saveApiKey: "Save API Key", deleteApiKey: "Delete API Key", apiKeySaved: "API Key saved securely", apiKeyDeleted: "API Key deleted", cancel: "Cancel", delete: "Delete", confirmDeleteMcp: "Delete MCP “{name}”?", confirmDeleteApiKey: "Delete the Codex API Key? The active provider may stop working.", confirmDeleteImageKey: "Delete the image API Key? Chat is not affected.", confirmRestore: "Restore the previous configuration? The current version remains undoable.", discardTitle: "Discard unsaved changes?", discardBody: "Changes in this dialog have not been saved. Discarding restores the active configuration.", keepEditing: "Keep editing", discard: "Discard changes", saved: "Configuration saved with a previous-version backup", savedRunning: "Configuration saved; restart Codex to apply it",
+  currentMode: "Active mode", singleMode: "Default configuration", multiMode: "OpenCodex multi-model", notConfigured: "Not configured", defaultConnection: "Codex default", defaultConfigFile: "Default config file", defaultConfigFileHint: "Read and apply the active Codex configuration file", selectProvider: "Choose provider", switchProvider: "Use this provider", selectedProvider: "Selected provider", providerConnected: "Connected", providerFailed: "Connection failed", providerChecking: "Checking", providerUnknown: "Not checked", modeSwitching: "Switching configuration mode…", backToDefault: "Back to default configuration", enableDefault: "Enable default configuration", enableMulti: "Enable OpenCodex multi-model", confirmDefault: "Switch to the default configuration?", confirmMulti: "Enable OpenCodex multi-model?", confirmDefaultBody: "Codex will restore the default provider from config.toml. Your OpenCodex configuration will be kept.", confirmMultiBody: "Codex will switch to the local OpenCodex routes. Existing conversation data will not be moved or deleted.", restartCodex: "Restart Codex", restartHint: "Configuration switched; restart Codex to apply it.", defaultModeHint: "Uses the provider chain from Codex config.toml", available: "Ready to use", needsRestart: "Restart Codex to apply", connectionError: "Configuration needs repair", currentPath: "Request path", currentModel: "Current model", currentProvider: "Current provider", credentials: "API credentials", configured: "Configured", missing: "Missing", mcpCount: "MCP services", backup: "Backup", backupReady: "Available", noBackup: "No backup", manageSingle: "Configure provider", editConnection: "Edit connection", addProvider: "Add provider", rotateKey: "Manage API Key", providerList: "Provider connections", providerListHint: "Select a provider to inspect it. Only the active provider is written to Codex.", recommended: "Recommended", current: "Active", provider: "Provider key", providerPlaceholder: "For example, osir", baseUrl: "Base URL", model: "Model", modelPlaceholder: "For example, gpt-5.6-sol", fetchModels: "Fetch models", modelsFetched: "Fetched {count} models", apiKey: "API Key", apiKeyPlaceholder: "Enter a new API Key", apiKeyHint: "Saved keys are never shown; leave blank to keep the current credential.", showApiKey: "Show the API Key being entered", chooseProvider: "Choose provider", configureConnection: "Configure connection", chooseModel: "Choose model", step: "Step", previous: "Previous", next: "Next", saveAndEnable: "Save and enable", providerSaved: "Default provider saved", connectionHelp: "Required fields are checked before save and the previous configuration is backed up.", behaviorSummary: "Behavior and permission summary", editBehavior: "Edit behavior", reasoning: "Reasoning effort", personality: "Personality", goalMode: "Goal Mode", disableResponseStorage: "Disable response storage", imageGenerationCompatibility: "Third-party image relay mode", imageGenerationCompatibilityHint: "Image requests use the independent image API while chat keeps the normal API Key.", approvalPolicy: "Approval policy", sandboxMode: "Sandbox mode", automatic: "Use Codex default", dangerousCombination: "This combination lets Codex access all system files and run commands without confirmation.", saveBehavior: "Save behavior", behaviorSaved: "Codex behavior saved", mcpServers: "MCP servers", mcpHint: "The list shows status only; add and edit in a focused dialog.", emptyMcp: "No MCP servers configured", addMcp: "Add MCP", editMcp: "Edit MCP", newMcp: "New MCP", name: "Name", namePlaceholder: "For example, context7", transport: "Transport", command: "Command", commandPlaceholder: "For example, npx", args: "Arguments (one per line)", url: "Service URL", enabled: "Enabled", sensitive: "Contains sensitive fields", sensitiveKept: "Hidden environment, header and extension fields are preserved.", saveMcp: "Save MCP", mcpSaved: "MCP configuration saved", imageTool: "Image generation", imageToolHint: "Manage the image model and credential separately from chat.", configureImage: "Configure image generation", imageApiKey: "Image API Key", imageApiKeyPlaceholder: "Enter the independent image API Key", imageModel: "Image model", imageBaseUrl: "Image API Base URL", fetchImageModels: "Fetch image models", imageModelPlaceholder: "Defaults to gpt-image-2; fetch models to choose", saveImageApiKey: "Save and install skill", deleteImageApiKey: "Delete image API Key", imageSaved: "Image generation configuration saved", diagnostics: "Configuration diagnostics", configFile: "Configuration file", openFolder: "Open folder", parseStatus: "TOML status", valid: "Valid", invalid: "The current TOML is invalid. Repair it in the advanced editor.", codexStatus: "Codex status", running: "Running", stopped: "Not running", editRaw: "Edit raw configuration", showSecrets: "Show and edit sensitive values", hiddenHint: "Sensitive values are masked. Enable editing before saving raw TOML.", validate: "Validate TOML", saveRaw: "Save raw configuration", rawDirty: "Raw configuration has unsaved changes", restore: "Restore previous version", restored: "Previous configuration restored; the pre-restore content remains undoable", saveApiKey: "Save API Key", deleteApiKey: "Delete API Key", apiKeySaved: "API Key saved securely", apiKeyDeleted: "API Key deleted", cancel: "Cancel", delete: "Delete", confirmDeleteMcp: "Delete MCP “{name}”?", confirmDeleteApiKey: "Delete the Codex API Key? The active provider may stop working.", confirmDeleteImageKey: "Delete the image API Key? Chat is not affected.", confirmRestore: "Restore the previous configuration? The current version remains undoable.", discardTitle: "Discard unsaved changes?", discardBody: "Changes in this dialog have not been saved. Discarding restores the active configuration.", keepEditing: "Keep editing", discard: "Discard changes", saved: "Configuration saved with a previous-version backup", savedRunning: "Configuration saved; restart Codex to apply it",
 };
 
 function basicFromReport(report: CodexConfigReport): CodexBasicConfigInput {
@@ -114,6 +117,8 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [report, setReport] = useState<CodexConfigReport | null>(null);
   const [openCodex, setOpenCodex] = useState<OpenCodexStatus | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [providerHealth, setProviderHealth] = useState<Record<string, ProviderHealth>>({});
   const [basic, setBasic] = useState<CodexBasicConfigInput>(EMPTY_BASIC);
   const [dialogBaseline, setDialogBaseline] = useState({ provider: EMPTY_BASIC, behavior: EMPTY_BASIC, imageModel: "gpt-image-2", imageBaseUrl: "", raw: "", mcp: "" });
   const [providerStep, setProviderStep] = useState(1);
@@ -130,6 +135,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const [rawDraft, setRawDraft] = useState("");
   const [showSecrets, setShowSecrets] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [restartRequired, setRestartRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -144,6 +150,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     setApiKey("");
     setImageApiKey("");
     setShowApiKey(false);
+    setSelectedProviderId(next.provider && next.provider !== "opencodex" ? next.provider : (next.providers[0]?.id || ""));
     if (next.provider === "opencodex" || next.openCodex?.enabled) setConnectionView("multi");
   }, []);
 
@@ -187,12 +194,101 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     }
   };
 
+  const activateDefaultMode = async () => {
+    setBusy("mode");
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await managerApi.codexConfigActivateDefault();
+      applyReport(next);
+      setOpenCodex((current) => current ? { ...current, enabled: false, codexProviderId: "" } : current);
+      setConnectionView("single");
+      setRestartRequired(next.codexRunning);
+      setNotice(report?.codexRunning ? copy.savedRunning : copy.defaultModeHint);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const activateMultiMode = async () => {
+    if (multiActive) {
+      setConnectionView("multi");
+      return;
+    }
+    if (!openCodex?.routes.length) {
+      setConnectionView("multi");
+      return;
+    }
+    setBusy("mode");
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await managerApi.openCodexActivateSaved();
+      setOpenCodex(next);
+      const nextReport = await managerApi.codexConfigGet();
+      applyReport(nextReport);
+      setConnectionView("multi");
+      setRestartRequired(nextReport.codexRunning);
+      setNotice(copy.multiMode + " · " + copy.available);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const activateProvider = async (profile: CodexProviderProfile) => {
+    setBusy("provider-switch");
+    setError(null);
+    setNotice(null);
+    try {
+      const next = await managerApi.codexConfigSaveBasic({ ...basic, provider: profile.id, baseUrl: profile.baseUrl });
+      applyReport(next);
+      setSelectedProviderId(profile.id);
+      setConnectionView("single");
+      setRestartRequired(next.codexRunning);
+      setNotice(next.codexRunning ? copy.savedRunning : copy.providerSaved);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restartCodex = async () => {
+    setBusy("restart");
+    try {
+      if (navigator.platform.toLowerCase().startsWith("win")) await managerApi.winRestart();
+      else await managerApi.macRestart();
+      setRestartRequired(false);
+      setNotice(copy.savedRunning);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const checkProvider = async (profile: CodexProviderProfile) => {
+    if (!profile.baseUrl) return;
+    setProviderHealth((current) => ({ ...current, [profile.id]: "checking" }));
+    try {
+      const fetched = await managerApi.codexConfigFetchModels(profile.baseUrl);
+      setProviderHealth((current) => ({ ...current, [profile.id]: fetched.length ? "connected" : "failed" }));
+    } catch {
+      setProviderHealth((current) => ({ ...current, [profile.id]: "failed" }));
+    }
+  };
+
   const providerProfiles = useMemo<CodexProviderProfile[]>(() => {
     if (!report) return [];
-    return [
-      { id: "osir", name: "OSIR", baseUrl: "https://api.osirclaw.com/v1", wireApi: "responses" },
-      ...report.providers.filter((profile) => profile.id !== "osir" && profile.id !== "opencodex"),
-    ];
+    const profiles = report.providers.filter((profile) => profile.id !== "opencodex");
+    if (!profiles.some((profile) => profile.id === "osir")) {
+      profiles.unshift({ id: "osir", name: "OSIR", baseUrl: "https://api.osirclaw.com/v1", wireApi: "responses" });
+    }
+    return profiles;
   }, [report]);
 
   const providerDirty = !sameBasic(basic, dialogBaseline.provider, ["model", "provider", "baseUrl"]) || Boolean(providerApiKey);
@@ -305,12 +401,14 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const executeConfirm = async () => {
     if (!confirm) return;
     if (confirm.kind === "discard") { resetDialogDraft(confirm.returnTo); setConfirm(null); return; }
+    if (confirm.kind === "switch-default") { setConfirm(null); await activateDefaultMode(); return; }
+    if (confirm.kind === "switch-multi") { setConfirm(null); await activateMultiMode(); return; }
     if (confirm.kind === "delete-mcp") { const next = await runReport("delete-mcp", () => managerApi.codexConfigDeleteMcp(confirm.name), copy.saved); if (next) setConfirm(null); return; }
     if (confirm.kind === "delete-api-key") { const next = await runReport("delete-api-key", () => managerApi.codexConfigDeleteApiKey(), copy.apiKeyDeleted); if (next) { setConfirm(null); setDialog(null); } return; }
     if (confirm.kind === "delete-image-api-key") { const next = await runReport("delete-image-api-key", () => managerApi.codexConfigDeleteImageGenerationApiKey(), copy.saved); if (next) { setConfirm(null); setDialog(null); } return; }
     const next = await runReport("restore", () => managerApi.codexConfigRestoreBackup(), copy.restored); if (next) setConfirm(null);
   };
-  const confirmText = !confirm ? { title: "", body: "", action: copy.delete, danger: true } : confirm.kind === "discard" ? { title: copy.discardTitle, body: copy.discardBody, action: copy.discard, danger: true } : confirm.kind === "delete-mcp" ? { title: copy.delete, body: copy.confirmDeleteMcp.replace("{name}", confirm.name), action: copy.delete, danger: true } : confirm.kind === "delete-api-key" ? { title: copy.deleteApiKey, body: copy.confirmDeleteApiKey, action: copy.deleteApiKey, danger: true } : confirm.kind === "delete-image-api-key" ? { title: copy.deleteImageApiKey, body: copy.confirmDeleteImageKey, action: copy.deleteImageApiKey, danger: true } : { title: copy.restore, body: copy.confirmRestore, action: copy.restore, danger: false };
+  const confirmText = !confirm ? { title: "", body: "", action: copy.delete, danger: true } : confirm.kind === "discard" ? { title: copy.discardTitle, body: copy.discardBody, action: copy.discard, danger: true } : confirm.kind === "switch-default" ? { title: copy.confirmDefault, body: copy.confirmDefaultBody, action: copy.enableDefault, danger: false } : confirm.kind === "switch-multi" ? { title: copy.confirmMulti, body: copy.confirmMultiBody, action: copy.enableMulti, danger: false } : confirm.kind === "delete-mcp" ? { title: copy.delete, body: copy.confirmDeleteMcp.replace("{name}", confirm.name), action: copy.delete, danger: true } : confirm.kind === "delete-api-key" ? { title: copy.deleteApiKey, body: copy.confirmDeleteApiKey, action: copy.deleteApiKey, danger: true } : confirm.kind === "delete-image-api-key" ? { title: copy.deleteImageApiKey, body: copy.confirmDeleteImageKey, action: copy.deleteImageApiKey, danger: true } : { title: copy.restore, body: copy.confirmRestore, action: copy.restore, danger: false };
 
   return (
     <div className="pop config-pop">
@@ -353,10 +451,15 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                     <span className="config-mode-option-icon"><Icon name="sliders" /></span><span><strong>{copy.singleMode}</strong><small>{report.provider && report.provider !== "opencodex" ? report.provider + " · " + report.model : copy.notConfigured}</small></span>{effectiveMode === "single" ? <span className="config-current-dot">{copy.current}</span> : null}
                   </button>
                   <button className={"config-mode-option" + (connectionView === "multi" ? " active" : "")} type="button" aria-pressed={connectionView === "multi"} onClick={() => setConnectionView("multi")}>
-                    <span className="config-mode-option-icon"><Icon name="grid" /></span><span><strong>{copy.multiMode}</strong><small>{openCodex?.installed ? "OpenCodex " + (openCodex.version || "") + " · " + openCodex.modelCount + " models" : copy.notConfigured}</small></span>{effectiveMode === "multi" ? <span className="config-current-dot">{copy.current}</span> : null}
+                    <span className="config-mode-option-icon"><Icon name="grid" /></span><span><strong>{copy.multiMode}</strong><small>{openCodex?.installed ? (openCodex.routes.length ? "已保存 " + openCodex.modelCount + " 个模型 · 点击启用" : "OpenCodex " + (openCodex.version || "") + " · " + openCodex.modelCount + " models") : copy.notConfigured}</small></span>{effectiveMode === "multi" ? <span className="config-current-dot">{copy.current}</span> : null}
                   </button>
                 </div>
-                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={setOpenCodex} />}
+                <div className="config-mode-actions" role="status">
+                  {connectionView === "single" && effectiveMode !== "single" ? <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: "switch-default" })}><Icon name={busy === "mode" ? "loader" : "check"} />{copy.enableDefault}</button> : null}
+                  {connectionView === "multi" && effectiveMode !== "multi" && openCodex?.routes.length ? <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: "switch-multi" })}><Icon name={busy === "mode" ? "loader" : "grid"} />{copy.enableMulti}</button> : null}
+                  {restartRequired ? <><span className="config-restart-hint"><Icon name="info" />{copy.restartHint}</span><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void restartCodex()}><Icon name={busy === "restart" ? "loader" : "refresh"} />{copy.restartCodex}</button></> : null}
+                </div>
+                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={setOpenCodex} />}
               </section>
             ) : null}
             {module === "behavior" ? <BehaviorView report={report} copy={copy} onEdit={openBehavior} /> : null}
@@ -381,16 +484,33 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   );
 }
 
-function SingleConnectionView({ report, providers, copy, singleReady, onProvider, onCredential }: { report: CodexConfigReport; providers: CodexProviderProfile[]; copy: Copy; singleReady: boolean; onProvider: (profile?: CodexProviderProfile) => void; onCredential: () => void }) {
-  return <div className="config-connection-layout">
-    <section className="config-feature-card">
-      <header className="config-card-head"><div><span className="config-eyebrow">{copy.singleMode}</span><h2>{report.provider && report.provider !== "opencodex" ? report.provider : copy.notConfigured}</h2></div><StatusBadge tone={singleReady ? "ok" : "neutral"} icon={singleReady ? "check" : "info"}>{singleReady ? copy.available : copy.notConfigured}</StatusBadge></header>
-      <div className="config-feature-grid"><SummaryItem label={copy.currentProvider} value={report.provider && report.provider !== "opencodex" ? report.provider : "—"} /><SummaryItem label={copy.currentModel} value={report.provider !== "opencodex" ? report.model || "—" : "—"} /><SummaryItem label={copy.baseUrl} value={report.provider !== "opencodex" ? report.baseUrl || "—" : "—"} /><SummaryItem label={copy.credentials} value={report.apiKeyConfigured ? copy.configured : copy.missing} /></div>
-      <div className="config-card-actions"><button className="btn ghost" type="button" onClick={onCredential}><Icon name="shield" />{copy.rotateKey}</button><button className="btn primary" type="button" disabled={Boolean(report.parseError)} onClick={() => onProvider(report.provider && report.provider !== "opencodex" ? providers.find((profile) => profile.id === report.provider) : undefined)}><Icon name="sliders" />{singleReady ? copy.editConnection : copy.manageSingle}</button></div>
+function SingleConnectionView({ report, providers, copy, singleReady, selectedProviderId, providerHealth, busy, onSelectProvider, onCheckProvider, onActivateProvider, onProvider, onCredential }: { report: CodexConfigReport; providers: CodexProviderProfile[]; copy: Copy; singleReady: boolean; selectedProviderId: string; providerHealth: Record<string, ProviderHealth>; busy: string | null; onSelectProvider: (id: string) => void; onCheckProvider: (profile: CodexProviderProfile) => void; onActivateProvider: (profile: CodexProviderProfile) => void; onProvider: (profile?: CodexProviderProfile) => void; onCredential: () => void }) {
+  const selected = providers.find((profile) => profile.id === selectedProviderId) || providers[0];
+  const selectedHealth = selected ? providerHealth[selected.id] || "unknown" : "unknown";
+  const active = selected?.id === report.provider;
+  const healthLabel = selectedHealth === "connected" ? copy.providerConnected : selectedHealth === "failed" ? copy.providerFailed : selectedHealth === "checking" ? copy.providerChecking : copy.providerUnknown;
+  const healthTone = selectedHealth === "connected" ? "ok" : selectedHealth === "failed" ? "error" : selectedHealth === "checking" ? "warn" : "neutral";
+  return <div className="config-default-layout">
+    <section className="config-list-card config-default-providers" aria-label={copy.providerList}>
+      <header className="config-card-head"><div><span className="config-eyebrow">{copy.selectProvider}</span><h2>{providers.length} {copy.providerList}</h2><p>{copy.providerListHint}</p></div><button className="btn ghost compact" type="button" disabled={Boolean(report.parseError)} onClick={() => onProvider()}><Icon name="plus" />{copy.addProvider}</button></header>
+      <div className="config-default-file"><Icon name="folder" /><div><strong className="mono">{report.path.split(/[\\/]/u).pop() || "config.toml"}</strong><span>{copy.defaultConfigFileHint}</span></div></div>
+      <div className="config-resource-list">{providers.map((profile) => {
+        const isActive = report.provider === profile.id;
+        const isSelected = selected?.id === profile.id;
+        const health = providerHealth[profile.id] || "unknown";
+        return <button className={"config-resource-row config-default-provider-row" + (isSelected ? " selected" : "") + (isActive ? " active" : "")} type="button" key={profile.id} onClick={() => onSelectProvider(profile.id)}>
+          <span className="config-resource-icon">{(profile.name || profile.id).slice(0, 1).toUpperCase()}</span>
+          <span className="config-resource-copy"><strong>{profile.name || profile.id}</strong><span className="mono">{profile.id} · {profile.baseUrl || copy.automatic}</span></span>
+          {profile.id === "osir" ? <span className="tag">{copy.recommended}</span> : null}
+          {isActive ? <StatusBadge tone="ok" icon="check">{copy.current}</StatusBadge> : health === "connected" ? <StatusBadge tone="ok" icon="check">{copy.providerConnected}</StatusBadge> : health === "failed" ? <StatusBadge tone="error" icon="alert">{copy.providerFailed}</StatusBadge> : <Icon name="chevron" />}
+        </button>;
+      })}</div>
     </section>
-    <section className="config-list-card" aria-label={copy.providerList}>
-      <header className="config-card-head"><div><span className="config-eyebrow">{copy.providerList}</span><h2>{providers.length}</h2><p>{copy.providerListHint}</p></div><button className="btn ghost compact" type="button" disabled={Boolean(report.parseError)} onClick={() => onProvider()}><Icon name="plus" />{copy.addProvider}</button></header>
-      <div className="config-resource-list">{providers.map((profile) => { const active = report.provider === profile.id; return <button className={"config-resource-row" + (active ? " active" : "")} type="button" key={profile.id} onClick={() => onProvider(profile)}><span className="config-resource-icon">{(profile.name || profile.id).slice(0, 1)}</span><span className="config-resource-copy"><strong>{profile.name || profile.id}</strong><span className="mono">{profile.id} · {profile.baseUrl || copy.automatic}</span></span>{profile.id === "osir" ? <span className="tag">{copy.recommended}</span> : null}{active ? <StatusBadge tone="ok" icon="check">{copy.current}</StatusBadge> : <Icon name="chevron" />}</button>; })}</div>
+    <section className="config-feature-card config-default-detail" aria-label={copy.defaultConnection}>
+      <header className="config-card-head"><div><span className="config-eyebrow">{copy.defaultConnection} · {report.path.split(/[\\/]/u).pop() || "config.toml"}</span><h2>{selected?.name || selected?.id || copy.notConfigured}</h2><p>{copy.defaultModeHint}</p></div><StatusBadge tone={active && singleReady ? "ok" : healthTone} icon={active && singleReady ? "check" : selectedHealth === "failed" ? "alert" : selectedHealth === "connected" ? "check" : "info"}>{active && singleReady ? copy.current : healthLabel}</StatusBadge></header>
+      <div className="config-feature-grid"><SummaryItem label={copy.currentProvider} value={selected?.name || "—"} hint={selected?.id} /><SummaryItem label={copy.currentModel} value={active ? report.model || "—" : "—"} /><SummaryItem label={copy.baseUrl} value={selected?.baseUrl || "—"} /><SummaryItem label={copy.credentials} value={active && report.apiKeyConfigured ? copy.configured : copy.missing} /></div>
+      <div className="config-default-detail-note"><Icon name="info" /><span>{copy.providerListHint}</span></div>
+      <div className="config-card-actions"><button className="btn ghost" type="button" disabled={!selected || Boolean(busy)} onClick={() => selected && void onCheckProvider(selected)}><Icon name={selectedHealth === "checking" ? "loader" : "refresh"} />{healthLabel}</button><button className="btn ghost" type="button" onClick={onCredential}><Icon name="shield" />{copy.rotateKey}</button><button className="btn primary" type="button" disabled={!selected || Boolean(busy) || active} onClick={() => selected && void onActivateProvider(selected)}><Icon name={busy === "provider-switch" ? "loader" : "check"} />{active ? copy.current : copy.switchProvider}</button></div>
     </section>
   </div>;
 }
