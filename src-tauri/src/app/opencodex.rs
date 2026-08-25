@@ -92,6 +92,34 @@ pub struct OpenCodexStatus {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpenCodexOAuthProgress {
+    pub stage: String,
+    pub state: String,
+    pub step: usize,
+    pub total: usize,
+    pub title: String,
+    pub detail: String,
+}
+
+fn oauth_progress(
+    stage: &str,
+    state: &str,
+    step: usize,
+    title: &str,
+    detail: &str,
+) -> OpenCodexOAuthProgress {
+    OpenCodexOAuthProgress {
+        stage: stage.to_string(),
+        state: state.to_string(),
+        step,
+        total: 4,
+        title: title.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenCodexEnvironmentStatus {
     pub platform: String,
     pub architecture: String,
@@ -1194,7 +1222,13 @@ pub fn ensure_ready_for_codex() -> Result<(), AppError> {
     Ok(())
 }
 
-fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodexStatus, AppError> {
+fn apply_codex_install_payload_with_progress<F>(
+    payload: CodexInstallPayload,
+    progress: &F,
+) -> Result<OpenCodexStatus, AppError>
+where
+    F: Fn(OpenCodexOAuthProgress),
+{
     validate_codex_install_payload(&payload)?;
     let account = payload.account.clone();
     let routes = payload
@@ -1221,6 +1255,13 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
         .split_once('/')
         .map(|(route, model)| (route.to_string(), model.to_string()))
         .ok_or_else(|| AppError::Engine("OSIRAPI 默认模型路由格式无效".to_string()))?;
+    progress(oauth_progress(
+        "config",
+        "running",
+        3,
+        "正在写入模型配置",
+        "保存订阅 Key、模型路由和 Codex 模型目录。",
+    ));
     let configured = save(OpenCodexConfigInput {
         enabled: true,
         port: DEFAULT_PORT,
@@ -1237,15 +1278,25 @@ fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodex
         &serde_json::to_value(state)
             .map_err(|error| AppError::Internal(format!("保存 OSIRAPI 连接状态失败：{error}")))?,
     )?;
-    let synced = sync()?;
+    progress(oauth_progress(
+        "verify",
+        "running",
+        4,
+        "正在验证默认模型",
+        "确认 OpenCodex 服务和默认模型路由可以直接使用。",
+    ));
     let check = check_route(&default_route_id, &default_model)?;
     let mut verified = status()?;
-    verified.error = configured.error.or(synced.error);
+    verified.error = configured.error;
     if !check.available {
         verified.connection_status = "error".to_string();
         verified.error = Some(format!("模型已同步，但默认路由验证失败：{}", check.detail));
     }
     Ok(verified)
+}
+
+fn apply_codex_install_payload(payload: CodexInstallPayload) -> Result<OpenCodexStatus, AppError> {
+    apply_codex_install_payload_with_progress(payload, &|_| {})
 }
 
 pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
@@ -1262,7 +1313,10 @@ pub fn connect_osir_code(code: &str) -> Result<OpenCodexStatus, AppError> {
     Ok(status)
 }
 
-pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
+pub fn connect_osir_oauth_with_progress<F>(progress: F) -> Result<OpenCodexStatus, AppError>
+where
+    F: Fn(OpenCodexOAuthProgress),
+{
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .map_err(|error| AppError::Engine(format!("无法启动 OAuth 本机回调：{error}")))?;
     let port = listener
@@ -1282,6 +1336,13 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
         .append_pair("code_challenge", &code_challenge)
         .append_pair("code_challenge_method", "S256");
     open_external_browser(authorization_url.as_str())?;
+    progress(oauth_progress(
+        "browser",
+        "running",
+        0,
+        "等待浏览器授权",
+        "请在浏览器完成登录；成功后标签页会自动关闭。",
+    ));
     let callback = wait_for_oauth_callback(listener, &state)?;
     log::info!("OSIRAPI desktop OAuth callback received");
     if let Some(error) = callback.error.filter(|value| !value.is_empty()) {
@@ -1290,6 +1351,13 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
     if callback.code.is_empty() || callback.state != state {
         return Err(AppError::Engine("OSIRAPI 授权回调无效，请重新连接".to_string()));
     }
+    progress(oauth_progress(
+        "exchange",
+        "running",
+        1,
+        "授权成功，正在读取账户",
+        "正在获取订阅、专用 Key 和可用模型。",
+    ));
     let redemption = new_redemption_state()?;
     let response = exchange_osir_oauth(
         &callback.code,
@@ -1309,12 +1377,19 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
         "OSIRAPI desktop OAuth exchange decoded providers={} account_present=true",
         payload.providers.len()
     );
+    progress(oauth_progress(
+        "runtime",
+        "running",
+        2,
+        "正在准备本机组件",
+        "检查并启动 OpenCodex；首次使用可能需要安装运行时。",
+    ));
     if ocx_program().is_none() {
         install()?;
     } else if status()?.service_state != "ready" {
         start()?;
     }
-    let status = apply_codex_install_payload(payload)?;
+    let status = apply_codex_install_payload_with_progress(payload, &progress)?;
     log::info!(
         "OSIRAPI desktop OAuth applied connection_status={} account_present={} routes={} models={}",
         status.connection_status,
@@ -1322,7 +1397,18 @@ pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
         status.routes.len(),
         status.model_count
     );
+    progress(oauth_progress(
+        "complete",
+        "success",
+        4,
+        "连接完成",
+        "账户、模型配置和默认路由均已就绪。",
+    ));
     Ok(status)
+}
+
+pub fn connect_osir_oauth() -> Result<OpenCodexStatus, AppError> {
+    connect_osir_oauth_with_progress(|_| {})
 }
 
 pub fn install() -> Result<OpenCodexStatus, AppError> {

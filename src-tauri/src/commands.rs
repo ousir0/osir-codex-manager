@@ -2476,13 +2476,39 @@ pub async fn opencodex_connect_osir_oauth(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    let result = tauri::async_runtime::spawn_blocking(crate::app::opencodex::connect_osir_oauth)
+    let progress_app = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::app::opencodex::connect_osir_oauth_with_progress(move |progress| {
+            let focus_manager = progress.stage != "browser";
+            let _ = progress_app.emit("opencodex://oauth-progress", &progress);
+            if focus_manager {
+                if let Some(window) = progress_app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+    })
         .await
         .map_err(|error| AppError::Internal(format!("join: {error}")))?;
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+    if let Err(error) = &result {
+        let _ = app.emit(
+            "opencodex://oauth-progress",
+            serde_json::json!({
+                "stage": "failed",
+                "state": "error",
+                "step": 0,
+                "total": 4,
+                "title": "连接未完成",
+                "detail": error.to_string(),
+            }),
+        );
     }
     result.map_err(Into::into)
 }

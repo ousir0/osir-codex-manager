@@ -8,6 +8,15 @@ import { I18nProvider } from "../i18n";
 import { ThemeProvider } from "../theme";
 import { CodexConfig } from "./CodexConfig";
 
+const eventListeners = vi.hoisted(() => new Map<string, (event: { payload: unknown }) => void>());
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (name: string, callback: (event: { payload: unknown }) => void) => {
+    eventListeners.set(name, callback);
+    return () => eventListeners.delete(name);
+  }),
+}));
+
 vi.mock("../../services/managerApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../services/managerApi")>();
   return {
@@ -74,6 +83,7 @@ describe("Codex configuration workbench", () => {
   beforeEach(() => {
     localStorage.setItem("cam.lang", "zh-CN");
     vi.clearAllMocks();
+    eventListeners.clear();
     api.codexConfigGet.mockResolvedValue(config());
     api.codexConfigFetchModels.mockResolvedValue(["gpt-5.6-sol", "gpt-5.6-terra"]);
     api.codexConfigFetchImageModels.mockResolvedValue(["gpt-image-2"]);
@@ -141,6 +151,21 @@ describe("Codex configuration workbench", () => {
 
     expect(await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /OpenCodex 多模型.*当前使用/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows local setup progress after the browser authorization callback", async () => {
+    api.openCodexStatus.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
+    api.openCodexConnectOsirOAuth.mockImplementation(() => new Promise(() => undefined));
+    const user = userEvent.setup();
+    renderConfig();
+    await user.click(await screen.findByRole("button", { name: /OpenCodex 多模型/ }));
+    await user.click(await screen.findByRole("button", { name: /^连接 OSIRAPI$/ }));
+    await user.click(screen.getByRole("button", { name: "浏览器登录并连接" }));
+    await waitFor(() => expect(eventListeners.has("opencodex://oauth-progress")).toBe(true));
+    eventListeners.get("opencodex://oauth-progress")?.({ payload: { stage: "config", state: "running", step: 3, total: 4, title: "正在写入模型配置", detail: "保存订阅 Key、模型路由和 Codex 模型目录。" } });
+    expect(await screen.findByText("正在写入模型配置")).toBeInTheDocument();
+    expect(screen.getByText("读取账户与订阅").closest("div")).toHaveClass("complete");
+    expect(screen.getByText("写入模型配置").closest("div")).toHaveClass("active");
   });
 
   it("edits Codex behavior from a focused dialog", async () => {

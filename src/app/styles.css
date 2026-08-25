@@ -6282,6 +6282,56 @@ button.config-resource-row:hover {
 .multi-model-modal-body p {
   margin: 0;
 }
+.multi-model-oauth-progress {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.multi-model-oauth-progress-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.multi-model-oauth-progress-head > div {
+  display: grid;
+  gap: 3px;
+}
+.multi-model-oauth-progress-head strong {
+  color: var(--text);
+  font-size: var(--fs-label);
+}
+.multi-model-oauth-progress-head span:not(.multi-model-account-icon) {
+  color: var(--text-soft);
+  font-size: var(--fs-label);
+}
+.multi-model-oauth-progress-list {
+  display: grid;
+  gap: 8px;
+}
+.multi-model-oauth-progress-list > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-faint);
+  font-size: var(--fs-label);
+}
+.multi-model-oauth-progress-list > div > span {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 10px;
+}
+.multi-model-oauth-progress-list > div.active { color: var(--accent); }
+.multi-model-oauth-progress-list > div.active > span { border-color: var(--accent); }
+.multi-model-oauth-progress-list > div.complete { color: var(--success); }
+.multi-model-oauth-progress-list > div.complete > span { border-color: var(--success); }
 .multi-model-modal-field,
 .multi-model-manual-form label {
   display: grid;
