@@ -327,6 +327,13 @@ fn codex_takeover_backup_path(paths: &IntegrationPaths) -> PathBuf {
 fn codex_proxy_provider_is_loopback(path: &Path) -> bool {
     let Ok(raw) = fs::read_to_string(path) else { return false };
     let Ok(document) = raw.parse::<DocumentMut>() else { return false };
+    if document
+        .get("openai_base_url")
+        .and_then(Item::as_str)
+        .is_some_and(|url| url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:"))
+    {
+        return true;
+    }
     let provider_id = document
         .get("model_provider")
         .and_then(Item::as_str)
@@ -2079,7 +2086,7 @@ fn build_opencodex_config(
 fn write_codex_proxy_config(
     path: &Path,
     catalog: &Path,
-    provider_id: &str,
+    _provider_id: &str,
     port: u16,
     default_route: &str,
 ) -> Result<(), AppError> {
@@ -2095,26 +2102,10 @@ fn write_codex_proxy_config(
     let mut document = raw
         .parse::<DocumentMut>()
         .map_err(|error| AppError::Engine(format!("config.toml 格式错误：{error}")))?;
-    document["model_provider"] = value(provider_id);
+    document["model_provider"] = value("openai");
     document["model"] = value(default_route);
     document["model_catalog_json"] = value(catalog.display().to_string());
-    if !document.contains_key("model_providers") {
-        document["model_providers"] = toml_edit::table();
-    }
-    let providers = document["model_providers"]
-        .as_table_mut()
-        .ok_or_else(|| AppError::Engine("model_providers 必须是 TOML 表".to_string()))?;
-    if !providers.contains_key(provider_id) {
-        providers.insert(provider_id, Item::Table(Table::new()));
-    }
-    let provider = providers
-        .get_mut(provider_id)
-        .and_then(Item::as_table_mut)
-        .ok_or_else(|| AppError::Engine("OpenCodex Provider 必须是 TOML 表".to_string()))?;
-    provider["name"] = value("OpenCodex 多模型路由");
-    provider["base_url"] = value(format!("http://127.0.0.1:{port}/v1"));
-    provider["wire_api"] = value("responses");
-    provider["requires_openai_auth"] = value(false);
+    document["openai_base_url"] = value(format!("http://127.0.0.1:{port}/v1"));
     let rendered = document.to_string();
     atomic_file::write_atomic(path, rendered.as_bytes())
         .map_err(|error| AppError::Internal(format!("原子保存 config.toml 失败：{error}")))?;
