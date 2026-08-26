@@ -2255,7 +2255,16 @@ fn append_configured_models_to_catalog(
     // `osirapi-openai/gpt-5.5`. Keep a visible compatibility row so old
     // sessions can resolve model metadata and continue using the same route.
     for route in routes.iter().filter(|route| route.enabled) {
-        if !route.id.to_ascii_lowercase().contains("openai") {
+        let route_id = route.id.to_ascii_lowercase();
+        let route_label = route.label.to_ascii_lowercase();
+        let is_openai_route = route_id.contains("openai")
+            || route_label.contains("openai")
+            || route_label.contains("gpt")
+            || route
+                .models
+                .iter()
+                .any(|model| model.starts_with("gpt-") || model.starts_with("codex-"));
+        if !is_openai_route {
             continue;
         }
         for model in &route.models {
@@ -2765,7 +2774,6 @@ mod tests {
             }]})).unwrap(),
         ).unwrap();
         let mut route = input().routes[0].clone();
-        route.id = "osirapi-openai".to_string();
         route.models = vec!["gpt-5.5".to_string()];
         append_configured_models_to_catalog(&catalog, &[route]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
