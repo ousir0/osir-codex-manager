@@ -1769,16 +1769,40 @@ fn service_state(installed: bool) -> (String, Option<String>) {
 fn route_from_config(
     id: &str,
     config: &JsonMap<String, JsonValue>,
-    models: &[JsonValue],
+    catalog_models: &[JsonValue],
     locked_route: Option<&str>,
     route_health: &BTreeMap<String, String>,
 ) -> Option<OpenCodexRoute> {
     let provider = config.get("providers")?.as_object()?.get(id)?.as_object()?;
-    let models = models
+    // `customModels` is the normal synced representation, but a provider
+    // added or authorized directly inside OpenCodex can be visible in the
+    // provider config before the next catalog sync. Read its authoritative
+    // `models` array as a fallback so Manager can show it immediately.
+    let mut models = catalog_models
         .iter()
         .filter(|model| model.get("provider").and_then(JsonValue::as_str) == Some(id))
         .filter_map(|model| model.get("modelId").and_then(JsonValue::as_str).map(str::to_string))
         .collect::<Vec<_>>();
+    if models.is_empty() {
+        models = provider
+            .get("models")
+            .and_then(JsonValue::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(JsonValue::as_str)
+            .map(str::to_string)
+            .collect();
+    }
+    models.sort();
+    models.dedup();
+    let api_key_configured = provider
+        .get("apiKey")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|key| !key.trim().is_empty())
+        || provider
+            .get("authMode")
+            .and_then(JsonValue::as_str)
+            .is_some_and(|mode| !matches!(mode.to_ascii_lowercase().as_str(), "" | "key" | "none"));
     Some(OpenCodexRoute {
         id: id.to_string(),
         label: provider
@@ -1803,15 +1827,12 @@ fn route_from_config(
             .to_string(),
         models,
         enabled: provider.get("disabled").and_then(JsonValue::as_bool) != Some(true),
-        api_key_configured: provider
-            .get("apiKey")
-            .and_then(JsonValue::as_str)
-            .is_some_and(|key| !key.trim().is_empty()),
+        api_key_configured,
         availability: if provider.get("disabled").and_then(JsonValue::as_bool) == Some(true) {
             "offline".to_string()
         } else if let Some(health) = route_health.get(id) {
             health.clone()
-        } else if provider.get("apiKey").and_then(JsonValue::as_str).is_some_and(|key| !key.trim().is_empty()) {
+        } else if api_key_configured {
             "configured".to_string()
         } else {
             "unknown".to_string()
@@ -1824,24 +1845,26 @@ fn inferred_managed_provider_ids(
     config: &JsonMap<String, JsonValue>,
     models: &[JsonValue],
 ) -> Vec<String> {
-    let provider_ids = models
+    let custom_model_ids = models
         .iter()
         .filter_map(|model| model.get("provider").and_then(JsonValue::as_str))
         .collect::<BTreeSet<_>>();
-    provider_ids
+    config
+        .get("providers")
+        .and_then(JsonValue::as_object)
         .into_iter()
-        .filter(|id| {
-            config
-                .get("providers")
-                .and_then(JsonValue::as_object)
-                .and_then(|providers| providers.get(*id))
-                .and_then(JsonValue::as_object)
-                .is_some_and(|provider| {
-                    provider.get("baseUrl").and_then(JsonValue::as_str).is_some()
-                        && provider.get("defaultModel").and_then(JsonValue::as_str).is_some()
-                })
+        .flat_map(|providers| providers.iter())
+        .filter(|(id, provider)| {
+            let Some(provider) = provider.as_object() else { return false };
+            let has_endpoint = provider.get("baseUrl").and_then(JsonValue::as_str).is_some_and(|url| !url.trim().is_empty())
+                && provider.get("defaultModel").and_then(JsonValue::as_str).is_some_and(|model| !model.trim().is_empty());
+            let has_provider_models = provider
+                .get("models")
+                .and_then(JsonValue::as_array)
+                .is_some_and(|items| items.iter().any(JsonValue::is_string));
+            has_endpoint && (has_provider_models || custom_model_ids.contains(id.as_str()))
         })
-        .map(str::to_string)
+        .map(|(id, _)| id.clone())
         .collect()
 }
 
@@ -1881,11 +1904,12 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
         .cloned()
         .unwrap_or_default();
     let inferred_ids = inferred_managed_provider_ids(&config, &models);
-    let uninitialized = state.port == 0
-        && state.codex_provider_id.is_empty()
-        && state.managed_provider_ids.is_empty()
-        && state.locked_route.is_none();
-    if !uninitialized || inferred_ids.is_empty() || !codex_uses_opencodex(paths) {
+    // OpenCodex can be authorized or edited outside Manager (`ocx login`,
+    // its dashboard, or another client). When that external flow has already
+    // wired Codex to the local proxy, adopt the current provider set instead
+    // of treating it as stale state. This keeps Manager and OpenCodex in sync
+    // without requiring a second authorization in Manager.
+    if inferred_ids.is_empty() || !codex_uses_opencodex(paths) {
         return Ok(state);
     }
     let mut adopted = state;
@@ -1912,11 +1936,13 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
             &default_route,
         )?;
     }
-    write_json(
-        &paths.state,
-        &serde_json::to_value(&adopted)
-            .map_err(|error| AppError::Internal(format!("保存已有 OpenCodex 接管状态失败：{error}")))?,
-    )?;
+    if adopted != load_state(&paths.state) {
+        write_json(
+            &paths.state,
+            &serde_json::to_value(&adopted)
+                .map_err(|error| AppError::Internal(format!("保存已有 OpenCodex 接管状态失败：{error}")))?,
+        )?;
+    }
     Ok(adopted)
 }
 
@@ -1937,8 +1963,14 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         .and_then(JsonValue::as_array)
         .cloned()
         .unwrap_or_default();
-    let routes = state
+    let discovered_provider_ids = inferred_managed_provider_ids(&config, &models);
+    let display_provider_ids = state
         .managed_provider_ids
+        .iter()
+        .chain(discovered_provider_ids.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let routes = display_provider_ids
         .iter()
         .filter_map(|id| route_from_config(id, &config, &models, state.locked_route.as_deref(), &state.route_health))
         .collect::<Vec<_>>();
@@ -1953,10 +1985,15 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     } else {
         state.codex_provider_id
     };
+    let routes_ready = service_state == "ready" && !routes.is_empty();
+    let has_configured_credentials = routes.iter().any(|route| route.enabled && route.api_key_configured);
     let connection_status = if state.signed_out {
         "signedOut"
-    } else if state.connection.is_some() {
-        if service_state == "ready" && !routes.is_empty() { "connected" } else { "error" }
+    } else if routes_ready && (state.connection.is_some() || has_configured_credentials) {
+        // `ocx login` or the OpenCodex dashboard can create valid provider
+        // credentials without Manager's OSIR account exchange. Treat those
+        // routes as connected while leaving account billing details empty.
+        "connected"
     } else if state.enabled { "error" } else { "notConnected" }.to_string();
     let platform = std::env::consts::OS.to_string();
     let architecture = std::env::consts::ARCH.to_string();
@@ -2014,7 +2051,13 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
     let state = effective_state(&paths)?;
     if state.enabled && paths.catalog.is_file() {
         let config = load_config(&paths.opencodex_config)?;
-        let routes = configured_routes_from_config(&config, &state.managed_provider_ids);
+        let models = config
+            .get("customModels")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let provider_ids = inferred_managed_provider_ids(&config, &models);
+        let routes = configured_routes_from_config(&config, &provider_ids);
         if !routes.is_empty() {
             append_configured_models_to_catalog(&paths.catalog, &routes)?;
         }
@@ -2464,16 +2507,14 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
         return Ok(());
     }
     let config = load_config(&paths.opencodex_config)?;
-    let managed_provider_ids = if state.managed_provider_ids.is_empty() {
-        let models = config
-            .get("customModels")
-            .and_then(JsonValue::as_array)
-            .cloned()
-            .unwrap_or_default();
-        inferred_managed_provider_ids(&config, &models)
-    } else {
-        state.managed_provider_ids.clone()
-    };
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    // Always rediscover providers from the live OpenCodex config. This is the
+    // bridge for providers authorized/added outside Manager.
+    let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
     let Some(default_route) = inferred_default_route(&config, &managed_provider_ids) else {
         return Ok(());
     };
@@ -2659,11 +2700,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         .and_then(JsonValue::as_array)
         .cloned()
         .unwrap_or_default();
-    let managed_provider_ids = if prior.managed_provider_ids.is_empty() {
-        inferred_managed_provider_ids(&config, &models)
-    } else {
-        prior.managed_provider_ids.clone()
-    };
+    let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
     let routes = configured_routes_from_config(&config, &managed_provider_ids);
     if routes.is_empty() {
         return Err(AppError::Engine("尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string()));
@@ -2763,6 +2800,7 @@ mod tests {
         append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
         component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
+        route_from_config,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
@@ -2775,7 +2813,7 @@ mod tests {
     use rsa::sha2::Sha256 as RsaSha256;
     use rsa::{Oaep, RsaPrivateKey};
     use serde_json::{json, Map as JsonMap, Value as JsonValue};
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
@@ -3050,6 +3088,29 @@ mod tests {
         assert_eq!(rebuilt[0].id, "osir-gpt");
         assert_eq!(rebuilt[0].models, vec!["gpt-5.6-sol"]);
         assert!(rebuilt[0].enabled);
+    }
+
+    #[test]
+    fn discovers_provider_added_directly_in_opencodex_config() {
+        let config = JsonMap::from_iter([(
+            "providers".to_string(),
+            json!({
+                "oauth-claude": {
+                    "adapter": "openai-responses",
+                    "baseUrl": "https://provider.example/v1",
+                    "defaultModel": "claude-sonnet",
+                    "label": "我的 Claude",
+                    "authMode": "oauth",
+                    "models": ["claude-sonnet", "claude-haiku"]
+                }
+            }),
+        )]);
+        let ids = inferred_managed_provider_ids(&config, &[]);
+        assert_eq!(ids, vec!["oauth-claude"]);
+        let route = route_from_config("oauth-claude", &config, &[], None, &BTreeMap::new()).unwrap();
+        assert_eq!(route.models, vec!["claude-haiku", "claude-sonnet"]);
+        assert!(route.api_key_configured);
+        assert_eq!(route.availability, "configured");
     }
 
     #[test]

@@ -6213,6 +6213,13 @@ button.config-resource-row:hover {
   display: grid;
   gap: 3px;
 }
+.multi-model-route-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .multi-model-panel h2 {
   margin: 0;
   font-size: var(--fs-lg);
