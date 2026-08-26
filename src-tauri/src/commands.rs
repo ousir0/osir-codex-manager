@@ -1292,13 +1292,15 @@ pub async fn mac_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
             crate::app::codex_theme::restart_with_active_theme(&state.codex_theme, &settings)
                 .await?;
         if themed {
+            crate::app::opencodex::clear_codex_restart_required().map_err(CommandError::from)?;
             return Ok(());
         }
     }
     tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
         .await
         .map_err(|e| AppError::Internal(format!("join: {e}")))?
-        .map_err(Into::into)
+        .map_err(CommandError::from)?;
+    crate::app::opencodex::clear_codex_restart_required().map_err(CommandError::from)
 }
 
 /// macOS-only: fresh-install the latest Codex (full package) into /Applications.
@@ -2286,8 +2288,13 @@ pub fn codex_config_activate_default(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::codex_config::activate_default(crate::app::codex_theme::codex_running())
-        .map_err(Into::into)
+    let codex_running = crate::app::codex_theme::codex_running();
+    let report = crate::app::codex_config::activate_default(codex_running)
+        .map_err(CommandError::from)?;
+    if codex_running {
+        crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -2327,8 +2334,13 @@ pub fn codex_config_save_basic(
     input: crate::app::codex_config::CodexBasicConfigInput,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::codex_config::save_basic(input, crate::app::codex_theme::codex_running())
-        .map_err(Into::into)
+    let codex_running = crate::app::codex_theme::codex_running();
+    let report = crate::app::codex_config::save_basic(input, codex_running)
+        .map_err(CommandError::from)?;
+    if codex_running {
+        crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -3168,7 +3180,8 @@ pub async fn win_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
     tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
         .await
         .map_err(|e| AppError::Internal(format!("join: {e}")))?
-        .map_err(Into::into)
+        .map_err(CommandError::from)?;
+    crate::app::opencodex::clear_codex_restart_required().map_err(CommandError::from)
 }
 
 /// Windows-only: guarded execution. Requires explicit confirmation, stages and

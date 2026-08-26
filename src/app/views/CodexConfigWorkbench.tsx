@@ -159,7 +159,11 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     setError(null);
     try {
       applyReport(await managerApi.codexConfigGet());
-      try { setOpenCodex(await managerApi.openCodexStatus()); } catch { /* OpenCodex may not exist yet. */ }
+      try {
+        const nextOpenCodex = await managerApi.openCodexStatus();
+        setOpenCodex(nextOpenCodex);
+        setRestartRequired(Boolean(nextOpenCodex.requiresCodexRestart));
+      } catch { /* OpenCodex may not exist yet. */ }
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -171,7 +175,8 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     if (openCodex?.enabled) setConnectionView("multi");
-  }, [openCodex?.enabled]);
+    if (openCodex?.requiresCodexRestart) setRestartRequired(true);
+  }, [openCodex?.enabled, openCodex?.requiresCodexRestart]);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
@@ -459,7 +464,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                   {connectionView === "multi" && effectiveMode !== "multi" && openCodex?.routes.length ? <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: "switch-multi" })}><Icon name={busy === "mode" ? "loader" : "grid"} />{copy.enableMulti}</button> : null}
                   {restartRequired ? <><span className="config-restart-hint"><Icon name="info" />{copy.restartHint}</span><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void restartCodex()}><Icon name={busy === "restart" ? "loader" : "refresh"} />{copy.restartCodex}</button></> : null}
                 </div>
-                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={setOpenCodex} />}
+                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={(next) => { setOpenCodex(next); if (next.requiresCodexRestart) setRestartRequired(true); }} />}
               </section>
             ) : null}
             {module === "behavior" ? <BehaviorView report={report} copy={copy} onEdit={openBehavior} /> : null}

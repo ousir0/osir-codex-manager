@@ -751,6 +751,8 @@ export interface OpenCodexStatus {
   connectionStatus: "notConnected" | "connected" | "error" | "signedOut";
   account: OpenCodexAccountSummary | null;
   environment?: OpenCodexEnvironmentStatus;
+  /** The running Codex process must be restarted to read the latest catalog. */
+  requiresCodexRestart?: boolean;
 }
 
 export interface OpenCodexEnvironmentStatus {

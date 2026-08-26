@@ -43,6 +43,8 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       openCodexActivateSaved: vi.fn(),
       openCodexConnectOsirOAuth: vi.fn(),
       openCodexHome: vi.fn(),
+      macRestart: vi.fn(),
+      winRestart: vi.fn(),
     },
   };
 });
@@ -104,6 +106,33 @@ describe("Codex configuration workbench", () => {
     api.openCodexInstall.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
     api.openCodexActivateSaved.mockResolvedValue({ enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [], backupAvailable: true, error: null, connectionStatus: "connected", account: null });
     api.openCodexHome.mockResolvedValue();
+    api.macRestart.mockResolvedValue();
+    api.winRestart.mockResolvedValue();
+  });
+
+  it("keeps the restart prompt when the synced catalog is newer than running Codex", async () => {
+    const user = userEvent.setup();
+    api.openCodexStatus.mockResolvedValue({
+      enabled: false,
+      installed: true,
+      version: "2.22.0",
+      port: 10100,
+      serviceState: "ready",
+      codexProviderId: "opencodex",
+      configPath: "~/.opencodex/config.json",
+      catalogPath: "~/.codex/opencodex-catalog.json",
+      modelCount: 31,
+      routes: [],
+      backupAvailable: true,
+      error: null,
+      connectionStatus: "connected",
+      account: null,
+      requiresCodexRestart: true,
+    });
+    renderConfig();
+    const restart = await screen.findByRole("button", { name: "重启 Codex" });
+    await user.click(restart);
+    await waitFor(() => expect(api.macRestart).toHaveBeenCalledOnce());
   });
 
   it("shows a status-first overview and switches the selected default provider", async () => {

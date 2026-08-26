@@ -88,6 +88,67 @@ pub struct OpenCodexStatus {
     pub connection_status: String,
     pub account: Option<OpenCodexAccountSummary>,
     pub environment: OpenCodexEnvironmentStatus,
+    pub requires_codex_restart: bool,
+}
+
+fn restart_required_path(paths: &IntegrationPaths) -> PathBuf {
+    paths.state.with_extension("codex-restart-required")
+}
+
+fn restart_applied_path(paths: &IntegrationPaths) -> PathBuf {
+    paths.state.with_extension("codex-restart-applied")
+}
+
+fn codex_configuration_revision(paths: &IntegrationPaths) -> Option<String> {
+    let mut digest = Sha256::new();
+    digest.update(fs::read(&paths.codex_config).ok()?);
+    if paths.catalog.is_file() {
+        digest.update(fs::read(&paths.catalog).ok()?);
+    }
+    Some(
+        digest
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+    )
+}
+
+fn configuration_requires_restart(
+    codex_running: bool,
+    opencodex_enabled: bool,
+    marker_exists: bool,
+    current_revision: Option<&str>,
+    applied_revision: Option<&str>,
+) -> bool {
+    codex_running
+        && (marker_exists
+            || opencodex_enabled
+                && current_revision
+                    .is_some_and(|revision| applied_revision != Some(revision)))
+}
+
+fn mark_codex_restart_required_at(paths: &IntegrationPaths) -> Result<(), AppError> {
+    atomic_file::write_atomic(&restart_required_path(paths), b"codex catalog changed\n")
+        .map_err(|error| AppError::Internal(format!("记录 Codex 重启状态失败：{error}")))
+}
+
+pub(crate) fn mark_codex_restart_required() -> Result<(), AppError> {
+    mark_codex_restart_required_at(&integration_paths()?)
+}
+
+pub(crate) fn clear_codex_restart_required() -> Result<(), AppError> {
+    let paths = integration_paths()?;
+    if let Some(revision) = codex_configuration_revision(&paths) {
+        atomic_file::write_atomic(&restart_applied_path(&paths), revision.as_bytes())
+            .map_err(|error| AppError::Internal(format!("记录 Codex 已加载配置失败：{error}")))?;
+    }
+    let marker = restart_required_path(&paths);
+    if marker.exists() {
+        fs::remove_file(marker)
+            .map_err(|error| AppError::Internal(format!("清除 Codex 重启状态失败：{error}")))?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1906,6 +1967,10 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let system_node = node_version();
     let runtime_state = if managed { "managed" } else if private { "privateNpm" } else if system { "system" } else if system_node.as_deref().is_some_and(node_supported) { "node" } else if supported { "missing" } else { "unsupported" };
     let install_strategy = if managed || system { "reuse" } else if supported { "managedComponent" } else if system_node.as_deref().is_some_and(node_supported) && npm_available() { "privateNpm" } else { "unavailable" };
+    let codex_running = crate::app::codex_theme::codex_running();
+    let marker_requires_restart = restart_required_path(paths).is_file();
+    let current_revision = codex_configuration_revision(paths);
+    let applied_revision = fs::read_to_string(restart_applied_path(paths)).ok();
     Ok(OpenCodexStatus {
         enabled: state.enabled,
         installed,
@@ -1932,6 +1997,13 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
             npm_available: npm_available(),
             detail: if managed { "已发现 Manager 自带运行时" } else if system { "已发现系统 OpenCodex" } else if supported { "可下载当前平台的自带运行时" } else { "当前系统或 CPU 暂无可用安装包" }.to_string(),
         },
+        requires_codex_restart: configuration_requires_restart(
+            codex_running,
+            state.enabled,
+            marker_requires_restart,
+            current_revision.as_deref(),
+            applied_revision.as_deref().map(str::trim),
+        ),
     })
 }
 
@@ -2385,6 +2457,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
     }
     let paths = integration_paths()?;
+    let codex_was_running = crate::app::codex_theme::codex_running();
     let (provider_id, default_route, routes) = validate_input(&input)?;
     let prior = load_state(&paths.state);
     let previous_config = fs::read(&paths.opencodex_config).ok();
@@ -2445,6 +2518,9 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     // picker cache only the default model. Rewrite the same binding after the
     // complete catalog exists so a running Codex reloads every synced model.
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
+    if codex_was_running {
+        mark_codex_restart_required_at(&paths)?;
+    }
     let enabled_state = ManagedState {
         enabled: true,
         port: input.port,
@@ -2464,12 +2540,16 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
+    let codex_was_running = crate::app::codex_theme::codex_running();
     sync_with_service_recovery()?;
     let paths = integration_paths()?;
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
     }
     refresh_codex_catalog_binding(&paths)?;
+    if codex_was_running {
+        mark_codex_restart_required_at(&paths)?;
+    }
     status_at(&paths)
 }
 
@@ -2480,6 +2560,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
     }
     let paths = integration_paths()?;
+    let codex_was_running = crate::app::codex_theme::codex_running();
     let prior = load_state(&paths.state);
     let config = load_config(&paths.opencodex_config)?;
     let models = config
@@ -2517,6 +2598,9 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
     }
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, port, &default_route)?;
+    if codex_was_running {
+        mark_codex_restart_required_at(&paths)?;
+    }
     write_json(
         &paths.state,
         &serde_json::to_value(ManagedState {
@@ -2586,7 +2670,7 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 mod tests {
     use super::{
         append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
-        component_target_for, configured_routes_from_config, decrypt_bundle,
+        component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
@@ -2638,6 +2722,38 @@ mod tests {
         assert!(should_reconcile_codex_ownership(false, true));
         assert!(should_reconcile_codex_ownership(true, false));
         assert!(!should_reconcile_codex_ownership(true, true));
+    }
+
+    #[test]
+    fn requests_restart_only_for_a_running_codex_with_unapplied_configuration() {
+        assert!(configuration_requires_restart(
+            true,
+            true,
+            false,
+            Some("new"),
+            Some("old")
+        ));
+        assert!(configuration_requires_restart(
+            true,
+            false,
+            true,
+            None,
+            None
+        ));
+        assert!(!configuration_requires_restart(
+            true,
+            true,
+            false,
+            Some("same"),
+            Some("same")
+        ));
+        assert!(!configuration_requires_restart(
+            false,
+            true,
+            true,
+            Some("new"),
+            Some("old")
+        ));
     }
 
     #[test]
