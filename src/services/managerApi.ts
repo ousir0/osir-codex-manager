@@ -1597,7 +1597,7 @@ export const managerApi = {
   },
   openCodexCheckRoute(routeId: string, model: string): Promise<OpenCodexRouteCheck> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve({ routeId, model, available: true, detail: "浏览器预览：未发送真实请求", checkedAt: String(Date.now()) });
+      return Promise.resolve({ routeId, model, available: true, retryable: false, detail: "浏览器预览：未发送真实请求", checkedAt: String(Date.now()) });
     }
     return invoke<OpenCodexRouteCheck>("opencodex_check_route", { routeId, model });
   },

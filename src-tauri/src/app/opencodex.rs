@@ -48,6 +48,7 @@ const MAX_ROUTE_COUNT: usize = 32;
 const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
+const ROUTE_CHECK_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -244,6 +245,7 @@ pub struct OpenCodexRouteCheck {
     pub route_id: String,
     pub model: String,
     pub available: bool,
+    pub retryable: bool,
     pub detail: String,
     pub checked_at: String,
 }
@@ -1393,17 +1395,63 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     status_at(&paths)
 }
 
+fn is_transient_route_check_error(error: &AppError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    ["status 429", "status 502", "status 503", "status 504", "(429)", "(502)", "(503)", "(504)"]
+        .iter()
+        .any(|marker| message.contains(marker))
+        || [
+            "bad gateway",
+            "service unavailable",
+            "gateway timeout",
+            "connection reset",
+            "connection refused",
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+            "temporary failure",
+            "server overloaded",
+        ]
+        .iter()
+        .any(|marker| message.contains(marker))
+}
+
+fn route_check_with_retry<F>(mut attempt: F, retry_delays: &[Duration]) -> Result<Vec<u8>, AppError>
+where
+    F: FnMut() -> Result<Vec<u8>, AppError>,
+{
+    let mut retry_index = 0;
+    loop {
+        match attempt() {
+            Ok(output) => return Ok(output),
+            Err(error) if is_transient_route_check_error(&error) && retry_index < retry_delays.len() => {
+                thread::sleep(retry_delays[retry_index]);
+                retry_index += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, AppError> {
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     let route = format!("{route_id}/{model}");
-    let check = match ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]) {
-        Ok(_) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: true, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() },
-        Err(error) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: false, detail: error.to_string(), checked_at: timestamp_marker() },
+    let retry_delays = ROUTE_CHECK_RETRY_DELAYS_MS.map(Duration::from_millis);
+    let check = match route_check_with_retry(
+        || ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]),
+        &retry_delays,
+    ) {
+        Ok(_) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: true, retryable: false, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() },
+        Err(error) => {
+            let retryable = is_transient_route_check_error(&error);
+            OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: false, retryable, detail: error.to_string(), checked_at: timestamp_marker() }
+        }
     };
     if let Ok(paths) = integration_paths() {
         let mut state = effective_state(&paths).unwrap_or_else(|_| load_state(&paths.state));
-        state.route_health.insert(route, if check.available { "verified" } else { "offline" }.to_string());
+        let health = if check.available { "verified" } else if check.retryable { "degraded" } else { "offline" };
+        state.route_health.insert(route, health.to_string());
         if let Ok(value) = serde_json::to_value(state) {
             let _ = write_json(&paths.state, &value);
         }
@@ -1494,8 +1542,12 @@ where
     let mut verified = status()?;
     verified.error = configured.error;
     if !check.available {
-        verified.connection_status = "error".to_string();
-        verified.error = Some(format!("模型已同步，但默认路由验证失败：{}", check.detail));
+        if check.retryable {
+            verified.error = Some(format!("授权和模型同步已完成，但默认路由遇到临时网络异常：{}", check.detail));
+        } else {
+            verified.connection_status = "error".to_string();
+            verified.error = Some(format!("模型已同步，但默认路由验证失败：{}", check.detail));
+        }
     }
     Ok(verified)
 }
@@ -1830,7 +1882,12 @@ fn route_from_config(
         api_key_configured,
         availability: if provider.get("disabled").and_then(JsonValue::as_bool) == Some(true) {
             "offline".to_string()
-        } else if let Some(health) = route_health.get(id) {
+        } else if let Some(health) = provider
+            .get("defaultModel")
+            .and_then(JsonValue::as_str)
+            .and_then(|model| route_health.get(&format!("{id}/{model}")))
+            .or_else(|| route_health.get(id))
+        {
             health.clone()
         } else if api_key_configured {
             "configured".to_string()
@@ -2800,7 +2857,7 @@ mod tests {
         append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
         component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
-        route_from_config,
+        is_transient_route_check_error, route_check_with_retry, route_from_config,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
@@ -2813,11 +2870,15 @@ mod tests {
     use rsa::sha2::Sha256 as RsaSha256;
     use rsa::{Oaep, RsaPrivateKey};
     use serde_json::{json, Map as JsonMap, Value as JsonValue};
+    use std::cell::Cell;
     use std::collections::{BTreeMap, BTreeSet};
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
+    use std::time::Duration;
     use uuid::Uuid;
+
+    use crate::errors::AppError;
 
     fn input() -> OpenCodexConfigInput {
         OpenCodexConfigInput {
@@ -2843,6 +2904,56 @@ mod tests {
         let mut value = input();
         value.default_route = "osir-gpt/gpt-5.6-terra".to_string();
         assert!(validate_input(&value).is_err());
+    }
+
+    #[test]
+    fn retries_transient_route_failures_until_the_model_responds() {
+        let attempts = Cell::new(0);
+        let result = route_check_with_retry(
+            || {
+                let current = attempts.get() + 1;
+                attempts.set(current);
+                if current < 3 {
+                    Err(AppError::Engine("unexpected status 502 Bad Gateway".to_string()))
+                } else {
+                    Ok(b"ok".to_vec())
+                }
+            },
+            &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
+        );
+        assert_eq!(result.unwrap(), b"ok");
+        assert_eq!(attempts.get(), 3);
+    }
+
+    #[test]
+    fn stops_after_all_transient_route_retries_are_exhausted() {
+        let attempts = Cell::new(0);
+        let result = route_check_with_retry(
+            || {
+                attempts.set(attempts.get() + 1);
+                Err(AppError::Engine("connection reset by peer".to_string()))
+            },
+            &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
+        );
+        assert!(result.is_err());
+        assert_eq!(attempts.get(), 4);
+    }
+
+    #[test]
+    fn does_not_retry_deterministic_route_authentication_failures() {
+        let attempts = Cell::new(0);
+        let result = route_check_with_retry(
+            || {
+                attempts.set(attempts.get() + 1);
+                Err(AppError::Engine("unexpected status 401 Unauthorized".to_string()))
+            },
+            &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
+        );
+        assert!(result.is_err());
+        assert_eq!(attempts.get(), 1);
+        assert!(!is_transient_route_check_error(&AppError::Engine(
+            "unexpected status 401 Unauthorized".to_string()
+        )));
     }
 
     #[test]
@@ -3111,6 +3222,28 @@ mod tests {
         assert_eq!(route.models, vec!["claude-haiku", "claude-sonnet"]);
         assert!(route.api_key_configured);
         assert_eq!(route.availability, "configured");
+    }
+
+    #[test]
+    fn maps_default_model_health_from_the_complete_route_key() {
+        let config = JsonMap::from_iter([(
+            "providers".to_string(),
+            json!({
+                "osirapi-openai": {
+                    "adapter": "openai-responses",
+                    "baseUrl": "https://api.osirclaw.com/v1",
+                    "defaultModel": "gpt-5.6-sol",
+                    "apiKey": "secret",
+                    "models": ["gpt-5.6-sol"]
+                }
+            }),
+        )]);
+        let health = BTreeMap::from([(
+            "osirapi-openai/gpt-5.6-sol".to_string(),
+            "degraded".to_string(),
+        )]);
+        let route = route_from_config("osirapi-openai", &config, &[], None, &health).unwrap();
+        assert_eq!(route.availability, "degraded");
     }
 
     #[test]

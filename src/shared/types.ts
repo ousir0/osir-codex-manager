@@ -723,7 +723,7 @@ export interface OpenCodexRoute {
   models: string[];
   enabled: boolean;
   apiKeyConfigured: boolean;
-  availability: "configured" | "verified" | "offline" | "unknown";
+  availability: "configured" | "verified" | "degraded" | "offline" | "unknown";
   locked: boolean;
 }
 
@@ -731,6 +731,8 @@ export interface OpenCodexRouteCheck {
   routeId: string;
   model: string;
   available: boolean;
+  /** True when retrying later is appropriate (for example 429/502/timeout). */
+  retryable: boolean;
   detail: string;
   checkedAt: string;
 }

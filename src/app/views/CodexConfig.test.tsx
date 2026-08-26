@@ -42,6 +42,7 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       openCodexStart: vi.fn(),
       openCodexActivateSaved: vi.fn(),
       openCodexConnectOsirOAuth: vi.fn(),
+      openCodexCheckRoute: vi.fn(),
       openCodexHome: vi.fn(),
       macRestart: vi.fn(),
       winRestart: vi.fn(),
@@ -105,6 +106,7 @@ describe("Codex configuration workbench", () => {
     api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null });
     api.openCodexInstall.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });
     api.openCodexActivateSaved.mockResolvedValue({ enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [], backupAvailable: true, error: null, connectionStatus: "connected", account: null });
+    api.openCodexCheckRoute.mockResolvedValue({ routeId: "osirapi-openai", model: "gpt-5.6-sol", available: true, retryable: false, detail: "路由验证成功", checkedAt: String(Date.now()) });
     api.openCodexHome.mockResolvedValue();
     api.macRestart.mockResolvedValue();
     api.winRestart.mockResolvedValue();
@@ -222,6 +224,30 @@ describe("Codex configuration workbench", () => {
     expect(await screen.findByText("正在写入模型配置")).toBeInTheDocument();
     expect(screen.getByText("读取账户与订阅").closest("div")).toHaveClass("complete");
     expect(screen.getByText("写入模型配置").closest("div")).toHaveClass("active");
+  });
+
+  it("keeps a completed OAuth connection and offers recheck after a transient 502", async () => {
+    const user = userEvent.setup();
+    const route = { id: "osirapi-openai", label: "GPT", adapter: "openai-responses", baseUrl: "https://api.osirclaw.com/v1", defaultModel: "gpt-5.6-sol", models: ["gpt-5.6-sol"], enabled: true, apiKeyConfigured: true, availability: "degraded" as const, locked: true };
+    const warningStatus = { enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready" as const, codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [route], backupAvailable: true, error: "授权和模型同步已完成，但默认路由遇到临时网络异常：502 Bad Gateway", connectionStatus: "connected" as const, account: { userId: 1, balance: 10, subscriptions: [] } };
+    const verifiedStatus = { ...warningStatus, error: null, routes: [{ ...route, availability: "verified" as const }] };
+    api.openCodexStatus.mockResolvedValueOnce(warningStatus).mockResolvedValue(verifiedStatus);
+    api.openCodexConnectOsirOAuth.mockResolvedValue(warningStatus);
+
+    renderConfig();
+    await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" });
+    const connectCard = (await screen.findAllByRole("button", { name: /连接 OSIRAPI/ }))
+      .find((button) => button.classList.contains("multi-model-connection-card"));
+    expect(connectCard).toBeDefined();
+    await user.click(connectCard!);
+    await user.click(screen.getByRole("button", { name: "浏览器登录并连接" }));
+
+    expect(await screen.findByRole("heading", { name: "OSIRAPI 已授权，等待模型复检" })).toBeInTheDocument();
+    expect(screen.getByText("授权与模型同步已经完成，无需重新授权")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重新授权" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重新检测" }));
+    await waitFor(() => expect(api.openCodexCheckRoute).toHaveBeenCalledWith("osirapi-openai", "gpt-5.6-sol"));
+    expect(await screen.findByRole("heading", { name: "OSIRAPI 已授权并同步" })).toBeInTheDocument();
   });
 
   it("edits Codex behavior from a focused dialog", async () => {

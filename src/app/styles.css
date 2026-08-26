@@ -6591,6 +6591,10 @@ button.config-resource-row:hover {
   background: var(--danger-tint);
   color: var(--danger-deep);
 }
+.multi-model-route-state.state-degraded {
+  background: var(--amber-tint);
+  color: var(--amber-deep);
+}
 .multi-model-route-state.state-configured {
   background: var(--accent-tint);
   color: var(--accent-deep);

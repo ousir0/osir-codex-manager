@@ -184,7 +184,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
       if (next.connectionStatus !== "connected" || !next.account) {
         throw new Error(next.error || "OSIRAPI 授权已完成，但本机服务、账户或默认模型路由验证未通过。请按提示重试。");
       }
-      setNotice("OSIRAPI 已授权，账户与模型状态已同步。");
+      setNotice(next.error ? "OSIRAPI 已授权并同步；默认模型遇到临时网络异常，可直接重新检测。" : "OSIRAPI 已授权，账户与模型状态已同步。");
       setConnectionMode(null);
       setOauthSuccess(next);
     } catch (cause) {
@@ -264,7 +264,38 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
     setRouteCheckBusy(true);
     try {
       const result = await managerApi.openCodexCheckRoute(selected.id, selected.model);
+      await refreshStatus();
       setNotice(result.available ? "路由验证成功：" + selected.label + " / " + selected.model : "路由验证失败：" + result.detail);
+    } catch (cause) {
+      setNotice(errorMessage(cause));
+    } finally {
+      setRouteCheckBusy(false);
+    }
+  };
+
+  const recheckOAuthDefaultRoute = async () => {
+    if (!oauthSuccess) return;
+    const route = oauthSuccess.routes.find((item) => item.availability === "degraded" || item.availability === "offline")
+      || oauthSuccess.routes.find((item) => item.locked)
+      || oauthSuccess.routes.find((item) => item.id.toLowerCase().includes("openai"))
+      || oauthSuccess.routes[0];
+    if (!route) {
+      setNotice("模型目录中没有可验证的默认路由，请先刷新配置。");
+      return;
+    }
+    setRouteCheckBusy(true);
+    try {
+      const result = await managerApi.openCodexCheckRoute(route.id, route.defaultModel);
+      if (!result.available) {
+        setOauthSuccess((current) => current ? { ...current, error: `模型已同步，但默认路由验证仍未通过：${result.detail}` } : current);
+        setNotice(result.retryable ? "上游连接仍在波动，请稍后再次检测；无需重新授权。" : "默认模型验证失败，请检查供应商凭据或模型权限。");
+        return;
+      }
+      const refreshed = await managerApi.openCodexStatus();
+      const verified = { ...refreshed, error: null };
+      setStatus(verified);
+      setOauthSuccess(verified);
+      setNotice(`路由验证成功：${route.label} / ${route.defaultModel}`);
     } catch (cause) {
       setNotice(errorMessage(cause));
     } finally {
@@ -347,7 +378,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
 
         <section className="multi-model-panel multi-model-routes-panel">
           <div className="multi-model-panel-head"><div><span className="multi-model-label">模型路由</span><h2>已准备 {status?.modelCount || 18} 个模型</h2></div><div className="multi-model-route-head-actions"><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void refreshStatus()}><Icon name={busy === "load" ? "loader" : "refresh"} /> 刷新配置</button><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void run("sync", () => managerApi.openCodexSync(), "模型目录已同步；请完全退出后重新打开 Codex。")}><Icon name={busy === "sync" ? "loader" : "refresh"} /> 同步</button></div></div>
-          <div className="multi-model-route-list">{displayRoutes.map((route) => { const isSelected = route.id === selectedRoute; return <button className={"multi-model-route route-" + route.accent + (isSelected ? " selected" : "")} type="button" key={route.id} onClick={() => setSelectedRoute(route.id)}><span className="multi-model-route-avatar">{route.initials}</span><span className="multi-model-route-body"><span className="multi-model-route-topline"><strong>{route.label}</strong><em>{route.provider}</em><small className={"multi-model-route-state state-" + route.availability}>{route.availability === "verified" ? "已验证" : route.availability === "offline" ? "不可用" : route.availability === "configured" ? "已配置" : "待验证"}</small></span><span className="multi-model-route-model">默认 · {route.model}</span></span><span className="multi-model-route-count">{route.count}<small> 个模型</small></span><Icon name={route.locked || isSelected ? "check" : "chevron"} /></button>; })}</div>
+          <div className="multi-model-route-list">{displayRoutes.map((route) => { const isSelected = route.id === selectedRoute; return <button className={"multi-model-route route-" + route.accent + (isSelected ? " selected" : "")} type="button" key={route.id} onClick={() => setSelectedRoute(route.id)}><span className="multi-model-route-avatar">{route.initials}</span><span className="multi-model-route-body"><span className="multi-model-route-topline"><strong>{route.label}</strong><em>{route.provider}</em><small className={"multi-model-route-state state-" + route.availability}>{route.availability === "verified" ? "已验证" : route.availability === "degraded" ? "临时异常" : route.availability === "offline" ? "不可用" : route.availability === "configured" ? "已配置" : "待验证"}</small></span><span className="multi-model-route-model">默认 · {route.model}</span></span><span className="multi-model-route-count">{route.count}<small> 个模型</small></span><Icon name={route.locked || isSelected ? "check" : "chevron"} /></button>; })}</div>
           <div className="multi-model-model-manager"><div className="multi-model-model-manager-head"><div><span className="multi-model-label">模型管理</span><strong>{selected.label} · {selected.models.length} 个模型</strong></div><span className="multi-model-method-hint">移除后会同步 OpenCodex 和 Codex 目录</span></div><div className="multi-model-model-list">{selected.models.map((model) => <div className="multi-model-model-row" key={model}><span className="mono">{model}</span><button className="btn ghost compact danger-text" type="button" disabled={Boolean(busy)} onClick={() => setRemoveModel({ routeId: selected.id, model })}><Icon name="trash" />移除</button></div>)}</div></div>
           <div className="multi-model-default-route"><span className="multi-model-label">当前默认模型</span><strong>{selected.model}</strong><span className="multi-model-route-badge">{selected.label}</span><div className="multi-model-route-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void selectCurrentRoute()}>{selected.locked ? "已锁定" : "锁定此路由"}</button><button className="btn ghost compact" type="button" disabled={routeCheckBusy || !installed} onClick={() => void checkCurrentRoute()}>{routeCheckBusy ? "验证中…" : "验证可用性"}</button></div></div>
         </section>
@@ -367,9 +398,9 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
 
       <Sheet open={oauthSuccess !== null} onDismiss={() => setOauthSuccess(null)} centeredAlways labelledBy="opencodex-oauth-success-title" initialFocus="first">
         <div className="multi-model-modal">
-          <div className="multi-model-modal-head"><div><span className="multi-model-label">连接完成</span><h2 id="opencodex-oauth-success-title">OSIRAPI 已授权并同步</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setOauthSuccess(null)}><Icon name="close" /></button></div>
-          <div className="multi-model-modal-body"><div className="multi-model-runtime-main"><div className="multi-model-runtime-mark"><Icon name="check" /></div><div><strong>订阅凭据已验证，可以直接使用</strong><span className="multi-model-runtime-meta"><i className="ready" />OpenCodex {oauthSuccess?.serviceState === "ready" ? "已就绪" : "配置已保存"}</span></div></div><div className="multi-model-safe-note"><Icon name="shield" /><span>已创建或复用 Manager 专用订阅 Key；长期 Key 不会回显。</span></div><div className="multi-model-model-list"><div className="multi-model-model-row"><span>已连接路由</span><strong>{oauthSuccess?.routes.length || 0} 条</strong></div><div className="multi-model-model-row"><span>已同步模型</span><strong>{oauthSuccess?.modelCount || 0} 个</strong></div><div className="multi-model-model-row"><span>本机服务</span><strong>127.0.0.1:{oauthSuccess?.port || 10100}</strong></div></div><p className="multi-model-method-hint">请完全退出并重新打开 Codex，让原生模型选择器读取最新目录。</p></div>
-          <div className="multi-model-modal-actions"><button className="btn primary" type="button" onClick={() => setOauthSuccess(null)}>完成</button></div>
+          <div className="multi-model-modal-head"><div><span className="multi-model-label">连接完成</span><h2 id="opencodex-oauth-success-title">{oauthSuccess?.error ? "OSIRAPI 已授权，等待模型复检" : "OSIRAPI 已授权并同步"}</h2></div><button className="iconbtn" type="button" aria-label="关闭" onClick={() => setOauthSuccess(null)}><Icon name="close" /></button></div>
+          <div className="multi-model-modal-body"><div className="multi-model-runtime-main"><div className="multi-model-runtime-mark"><Icon name={oauthSuccess?.error ? "alert" : "check"} /></div><div><strong>{oauthSuccess?.error ? "授权与模型同步已经完成，无需重新授权" : "订阅凭据已验证，可以直接使用"}</strong><span className="multi-model-runtime-meta"><i className={oauthSuccess?.error ? "" : "ready"} />OpenCodex {oauthSuccess?.serviceState === "ready" ? "已就绪" : "配置已保存"}</span></div></div>{oauthSuccess?.error ? <div className="banner err" role="alert"><Icon name="alert" /><span>{oauthSuccess.error}</span></div> : null}<div className="multi-model-safe-note"><Icon name="shield" /><span>已创建或复用 Manager 专用订阅 Key；长期 Key 不会回显。</span></div><div className="multi-model-model-list"><div className="multi-model-model-row"><span>已连接路由</span><strong>{oauthSuccess?.routes.length || 0} 条</strong></div><div className="multi-model-model-row"><span>已同步模型</span><strong>{oauthSuccess?.modelCount || 0} 个</strong></div><div className="multi-model-model-row"><span>本机服务</span><strong>127.0.0.1:{oauthSuccess?.port || 10100}</strong></div></div><p className="multi-model-method-hint">{oauthSuccess?.error ? "上游恢复后点击重新检测即可；不需要再次登录授权。" : "请完全退出并重新打开 Codex，让原生模型选择器读取最新目录。"}</p></div>
+          <div className="multi-model-modal-actions"><button className="btn ghost" type="button" onClick={() => setOauthSuccess(null)}>关闭</button>{oauthSuccess?.error ? <button className="btn primary" type="button" disabled={routeCheckBusy} onClick={() => void recheckOAuthDefaultRoute()}><Icon name={routeCheckBusy ? "loader" : "refresh"} />{routeCheckBusy ? "检测中…" : "重新检测"}</button> : <button className="btn primary" type="button" onClick={() => setOauthSuccess(null)}>完成</button>}</div>
         </div>
       </Sheet>
 
