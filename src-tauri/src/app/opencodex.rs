@@ -1936,7 +1936,18 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn status() -> Result<OpenCodexStatus, AppError> {
-    status_at(&integration_paths()?)
+    let paths = integration_paths()?;
+    // Repair legacy model ids as part of every status read while OpenCodex
+    // owns Codex, so an upgrade self-heals without another mode toggle.
+    let state = effective_state(&paths)?;
+    if state.enabled && paths.catalog.is_file() {
+        let config = load_config(&paths.opencodex_config)?;
+        let routes = configured_routes_from_config(&config, &state.managed_provider_ids);
+        if !routes.is_empty() {
+            append_configured_models_to_catalog(&paths.catalog, &routes)?;
+        }
+    }
+    status_at(&paths)
 }
 
 fn validate_input(input: &OpenCodexConfigInput) -> Result<(String, String, Vec<OpenCodexRouteInput>), AppError> {
@@ -2191,7 +2202,7 @@ fn append_configured_models_to_catalog(
         .get_mut("models")
         .and_then(JsonValue::as_array_mut)
         .ok_or_else(|| AppError::Engine("OpenCodex 模型目录缺少 models 数组".to_string()))?;
-    let existing = models
+    let mut existing = models
         .iter()
         .filter_map(|model| model.get("slug").and_then(JsonValue::as_str))
         .map(str::to_string)
@@ -2222,7 +2233,7 @@ fn append_configured_models_to_catalog(
             let object = entry
                 .as_object_mut()
                 .ok_or_else(|| AppError::Engine("OpenCodex 模型目录条目格式无效".to_string()))?;
-            object.insert("slug".to_string(), JsonValue::String(slug));
+            object.insert("slug".to_string(), JsonValue::String(slug.clone()));
             object.insert(
                 "display_name".to_string(),
                 JsonValue::String(format!("{} · {}", model, route.label)),
@@ -2235,6 +2246,34 @@ fn append_configured_models_to_catalog(
             object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
             object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
             models.push(entry);
+            existing.insert(slug);
+            changed = true;
+        }
+    }
+    // Older Codex rollouts persist bare OpenAI model ids (for example
+    // `gpt-5.5`), while the current catalog uses routed ids such as
+    // `osirapi-openai/gpt-5.5`. Keep a visible compatibility row so old
+    // sessions can resolve model metadata and continue using the same route.
+    for route in routes.iter().filter(|route| route.enabled) {
+        if !route.id.to_ascii_lowercase().contains("openai") {
+            continue;
+        }
+        for model in &route.models {
+            if !(model.starts_with("gpt-") || model.starts_with("codex-")) || existing.contains(model) {
+                continue;
+            }
+            let mut entry = template.clone();
+            let object = entry
+                .as_object_mut()
+                .ok_or_else(|| AppError::Engine("OpenCodex 模型目录条目格式无效".to_string()))?;
+            object.insert("slug".to_string(), JsonValue::String(model.clone()));
+            object.insert("display_name".to_string(), JsonValue::String(format!("{} · {}", model, route.label)));
+            object.insert("description".to_string(), JsonValue::String(format!("历史会话兼容别名 · OpenCodex -> {}", route.id)));
+            object.insert("default_reasoning_level".to_string(), JsonValue::String("high".to_string()));
+            object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
+            object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
+            models.push(entry);
+            existing.insert(model.clone());
             changed = true;
         }
     }
@@ -2552,6 +2591,7 @@ mod tests {
     use rsa::sha2::Sha256 as RsaSha256;
     use rsa::{Oaep, RsaPrivateKey};
     use serde_json::{json, Map as JsonMap, Value as JsonValue};
+    use std::collections::BTreeSet;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::thread;
@@ -2707,6 +2747,32 @@ mod tests {
         assert!(catalog_contains_enabled_routes(&catalog, &routes));
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
         assert_eq!(value["models"].as_array().unwrap().len(), 2);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn appends_bare_openai_aliases_for_legacy_sessions() {
+        let root = std::env::temp_dir().join(format!("opencodex-catalog-legacy-alias-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":[{
+                "slug":"osirapi-openai/gpt-5.5",
+                "display_name":"gpt-5.5 · GPT",
+                "supported_reasoning_levels":[{"effort":"high","description":"High"}],
+                "visibility":"list"
+            }]})).unwrap(),
+        ).unwrap();
+        let mut route = input().routes[0].clone();
+        route.id = "osirapi-openai".to_string();
+        route.models = vec!["gpt-5.5".to_string()];
+        append_configured_models_to_catalog(&catalog, &[route]).unwrap();
+        let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
+        let slugs = value["models"].as_array().unwrap().iter()
+            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        assert!(slugs.contains("osirapi-openai/gpt-5.5"));
+        assert!(slugs.contains("gpt-5.5"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
