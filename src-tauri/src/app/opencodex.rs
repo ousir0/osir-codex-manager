@@ -2169,7 +2169,7 @@ fn build_opencodex_config(
 fn write_codex_proxy_config(
     path: &Path,
     catalog: &Path,
-    _provider_id: &str,
+    provider_id: &str,
     port: u16,
     default_route: &str,
 ) -> Result<(), AppError> {
@@ -2185,10 +2185,33 @@ fn write_codex_proxy_config(
     let mut document = raw
         .parse::<DocumentMut>()
         .map_err(|error| AppError::Engine(format!("config.toml 格式错误：{error}")))?;
-    document["model_provider"] = value("openai");
+    // OpenCodex is a custom local provider. Do not masquerade as the built-in
+    // `openai` provider: the Codex desktop client uses this distinction when
+    // deciding which model catalog entries are eligible for its selector.
+    let provider_id = if provider_id.trim().is_empty() {
+        DEFAULT_PROVIDER_ID
+    } else {
+        provider_id.trim()
+    };
+    document["model_provider"] = value(provider_id);
     document["model"] = value(default_route);
     document["model_catalog_json"] = value(catalog.display().to_string());
-    document["openai_base_url"] = value(format!("http://127.0.0.1:{port}/v1"));
+    document.remove("openai_base_url");
+    if !document.contains_key("model_providers") {
+        document["model_providers"] = toml_edit::table();
+    }
+    let providers = document["model_providers"]
+        .as_table_mut()
+        .ok_or_else(|| AppError::Engine("model_providers 必须是 TOML 表".to_string()))?;
+    let provider = providers
+        .entry(provider_id)
+        .or_insert_with(|| Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| AppError::Engine(format!("model_providers.{provider_id} 必须是 TOML 表")))?;
+    provider["name"] = value("OpenCodex 多模型路由");
+    provider["base_url"] = value(format!("http://127.0.0.1:{port}/v1"));
+    provider["wire_api"] = value("responses");
+    provider["requires_openai_auth"] = value(false);
     let rendered = document.to_string();
     atomic_file::write_atomic(path, rendered.as_bytes())
         .map_err(|error| AppError::Internal(format!("原子保存 config.toml 失败：{error}")))?;
@@ -2317,6 +2340,7 @@ fn append_configured_models_to_catalog(
             object.insert("default_reasoning_level".to_string(), JsonValue::String("high".to_string()));
             object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
             object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
+            object.insert("hidden".to_string(), JsonValue::Bool(false));
             models.push(entry);
             existing.insert(slug);
             changed = true;
@@ -2352,11 +2376,78 @@ fn append_configured_models_to_catalog(
             object.insert("description".to_string(), JsonValue::String(format!("历史会话兼容别名 · OpenCodex -> {}", route.id)));
             object.insert("default_reasoning_level".to_string(), JsonValue::String("high".to_string()));
             object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
-            object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
+            // Keep the alias resolvable for legacy sessions, but do not show
+            // it as a second selectable row in the current model picker.
+            object.insert("visibility".to_string(), JsonValue::String("hide".to_string()));
+            object.insert("hidden".to_string(), JsonValue::Bool(true));
             models.push(entry);
             existing.insert(model.clone());
             changed = true;
         }
+    }
+
+    // Existing catalogs may already contain bare aliases from an earlier
+    // Manager release. Normalize them too, then sort the complete managed
+    // catalog into a stable GPT → Claude → Grok order. The Codex client keeps
+    // the file order when rendering models, so doing this at the source avoids
+    // release-to-release selector reshuffling.
+    let openai_models: BTreeSet<String> = routes
+        .iter()
+        .filter(|route| route.enabled)
+        .filter(|route| {
+            let id = route.id.to_ascii_lowercase();
+            let label = route.label.to_ascii_lowercase();
+            id.contains("openai") || label.contains("openai") || label.contains("gpt")
+        })
+        .flat_map(|route| route.models.iter().cloned())
+        .collect();
+    for model in models.iter_mut() {
+        let Some(slug) = model.get("slug").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        if openai_models.contains(slug) && !slug.contains('/') {
+            if let Some(object) = model.as_object_mut() {
+                let already_hidden = object.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
+                if !already_hidden || object.get("visibility").and_then(JsonValue::as_str) != Some("hide") {
+                    object.insert("visibility".to_string(), JsonValue::String("hide".to_string()));
+                    object.insert("hidden".to_string(), JsonValue::Bool(true));
+                    changed = true;
+                }
+            }
+        }
+    }
+    let before_order = models
+        .iter()
+        .map(|model| {
+            (
+                model.get("slug").and_then(JsonValue::as_str).unwrap_or_default().to_string(),
+                model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false),
+            )
+        })
+        .collect::<Vec<_>>();
+    models.sort_by(|left, right| {
+        let key = |model: &JsonValue| {
+            let slug = model.get("slug").and_then(JsonValue::as_str).unwrap_or_default();
+            let hidden = model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
+            let group = if slug.starts_with("osirapi-openai/") { 0 }
+                else if slug.starts_with("osirapi-claude/") { 1 }
+                else if slug.starts_with("osirapi-grok/") { 2 }
+                else { 3 };
+            (hidden, group, slug.to_ascii_lowercase())
+        };
+        key(left).cmp(&key(right))
+    });
+    let after_order = models
+        .iter()
+        .map(|model| {
+            (
+                model.get("slug").and_then(JsonValue::as_str).unwrap_or_default().to_string(),
+                model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false),
+            )
+        })
+        .collect::<Vec<_>>();
+    if before_order != after_order {
+        changed = true;
     }
     if changed {
         let bytes = serde_json::to_vec_pretty(&catalog)
@@ -2674,7 +2765,7 @@ mod tests {
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
-        EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
+        write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Nonce};
@@ -2897,6 +2988,55 @@ mod tests {
             .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
         assert!(slugs.contains("osirapi-openai/gpt-5.5"));
         assert!(slugs.contains("gpt-5.5"));
+        let alias = value["models"].as_array().unwrap().iter().find(|model| model["slug"] == "gpt-5.5").unwrap();
+        assert_eq!(alias["hidden"], json!(true));
+        assert_eq!(alias["visibility"], json!("hide"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sorts_visible_models_by_provider_and_hides_legacy_aliases() {
+        let root = std::env::temp_dir().join(format!("opencodex-catalog-sort-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":[
+                {"slug":"gpt-5.5"},
+                {"slug":"osirapi-grok/grok-4.6"},
+                {"slug":"osirapi-openai/gpt-5.5"},
+                {"slug":"osirapi-claude/claude-opus-5"}
+            ]})).unwrap(),
+        ).unwrap();
+        let mut gpt = input().routes[0].clone();
+        gpt.models = vec!["gpt-5.5".to_string()];
+        let claude = OpenCodexRouteInput { id: "osirapi-claude".into(), label: "Claude".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["claude-opus-5".into()], default_model: "claude-opus-5".into(), enabled: true };
+        let grok = OpenCodexRouteInput { id: "osirapi-grok".into(), label: "Grok".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["grok-4.6".into()], default_model: "grok-4.6".into(), enabled: true };
+        append_configured_models_to_catalog(&catalog, &[gpt, claude, grok]).unwrap();
+        let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
+        let models = value["models"].as_array().unwrap();
+        let slugs = models.iter().filter_map(|m| m["slug"].as_str()).collect::<Vec<_>>();
+        assert_eq!(slugs[..3], ["osirapi-openai/gpt-5.5", "osirapi-claude/claude-opus-5", "osirapi-grok/grok-4.6"]);
+        let alias = models.iter().find(|m| m["slug"] == "gpt-5.5").unwrap();
+        assert_eq!(alias["hidden"], json!(true));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn writes_opencodex_as_a_custom_codex_provider() {
+        let root = std::env::temp_dir().join(format!("opencodex-codex-config-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let config = root.join("config.toml");
+        let catalog = root.join("catalog.json");
+        std::fs::write(&config, "model_provider = \"openai\"\nopenai_base_url = \"http://127.0.0.1:10100/v1\"\n").unwrap();
+        write_codex_proxy_config(&config, &catalog, "opencodex", 10100, "osirapi-openai/gpt-5.6-sol").unwrap();
+        let document = std::fs::read_to_string(&config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+        assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
+        assert!(document.get("openai_base_url").is_none());
+        let provider = document["model_providers"]["opencodex"].as_table().unwrap();
+        assert_eq!(provider["base_url"].as_str(), Some("http://127.0.0.1:10100/v1"));
+        assert_eq!(provider["wire_api"].as_str(), Some("responses"));
+        assert_eq!(provider["requires_openai_auth"].as_bool(), Some(false));
         std::fs::remove_dir_all(root).unwrap();
     }
 
