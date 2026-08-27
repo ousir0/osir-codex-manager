@@ -1220,28 +1220,31 @@ fn platform_label(platform: &str) -> &str {
     match platform {
         "openai" => "GPT",
         "anthropic" => "Claude",
+        "gemini" => "Gemini",
         "grok" => "Grok",
         _ => "OSIR",
     }
 }
 
 fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), AppError> {
-    let required = ["openai", "anthropic", "grok"];
-    if payload.providers.len() != required.len() {
+    if payload.providers.is_empty() || payload.providers.len() > MAX_ROUTE_COUNT {
         return Err(AppError::Engine(format!(
-            "OSIRAPI 返回的订阅路由不完整：需要 GPT、Claude、Grok 三条，实际收到 {} 条",
+            "OSIRAPI 返回的订阅路由数量无效：实际收到 {} 条",
             payload.providers.len()
         )));
     }
     let mut platforms = BTreeSet::new();
+    let mut provider_ids = BTreeSet::new();
     for provider in &payload.providers {
-        if !required.contains(&provider.platform.as_str()) || !platforms.insert(provider.platform.as_str()) {
-            return Err(AppError::Engine("OSIRAPI 返回了重复或未知的订阅平台路由".to_string()));
+        let platform = provider.platform.trim();
+        let provider_id = checked_id(&provider.provider, "OSIRAPI Provider ID")?;
+        if platform.is_empty() || !platforms.insert(platform) || !provider_ids.insert(provider_id) {
+            return Err(AppError::Engine("OSIRAPI 返回了重复或无效的订阅平台路由".to_string()));
         }
         if provider.api_key.trim().is_empty() || provider.models.is_empty() {
             return Err(AppError::Engine(format!(
                 "OSIRAPI 的 {} 订阅路由缺少密钥或模型",
-                platform_label(&provider.platform)
+                platform_label(platform)
             )));
         }
         if provider.adapter.trim() != "openai-responses"
@@ -1249,7 +1252,7 @@ fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), A
         {
             return Err(AppError::Engine(format!(
                 "OSIRAPI 的 {} 订阅路由格式无效",
-                platform_label(&provider.platform)
+                platform_label(platform)
             )));
         }
     }
@@ -2596,8 +2599,8 @@ fn append_configured_models_to_catalog(
 
     // Existing catalogs may already contain bare aliases from an earlier
     // Manager release. Normalize them too, then sort the complete managed
-    // catalog into a stable GPT → Claude → Grok order. The Codex client keeps
-    // the file order when rendering models, so doing this at the source avoids
+    // catalog into a stable platform order. The Codex client keeps the file
+    // order when rendering models, so doing this at the source avoids
     // release-to-release selector reshuffling.
     let openai_models: BTreeSet<String> = routes
         .iter()
@@ -2637,10 +2640,13 @@ fn append_configured_models_to_catalog(
         let key = |model: &JsonValue| {
             let slug = model.get("slug").and_then(JsonValue::as_str).unwrap_or_default();
             let hidden = model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
-            let group = if slug.starts_with("osirapi-openai/") { 0 }
-                else if slug.starts_with("osirapi-claude/") { 1 }
-                else if slug.starts_with("osirapi-grok/") { 2 }
-                else { 3 };
+            let group = match slug.split('/').next().unwrap_or_default() {
+                "osirapi-openai" => 0,
+                "osirapi-claude" => 1,
+                "osirapi-gemini" => 2,
+                "osirapi-grok" => 3,
+                _ => 4,
+            };
             (hidden, group, slug.to_ascii_lowercase())
         };
         key(left).cmp(&key(right))
@@ -3012,7 +3018,7 @@ mod tests {
         is_transient_route_check_error, route_check_with_retry, route_from_config,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
-        write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
+        validate_codex_install_payload, write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Nonce};
@@ -3155,6 +3161,34 @@ mod tests {
         assert_eq!(component_target_for("linux", "aarch64"), Some("linux-arm64"));
         assert_eq!(component_target_for("freebsd", "x86_64"), None);
         assert_eq!(node_distribution_target_for("linux", "x86_64"), Some("linux-x64"));
+    }
+
+    #[test]
+    fn accepts_a_dynamic_subscription_provider_set_including_gemini() {
+        let payload = CodexInstallPayload {
+            providers: vec![
+                super::CodexInstallProvider {
+                    platform: "openai".into(),
+                    provider: "osirapi-openai".into(),
+                    api_key: "secret-openai".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gpt-5.6-sol".into()],
+                    recommended_model: "gpt-5.6-sol".into(),
+                },
+                super::CodexInstallProvider {
+                    platform: "gemini".into(),
+                    provider: "osirapi-gemini".into(),
+                    api_key: "secret-gemini".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gemini-2.5-pro".into(), "gemini-2.5-flash".into()],
+                    recommended_model: "gemini-2.5-pro".into(),
+                },
+            ],
+            account: None,
+        };
+        assert!(validate_codex_install_payload(&payload).is_ok());
     }
 
     #[test]

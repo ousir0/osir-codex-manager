@@ -27,6 +27,7 @@ const OAUTH_STEPS = [
 const ROUTES = [
   { id: "osir-gpt", label: "GPT", provider: "OSIR API", model: "gpt-5.6-sol", count: 7, accent: "blue", initials: "G" },
   { id: "osir-claude", label: "Claude", provider: "OSIR API", model: "claude-opus-5", count: 6, accent: "peach", initials: "C" },
+  { id: "osir-gemini", label: "Gemini", provider: "OSIR API", model: "gemini-2.5-pro", count: 4, accent: "peach", initials: "G" },
   { id: "osir-grok", label: "Grok", provider: "OSIR API", model: "grok-4.6", count: 5, accent: "lime", initials: "X" },
 ] as const;
 
@@ -221,7 +222,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
   const selected = displayRoutes.find((route) => route.id === selectedRoute) ?? displayRoutes[0];
   const installed = status?.installed ?? false;
   const serviceReady = status?.serviceState === "ready";
-  const osirReady = ROUTES.every((route) => Boolean(routeKeys[route.id]?.trim()));
+  const osirReady = ROUTES.some((route) => Boolean(routeKeys[route.id]?.trim()));
   const customReady = customEnabled && Boolean(customRoute.id && customRoute.label && customRoute.baseUrl && customRoute.model && customRoute.apiKey);
   const canSave = osirReady || customReady;
   const stageIndex = !status || !installed ? 0 : !status.enabled ? 1 : status.modelCount === 0 ? 2 : 3;
