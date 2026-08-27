@@ -43,4 +43,18 @@ describe("release report", () => {
     const result = await generateReleaseReport({ version: "v0.5.29", output: join(dir, "report.md"), releaseJson: releasePath, latestJson: latestPath, cwd: "/tmp/repo", run, fetchImpl: async () => ({ status: 200, ok: true, url: "https://example.test", headers: { get: () => null }, json: async () => ({}) }) });
     expect(await readFile(result.target, "utf8")).toContain("Codex Manager v0.5.29");
   });
+
+  it("attaches the report before immutable publication", async () => {
+    const workflow = await readFile(join(import.meta.dirname, "..", ".github", "workflows", "release.yml"), "utf8");
+    const draft = workflow.indexOf("- name: Upload GitHub Release draft");
+    const report = workflow.indexOf("- name: Generate release acceptance report");
+    const attach = workflow.indexOf("- name: Attach release acceptance report to draft");
+    const publish = workflow.indexOf("- name: Publish GitHub Release");
+    expect(draft).toBeGreaterThan(-1);
+    expect(report).toBeGreaterThan(draft);
+    expect(attach).toBeGreaterThan(report);
+    expect(publish).toBeGreaterThan(attach);
+    expect(workflow.slice(report, publish)).toContain("release-report.mjs");
+    expect(workflow.slice(attach, publish)).toContain("gh release upload");
+  });
 });

@@ -218,6 +218,7 @@ node scripts/release-report.mjs vX.Y.Z \\
 ```
 
 报告会记录 Git SHA、工作区状态、Release 资产、四平台线上 HTTP/大小、`latest.json`、CI/镜像状态和用户更新验收项；URL 查询参数会被清理，不记录预签名链接或凭据。
+正式 Release 流程会在草稿 Release 创建后自动生成并附加同一份报告，再切换为不可变 Release；发布后的不可变校验和镜像回读继续保存在工作流审计产物中。
 
 每次发版在 PR、Release 或交付记录中保留：
 

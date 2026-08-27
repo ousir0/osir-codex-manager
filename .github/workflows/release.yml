@@ -1309,6 +1309,36 @@ jobs:
             SHA256SUMS
             release-assets/*
 
+      # Immutable Releases cannot accept new assets after publication. Generate
+      # and attach the acceptance report while the draft is still mutable.
+      - name: Generate release acceptance report
+        id: release_report
+        if: ${{ steps.provenance.outputs.ready == 'true' && steps.release_source.outputs.existing != 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPORT_OUTPUT: ${{ runner.temp }}/release-acceptance-${{ env.RELEASE_TAG }}.md
+        run: |
+          set -euo pipefail
+          node scripts/release-report.mjs "$RELEASE_TAG" \
+            --latest-json latest.json \
+            --output "$RELEASE_REPORT_OUTPUT"
+          test -s "$RELEASE_REPORT_OUTPUT"
+          cp "$RELEASE_REPORT_OUTPUT" "release-assets/release-acceptance-${RELEASE_TAG}.md"
+          echo "path=release-assets/release-acceptance-${RELEASE_TAG}.md" >> "$GITHUB_OUTPUT"
+
+      - name: Attach release acceptance report to draft
+        if: ${{ steps.release_report.outcome == 'success' && steps.release_source.outputs.existing != 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" \
+            "${{ steps.release_report.outputs.path }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
       # Upload can take long enough for a repository policy regression to matter.
       # Fence the transition from mutable draft to immutable publication again.
       - name: Re-check protected release source before publication
