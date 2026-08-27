@@ -283,6 +283,7 @@ mod tests {
             ("c".into(), "other".into(), "unrelated/model".into()),
         ]);
         assert!(backup.is_file());
+        drop(connection);
         std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
     }
 
@@ -305,6 +306,7 @@ mod tests {
             ("b".into(), "osir".into(), "unknown".into()),
             ("c".into(), "opencodex".into(), "osirapi-claude/claude-opus-5".into()),
         ]);
+        drop(connection);
         std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
     }
 }
