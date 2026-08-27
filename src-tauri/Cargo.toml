@@ -6,7 +6,7 @@ name = "osir-codex-manager"
 # would otherwise ride along in the production app. default-run is kept
 # defensively to pin `cargo run` to the app should another src/bin/* be added.
 default-run = "osir-codex-manager"
-version = "0.5.30"
+version = "0.5.31"
 description = "A personal cross-platform manager for installing, updating, configuring, and theming the official Codex desktop app."
 authors = ["ousir0"]
 edition = "2021"

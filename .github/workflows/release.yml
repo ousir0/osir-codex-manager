@@ -1309,6 +1309,24 @@ jobs:
             SHA256SUMS
             release-assets/*
 
+      # Verify the binding is present in the draft before generating the
+      # acceptance report or publishing the immutable release.
+      - name: Verify and attach release binding to draft
+        if: ${{ steps.provenance.outputs.ready == 'true' && steps.release_source.outputs.existing != 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s release-binding.json
+          gh release upload "$RELEASE_TAG" release-binding.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json assets \
+            --jq '.assets[].name' | grep -Fxq 'release-binding.json'
+
       # Immutable Releases cannot accept new assets after publication. Generate
       # and attach the acceptance report while the draft is still mutable.
       - name: Generate release acceptance report
@@ -1320,9 +1338,17 @@ jobs:
           RELEASE_REPORT_OUTPUT: ${{ runner.temp }}/release-acceptance-${{ env.RELEASE_TAG }}.md
         run: |
           set -euo pipefail
-          node scripts/release-report.mjs "$RELEASE_TAG" \
-            --latest-json latest.json \
-            --output "$RELEASE_REPORT_OUTPUT"
+          report_ready=false
+          for attempt in 1 2 3 4 5; do
+            if node scripts/release-report.mjs "$RELEASE_TAG" \
+              --latest-json latest.json \
+              --output "$RELEASE_REPORT_OUTPUT"; then
+              report_ready=true
+              break
+            fi
+            sleep 3
+          done
+          [[ "$report_ready" == "true" ]]
           test -s "$RELEASE_REPORT_OUTPUT"
           cp "$RELEASE_REPORT_OUTPUT" "release-assets/release-acceptance-${RELEASE_TAG}.md"
           echo "path=release-assets/release-acceptance-${RELEASE_TAG}.md" >> "$GITHUB_OUTPUT"
