@@ -202,6 +202,23 @@ done
 
 ## 10. 发布记录模板
 
+发布完成后可直接生成验收报告（默认写入 `docs/release-reports/vX.Y.Z.md`）：
+
+```bash
+npm run release:report -- vX.Y.Z
+```
+
+若需要在离线或 CI 复核环境运行，可注入已保存的 Release 和 `latest.json`：
+
+```bash
+node scripts/release-report.mjs vX.Y.Z \\
+  --release-json /path/to/release.json \\
+  --latest-json /path/to/latest.json \\
+  --output docs/release-reports/vX.Y.Z.md
+```
+
+报告会记录 Git SHA、工作区状态、Release 资产、四平台线上 HTTP/大小、`latest.json`、CI/镜像状态和用户更新验收项；URL 查询参数会被清理，不记录预签名链接或凭据。
+
 每次发版在 PR、Release 或交付记录中保留：
 
 ```text
