@@ -1,6 +1,6 @@
 # Codex Manager 客户端发布与自动更新标准化任务
 
-状态：后续客户端更新前的前置任务记录。
+状态：已沉淀为长期执行标准；已落地部分见 [`CODEX_MANAGER_SOP_CN.md`](./CODEX_MANAGER_SOP_CN.md)。
 
 ## 目标
 
@@ -88,11 +88,11 @@ Windows/macOS 安装包验证以 CI 结果为准。
 - 客户端安装失败时保留原客户端可启动。
 - 后端和客户端发布可以分别回滚。
 
-## 待实现的标准化任务
+## 后续标准化建设
 
-### P0：统一发布入口
+### 已完成：统一发布入口
 
-新增一个发布命令或受保护 GitHub Action：
+当前已具备受保护 GitHub Action 和 `npm run publish:manager -- vX.Y.Z` 统一入口：
 
     版本检查
     → 本地/CI 测试
@@ -102,7 +102,7 @@ Windows/macOS 安装包验证以 CI 结果为准。
     → latest.json 回读
     → 用户更新验收报告
 
-### P0：幂等镜像脚本
+### 已完成：幂等镜像脚本
 
 要求：不覆盖历史版本、上传失败清理临时目录、校验失败禁止切换、latest 与版本目录原子更新，并固定使用 Rainyun Tailscale 目标。
 
@@ -120,13 +120,15 @@ Windows/macOS 安装包验证以 CI 结果为准。
 
 ## 完成标准
 
-- [ ] 一条命令或一个受保护 Action 完成客户端发布。
-- [ ] Windows/macOS 干净环境验证自动执行。
-- [ ] GitHub Release 与 Rainyun 资产 SHA-256 一致。
-- [ ] latest.json 自动推进且包含四个平台。
-- [ ] 用户点击更新按钮可完成升级。
-- [ ] 发布失败不会推进 latest。
+- [x] 一条命令或一个受保护 Action 完成客户端发布。
+- [x] Windows/macOS 干净环境验证自动执行。
+- [x] GitHub Release 与 Rainyun 资产 SHA-256 一致。
+- [x] latest.json 自动推进且包含四个平台。
+- [x] 用户点击更新按钮可完成升级。
+- [x] 发布失败不会推进 latest。
 - [ ] 自动生成发布报告和回滚信息。
+
+当前 P1 两项仍是后续增强，不影响现有版本化发布和用户点击更新流程。
 
 ## 反思
 

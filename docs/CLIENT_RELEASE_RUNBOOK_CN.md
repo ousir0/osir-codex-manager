@@ -5,6 +5,8 @@
 
 本手册固定“修改代码 → 测试 → GitHub Release → Rainyun 镜像 → 用户更新”的完整流程。发布必须基于已经提交并推送到 main 的完整 SHA，不能使用未提交工作区。
 
+日常执行总入口请先阅读 [`CODEX_MANAGER_SOP_CN.md`](./CODEX_MANAGER_SOP_CN.md)。本手册保留发布命令、平台资产和线上回读细节；配置切换、会话连续性、提交边界和用户更新动作以 SOP 为准。
+
 ## 固定升级约定（后续默认遵循）
 
 - Manager 的代码、配置或 OpenCodex 集成有任何修复，都必须提升 Manager 版本号；不能复用旧版本号覆盖发布。
@@ -19,7 +21,7 @@
     git diff --check
     git log -1 --format='%H %s'
 
-工作区必须干净。版本声明检查：
+本次修改必须已提交；如果工作区还保留用户原有未跟踪文件，应在交付记录中列出，不能误删或声称绝对干净。版本声明检查：
 
     node scripts/check-release-version.mjs source vX.Y.Z .
 
