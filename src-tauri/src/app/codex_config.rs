@@ -8,6 +8,8 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::thread;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
@@ -24,6 +26,7 @@ const MAX_VALUE_LEN: usize = 8192;
 const MAX_MODELS_BYTES: usize = 2 * 1024 * 1024;
 const MAX_MODEL_COUNT: usize = 2_000;
 const MAX_MODEL_ID_LEN: usize = 256;
+const DEFAULT_GATEWAY_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
 const LEGACY_PROVIDER_ID: &str = "awai"; // ownership-audit: allow-legacy
 const LEGACY_API_BASE_URL: &str = "https://api.awai.cc/v1"; // ownership-audit: allow-legacy
 const OSIR_PROVIDER_ID: &str = "osir";
@@ -571,6 +574,15 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
 
 pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
+    match crate::app::opencodex::repair_default_session_index() {
+        Ok(repaired) if repaired > 0 && codex_running => {
+            if let Err(error) = crate::app::opencodex::mark_codex_restart_required() {
+                log::warn!("failed to mark Codex restart after session repair: {error}");
+            }
+        }
+        Ok(_) => {}
+        Err(error) => log::warn!("failed to self-heal Codex session index: {error}"),
+    }
     sync_image_generation_skills_if_configured(&path)?;
     report_for_path(&path, codex_running)
 }
@@ -578,8 +590,162 @@ pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
 /// Switch Codex back to the configuration that was active before OpenCodex
 /// took over. The file remains the single source of truth for default mode.
 pub fn activate_default(codex_running: bool) -> Result<CodexConfigReport, AppError> {
+    let candidate = crate::app::opencodex::default_codex_config_candidate()?;
+    preflight_default_config(&candidate)?;
     crate::app::opencodex::disable_for_single_provider()?;
     report(codex_running)
+}
+
+fn responses_endpoint(base_url: &str) -> Result<url::Url, AppError> {
+    let mut endpoint = url::Url::parse(base_url.trim())
+        .map_err(|error| AppError::Engine(format!("默认网关 Base URL 无效：{error}")))?;
+    if !endpoint.username().is_empty() || endpoint.password().is_some() {
+        return Err(AppError::Engine("默认网关 Base URL 不能包含用户名或密码".to_string()));
+    }
+    if !matches!(endpoint.scheme(), "http" | "https") {
+        return Err(AppError::Engine("默认网关仅支持 http 或 https".to_string()));
+    }
+    let loopback = endpoint.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host.parse::<std::net::IpAddr>().is_ok_and(|address| address.is_loopback())
+    });
+    if endpoint.scheme() == "http" && !loopback {
+        return Err(AppError::Engine("非本机默认网关必须使用 HTTPS".to_string()));
+    }
+    endpoint.set_query(None);
+    endpoint.set_fragment(None);
+    let path = endpoint.path().trim_end_matches('/');
+    if !path.ends_with("/responses") {
+        endpoint.set_path(&format!("{path}/responses"));
+    }
+    Ok(endpoint)
+}
+
+fn transient_gateway_error(error: &AppError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    ["status 429", "status 502", "status 503", "status 504"]
+        .iter()
+        .any(|marker| message.contains(marker))
+        || ["bad gateway", "service unavailable", "gateway timeout", "timed out", "timeout", "connection reset", "connection refused"]
+            .iter()
+            .any(|marker| message.contains(marker))
+}
+
+fn gateway_probe_with_retry<F>(mut attempt: F, retry_delays: &[Duration]) -> Result<(), AppError>
+where
+    F: FnMut() -> Result<(), AppError>,
+{
+    let mut retry_index = 0;
+    loop {
+        match attempt() {
+            Ok(()) => return Ok(()),
+            Err(error) if transient_gateway_error(&error) && retry_index < retry_delays.len() => {
+                thread::sleep(retry_delays[retry_index]);
+                retry_index += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn probe_responses_gateway(base_url: &str, api_key: &str, model: &str) -> Result<(), AppError> {
+    let endpoint = responses_endpoint(base_url)?;
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|error| AppError::Internal(format!("创建默认网关检测请求失败：{error}")))?;
+    let retry_delays = DEFAULT_GATEWAY_RETRY_DELAYS_MS.map(Duration::from_millis);
+    gateway_probe_with_retry(
+        || {
+            let response = client
+                .post(endpoint.clone())
+                .bearer_auth(api_key)
+                .header(reqwest::header::ACCEPT, "application/json")
+                .json(&serde_json::json!({
+                    "model": model,
+                    "input": "Reply with OK only.",
+                    "max_output_tokens": 8,
+                    "store": false
+                }))
+                .send()
+                .map_err(|error| AppError::Engine(format!("默认网关连接失败：{error}")))?;
+            let status = response.status();
+            if status.is_success() {
+                return Ok(());
+            }
+            let detail = response.text().unwrap_or_default();
+            let detail = detail.chars().take(300).collect::<String>();
+            if matches!(status.as_u16(), 401 | 403) {
+                return Err(AppError::Engine(format!(
+                    "默认网关鉴权失败（status {}），请先更新 API Key；当前 OpenCodex 配置保持不变",
+                    status.as_u16()
+                )));
+            }
+            Err(AppError::Engine(format!(
+                "默认网关模型调用失败（status {}）：{}",
+                status.as_u16(),
+                if detail.trim().is_empty() { "上游未返回错误详情" } else { detail.trim() }
+            )))
+        },
+        &retry_delays,
+    )
+}
+
+fn preflight_default_config(raw: &str) -> Result<(), AppError> {
+    let document = parse_document(raw)?;
+    let provider_id = document
+        .get("model_provider")
+        .and_then(Item::as_str)
+        .filter(|provider| !provider.trim().is_empty())
+        .unwrap_or("openai");
+    let model = document
+        .get("model")
+        .and_then(Item::as_str)
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .ok_or_else(|| AppError::Engine("默认配置没有设置模型，已取消切换".to_string()))?;
+    let provider = document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(provider_id))
+        .and_then(Item::as_table);
+    let base_url = provider
+        .and_then(|provider| provider.get("base_url"))
+        .and_then(Item::as_str)
+        .or_else(|| document.get("openai_base_url").and_then(Item::as_str))
+        .map(str::trim)
+        .filter(|url| !url.is_empty());
+    let Some(base_url) = base_url else {
+        // Built-in OpenAI/ChatGPT authentication is owned by Codex itself and
+        // cannot be safely probed with the Manager's API-key path.
+        return Ok(());
+    };
+    let wire_api = provider
+        .and_then(|provider| provider.get("wire_api"))
+        .and_then(Item::as_str)
+        .unwrap_or("responses");
+    if wire_api != "responses" {
+        return Err(AppError::Engine(format!(
+            "默认供应商 {provider_id} 使用不受支持的 {wire_api} 协议，已取消切换"
+        )));
+    }
+    let requires_auth = provider
+        .and_then(|provider| provider.get("requires_openai_auth"))
+        .and_then(Item::as_bool)
+        .unwrap_or(true);
+    if !requires_auth {
+        return Ok(());
+    }
+    let config_path = config_path()?;
+    let auth = load_auth_object(&auth_path_for_config(&config_path))?;
+    let api_key = auth
+        .get("OPENAI_API_KEY")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .ok_or_else(|| AppError::Engine("默认配置缺少 API Key，已取消切换；当前 OpenCodex 配置保持不变".to_string()))?;
+    probe_responses_gateway(base_url, api_key, model)
 }
 
 pub fn validate(raw: &str) -> CodexConfigValidation {
@@ -1432,6 +1598,7 @@ pub fn restore_backup(codex_running: bool) -> Result<CodexConfigReport, AppError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -1736,6 +1903,52 @@ requires_openai_auth = true
                 .as_str(),
             "http://127.0.0.1:11434/v1/models"
         );
+    }
+
+    #[test]
+    fn responses_probe_endpoint_preserves_v1_prefix() {
+        assert_eq!(
+            responses_endpoint("https://api.osirclaw.com/v1").unwrap().as_str(),
+            "https://api.osirclaw.com/v1/responses"
+        );
+        assert_eq!(
+            responses_endpoint("http://127.0.0.1:10100/v1/responses").unwrap().as_str(),
+            "http://127.0.0.1:10100/v1/responses"
+        );
+        assert!(responses_endpoint("http://api.example.com/v1").is_err());
+    }
+
+    #[test]
+    fn default_gateway_probe_retries_transient_failures() {
+        let attempts = Cell::new(0);
+        gateway_probe_with_retry(
+            || {
+                let next = attempts.get() + 1;
+                attempts.set(next);
+                if next < 3 {
+                    Err(AppError::Engine("status 502 Bad Gateway".to_string()))
+                } else {
+                    Ok(())
+                }
+            },
+            &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
+        )
+        .unwrap();
+        assert_eq!(attempts.get(), 3);
+    }
+
+    #[test]
+    fn default_gateway_probe_does_not_retry_invalid_credentials() {
+        let attempts = Cell::new(0);
+        let result = gateway_probe_with_retry(
+            || {
+                attempts.set(attempts.get() + 1);
+                Err(AppError::Engine("status 401 Unauthorized".to_string()))
+            },
+            &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
+        );
+        assert!(result.is_err());
+        assert_eq!(attempts.get(), 1);
     }
 
     #[test]

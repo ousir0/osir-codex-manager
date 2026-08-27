@@ -170,6 +170,21 @@ describe("Codex configuration workbench", () => {
     expect(await screen.findByRole("heading", { name: "默认配置" })).toBeInTheDocument();
   });
 
+  it("keeps OpenCodex active when default gateway verification fails", async () => {
+    const user = userEvent.setup();
+    api.codexConfigGet.mockResolvedValue(config({ provider: "opencodex", baseUrl: "http://127.0.0.1:10100/v1" }));
+    api.openCodexStatus.mockResolvedValue({ enabled: true, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [], backupAvailable: true, error: null, connectionStatus: "connected", account: null });
+    api.codexConfigActivateDefault.mockRejectedValue(new Error("默认网关鉴权失败（status 401）"));
+    renderConfig();
+    await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" });
+    await user.click(screen.getByRole("button", { name: /默认配置/ }));
+    await user.click(screen.getByRole("button", { name: "启用默认配置" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "启用默认配置" }));
+    expect(await screen.findByText(/默认网关鉴权失败/)).toBeInTheDocument();
+    expect(api.codexConfigActivateDefault).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: /OpenCodex 多模型.*当前使用/ })).toBeInTheDocument();
+  });
+
   it("activates saved OpenCodex routes from the mode switch", async () => {
     const user = userEvent.setup();
     api.openCodexStatus.mockResolvedValue({ enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 1, routes: [{ id: "osirapi-openai", label: "GPT", adapter: "openai-responses", baseUrl: "https://api.osirclaw.com/v1", defaultModel: "gpt-5.6-sol", models: ["gpt-5.6-sol"], enabled: true, apiKeyConfigured: true, availability: "configured", locked: false }], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null });

@@ -1,5 +1,6 @@
 pub mod atomic_file;
 pub mod codex_config;
+pub mod codex_sessions;
 pub mod codex_self_update;
 pub mod codex_theme;
 pub mod config_health;

@@ -2284,13 +2284,17 @@ pub fn codex_config_get() -> Result<crate::app::codex_config::CodexConfigReport,
 }
 
 #[tauri::command]
-pub fn codex_config_activate_default(
+pub async fn codex_config_activate_default(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
     let codex_running = crate::app::codex_theme::codex_running();
-    let report = crate::app::codex_config::activate_default(codex_running)
-        .map_err(CommandError::from)?;
+    let report = tauri::async_runtime::spawn_blocking(move || {
+        crate::app::codex_config::activate_default(codex_running)
+    })
+    .await
+    .map_err(|error| AppError::Internal(format!("join: {error}")))?
+    .map_err(CommandError::from)?;
     if codex_running {
         crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
     }
