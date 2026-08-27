@@ -50,8 +50,20 @@ export async function collectGitFacts(cwd = REPO_ROOT, run = execFileAsync) {
 }
 
 export async function collectReleaseJson(tag, run = execFileAsync, repo = "ousir0/osir-codex-manager") {
-  const result = await run("gh", ["api", `repos/${repo}/releases/tags/${tag}`], { encoding: "utf8" });
-  return JSON.parse(result.stdout);
+  try {
+    const result = await run("gh", ["api", `repos/${repo}/releases/tags/${tag}`], { encoding: "utf8" });
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    // GitHub's tag lookup excludes draft releases. During the draft-first
+    // publication window, list releases instead so the acceptance report can
+    // validate the exact assets before the immutable release is published.
+    const result = await run("gh", ["api", `repos/${repo}/releases`, "--paginate", "--slurp"], { encoding: "utf8" });
+    const pages = JSON.parse(result.stdout);
+    const releases = Array.isArray(pages) ? pages.flat() : [];
+    const release = releases.find((item) => item.tag_name === tag);
+    if (!release) throw error;
+    return release;
+  }
 }
 
 export async function collectReleaseCommitSha(tag, run = execFileAsync, repo = "ousir0/osir-codex-manager") {

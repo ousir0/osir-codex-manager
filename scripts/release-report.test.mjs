@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReleaseReport, collectGitFacts, generateReleaseReport } from "./release-report.mjs";
+import { buildReleaseReport, collectGitFacts, collectReleaseJson, generateReleaseReport } from "./release-report.mjs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +42,19 @@ describe("release report", () => {
     const run = async (_cmd, args) => ({ stdout: args.at(-1) === "HEAD" ? "sha\n" : args.at(-1) === "--show-current" ? "main\n" : "" });
     const result = await generateReleaseReport({ version: "v0.5.29", output: join(dir, "report.md"), releaseJson: releasePath, latestJson: latestPath, cwd: "/tmp/repo", run, fetchImpl: async () => ({ status: 200, ok: true, url: "https://example.test", headers: { get: () => null }, json: async () => ({}) }) });
     expect(await readFile(result.target, "utf8")).toContain("Codex Manager v0.5.29");
+  });
+
+  it("finds draft releases when tag lookup excludes them", async () => {
+    const calls = [];
+    const run = async (_cmd, args) => {
+      calls.push(args);
+      if (args.some((arg) => arg.includes("releases/tags/v0.5.31"))) throw new Error("gh: Not Found (HTTP 404)");
+      return { stdout: JSON.stringify([[{ tag_name: "v0.5.31", draft: true, assets: [] }]]) };
+    };
+    const release = await collectReleaseJson("v0.5.31", run);
+    expect(release).toMatchObject({ tag_name: "v0.5.31", draft: true });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toContain("--paginate");
   });
 
   it("attaches the report before immutable publication", async () => {
