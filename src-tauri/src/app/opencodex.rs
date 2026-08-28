@@ -153,7 +153,7 @@ fn preferred_osir_model(route_id: &str, models: &[String]) -> Option<String> {
         .or_else(|| models.first().cloned())
 }
 
-fn sanitize_osir_routes(routes: &mut Vec<OpenCodexRouteInput>) -> Result<(), AppError> {
+fn sanitize_osir_routes(routes: &mut [OpenCodexRouteInput]) -> Result<(), AppError> {
     for route in routes.iter_mut() {
         route
             .models
