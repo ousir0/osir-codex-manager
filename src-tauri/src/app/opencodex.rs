@@ -132,6 +132,100 @@ fn osir_model_supported_in_codex(route_id: &str, model: &str) -> bool {
         && !normalized.contains("grok-imagine")
 }
 
+fn title_case_model_token(token: &str) -> String {
+    match token.to_ascii_lowercase().as_str() {
+        "gpt" => "GPT".to_string(),
+        "api" => "API".to_string(),
+        "ai" => "AI".to_string(),
+        "openai" => "OpenAI".to_string(),
+        "claude" => "Claude".to_string(),
+        "gemini" => "Gemini".to_string(),
+        "grok" => "Grok".to_string(),
+        "codex" => "Codex".to_string(),
+        _ => {
+            let mut chars = token.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        }
+    }
+}
+
+/// Keep the native Codex picker readable without changing the model ID used
+/// for routing. Provider identity is already encoded in the catalog slug, so
+/// repeating it in every display name only makes the picker wider and harder
+/// to scan.
+fn model_display_name(model: &str) -> String {
+    let mut parts = model
+        .trim()
+        .split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.is_empty() {
+        return model.trim().to_string();
+    }
+
+    let family = parts.remove(0);
+    let mut result = title_case_model_token(family);
+    if family.eq_ignore_ascii_case("gpt") {
+        if let Some(version) = parts.first().copied().filter(|part| part.chars().any(|ch| ch.is_ascii_digit())) {
+            result.push('-');
+            result.push_str(version);
+            parts.remove(0);
+        }
+    }
+
+    let mut suffix = Vec::new();
+    for part in parts {
+        if part.chars().all(|ch| ch.is_ascii_digit())
+            && part.len() == 1
+            && suffix.last().is_some_and(|previous: &String| previous.len() == 1 && previous.chars().all(|ch| ch.is_ascii_digit()))
+        {
+            if let Some(previous) = suffix.last_mut() {
+                previous.push('.');
+                previous.push_str(part);
+            }
+        } else {
+            suffix.push(title_case_model_token(part));
+        }
+    }
+    if !suffix.is_empty() {
+        result.push(' ');
+        result.push_str(&suffix.join(" "));
+    }
+    result
+}
+
+fn normalize_saved_model_display_names(
+    config: &mut JsonMap<String, JsonValue>,
+    managed_provider_ids: &BTreeSet<String>,
+) -> bool {
+    let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) else {
+        return false;
+    };
+    let mut changed = false;
+    for entry in models {
+        let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        if !managed_provider_ids.contains(provider) {
+            continue;
+        }
+        let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        let expected = model_display_name(model_id);
+        if entry.get("displayName").and_then(JsonValue::as_str) != Some(expected.as_str()) {
+            if let Some(object) = entry.as_object_mut() {
+                object.insert("displayName".to_string(), JsonValue::String(expected));
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
 fn preferred_osir_model(route_id: &str, models: &[String]) -> Option<String> {
     let preferred: &[&str] = match route_id {
         "osirapi-openai" => &["gpt-5.6-sol", "gpt-5.6", "gpt-5.5"],
@@ -223,6 +317,8 @@ fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result
         providers.remove(route_id);
         changed = true;
     }
+    let managed_provider_ids = route_ids.iter().cloned().collect::<BTreeSet<_>>();
+    changed |= normalize_saved_model_display_names(config, &managed_provider_ids);
     if let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) {
         let before = models.len();
         models.retain(|entry| {
@@ -304,9 +400,13 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
     }
     let mut config = load_config(&paths.opencodex_config)?;
     if sanitize_saved_osir_config(&mut config)? {
-        write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
+        write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
     }
     let state = effective_state(&paths)?;
+    let managed_provider_ids = state.managed_provider_ids.iter().cloned().collect::<BTreeSet<_>>();
+    if normalize_saved_model_display_names(&mut config, &managed_provider_ids) {
+        write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
+    }
     if !state.enabled {
         record_current_manager_runtime(&paths)?;
         let _ = fs::remove_file(marker);
@@ -2579,7 +2679,7 @@ fn build_opencodex_config(
                     "id": Uuid::new_v4().to_string(),
                     "provider": route.id,
                     "modelId": model,
-                    "displayName": format!("{} · {}", model, route.label),
+                    "displayName": model_display_name(model),
                     "contextWindow": 200000,
                     "inputModalities": ["text", "image"],
                     "reasoningEfforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
@@ -2833,10 +2933,28 @@ fn normalize_synced_catalog(
     // order when rendering models, so doing this at the source avoids
     // release-to-release selector reshuffling.
     for model in models.iter_mut() {
-        let Some(slug) = model.get("slug").and_then(JsonValue::as_str) else {
+        let Some(slug) = model
+            .get("slug")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string)
+        else {
             continue;
         };
-        if openai_models.contains(slug) && !slug.contains('/') {
+        if let Some((provider, model_id)) = slug.split_once('/') {
+            if routes
+                .iter()
+                .any(|route| route.id == provider && route.models.iter().any(|model| model == model_id))
+            {
+                if let Some(object) = model.as_object_mut() {
+                    let expected = model_display_name(model_id);
+                    if object.get("display_name").and_then(JsonValue::as_str) != Some(expected.as_str()) {
+                        object.insert("display_name".to_string(), JsonValue::String(expected));
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if openai_models.contains(slug.as_str()) && !slug.contains('/') {
             if let Some(object) = model.as_object_mut() {
                 let already_hidden = object.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
                 if !already_hidden || object.get("visibility").and_then(JsonValue::as_str) != Some("hide") {
@@ -3272,6 +3390,7 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 mod tests {
     use super::{
         build_opencodex_config, catalog_contains_enabled_routes, normalize_synced_catalog,
+        model_display_name,
         component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
         is_transient_route_check_error, manager_runtime_needs_reconcile, route_check_with_retry, route_from_config,
@@ -3470,6 +3589,15 @@ mod tests {
             json!(["gemini-3.7-flash"])
         );
         assert_eq!(config["customModels"].as_array().unwrap().len(), 1);
+        assert_eq!(config["customModels"][0]["displayName"], json!("Gemini 3.7 Flash"));
+    }
+
+    #[test]
+    fn formats_model_ids_for_the_native_codex_picker() {
+        assert_eq!(model_display_name("gpt-5.6-sol"), "GPT-5.6 Sol");
+        assert_eq!(model_display_name("claude-opus-4-8"), "Claude Opus 4.8");
+        assert_eq!(model_display_name("gemini-2.5-pro"), "Gemini 2.5 Pro");
+        assert_eq!(model_display_name("codex-auto-review"), "Codex Auto Review");
     }
 
     #[test]
@@ -3610,6 +3738,11 @@ mod tests {
         assert!(models.iter().any(|model| model["provider"] == "keep"));
         assert!(models.iter().any(|model| model["provider"] == "osir-gpt"));
         assert!(!models.iter().any(|model| model["provider"] == "old"));
+        let generated = models
+            .iter()
+            .find(|model| model["provider"] == "osir-gpt")
+            .unwrap();
+        assert_eq!(generated["displayName"], json!("GPT-5.6 Sol"));
     }
 
     #[test]
@@ -3754,6 +3887,7 @@ mod tests {
             ]})).unwrap(),
         ).unwrap();
         let mut gpt = input().routes[0].clone();
+        gpt.id = "osirapi-openai".to_string();
         gpt.models = vec!["gpt-5.5".to_string()];
         let claude = OpenCodexRouteInput { id: "osirapi-claude".into(), label: "Claude".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["claude-opus-5".into()], default_model: "claude-opus-5".into(), enabled: true };
         let grok = OpenCodexRouteInput { id: "osirapi-grok".into(), label: "Grok".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["grok-4.6".into()], default_model: "grok-4.6".into(), enabled: true };
@@ -3764,6 +3898,11 @@ mod tests {
         assert_eq!(slugs[..3], ["osirapi-openai/gpt-5.5", "osirapi-claude/claude-opus-5", "osirapi-grok/grok-4.6"]);
         let alias = models.iter().find(|m| m["slug"] == "gpt-5.5").unwrap();
         assert_eq!(alias["hidden"], json!(true));
+        let routed = models
+            .iter()
+            .find(|m| m["slug"] == "osirapi-openai/gpt-5.5")
+            .unwrap();
+        assert_eq!(routed["display_name"], json!("GPT-5.5"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
