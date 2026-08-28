@@ -420,7 +420,7 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
             "Manager 更新后 OpenCodex 没有生成可用模型目录".to_string(),
         ));
     }
-    refresh_codex_catalog_binding(&paths)?;
+    refresh_codex_catalog_binding(&paths, true)?;
     let config = load_config(&paths.opencodex_config)?;
     let routes = configured_routes_from_config(&config, &state.managed_provider_ids);
     if !routes.is_empty() && !catalog_contains_enabled_routes(&paths.catalog, &routes) {
@@ -428,9 +428,7 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
             "Manager 更新后 OpenCodex 未加载全部供应商模型，请点击同步重试".to_string(),
         ));
     }
-    if crate::app::codex_theme::codex_running() {
-        mark_codex_restart_required_at(&paths)?;
-    }
+    clear_codex_restart_required()?;
     record_current_manager_runtime(&paths)?;
     fs::remove_file(marker)
         .map_err(|error| AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}")))?;
@@ -1818,6 +1816,7 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         let _ = restore();
         return Err(error);
     }
+    sync_codex_model_cache(false)?;
     let locked_route = state
         .locked_route
         .filter(|locked| managed_provider_ids.iter().any(|id| id == locked));
@@ -2235,6 +2234,18 @@ fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
         }));
     }
     Ok(output.stdout)
+}
+
+fn sync_cache_args(restart_codex: bool) -> &'static [&'static str] {
+    if restart_codex {
+        &["sync-cache", "--restart-codex"]
+    } else {
+        &["sync-cache"]
+    }
+}
+
+fn sync_codex_model_cache(restart_codex: bool) -> Result<(), AppError> {
+    ocx_output(sync_cache_args(restart_codex)).map(|_| ())
 }
 
 fn version() -> Option<String> {
@@ -3010,7 +3021,10 @@ fn normalize_synced_catalog(
     Ok(())
 }
 
-fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppError> {
+fn refresh_codex_catalog_binding(
+    paths: &IntegrationPaths,
+    restart_codex: bool,
+) -> Result<(), AppError> {
     let state = effective_state(paths)?;
     if !state.enabled {
         return Ok(());
@@ -3048,7 +3062,11 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
         provider_id,
         port,
         &default_route,
-    )
+    )?;
+    // OpenCodex refreshes its catalog before Manager normalizes routed entries.
+    // Refresh the Codex-owned cache after that final write, or removed rows
+    // (for example a retired Gemini model) can survive in the picker.
+    sync_codex_model_cache(restart_codex)
 }
 
 fn validate_candidate(path: &Path, candidate: &JsonValue) -> Result<(), AppError> {
@@ -3101,6 +3119,9 @@ fn rollback_reloaded_save(
     // The failed candidate may already be loaded in the running process. Load
     // the restored snapshot as well so disk and runtime cannot diverge.
     let _ = restart_service_and_wait_ready();
+    if state.enabled {
+        let _ = sync_codex_model_cache(false);
+    }
 }
 
 pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
@@ -3190,6 +3211,16 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     // picker cache only the default model. Rewrite the same binding after the
     // complete catalog exists so a running Codex reloads every synced model.
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
+    if let Err(error) = sync_codex_model_cache(false) {
+        rollback_reloaded_save(
+            &paths,
+            previous_config.as_deref(),
+            previous_codex_config.as_deref(),
+            previous_catalog.as_deref(),
+            &previous_state,
+        );
+        return Err(error);
+    }
     if codex_was_running {
         mark_codex_restart_required_at(&paths)?;
     }
@@ -3222,7 +3253,7 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
     }
-    refresh_codex_catalog_binding(&paths)?;
+    refresh_codex_catalog_binding(&paths, false)?;
     if codex_was_running {
         mark_codex_restart_required_at(&paths)?;
     }
@@ -3298,6 +3329,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
             )));
         }
         write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, port, &default_route)?;
+        sync_codex_model_cache(false)?;
         write_json(
             &paths.state,
             &serde_json::to_value(ManagedState {
@@ -3390,7 +3422,7 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 mod tests {
     use super::{
         build_opencodex_config, catalog_contains_enabled_routes, normalize_synced_catalog,
-        model_display_name,
+        model_display_name, sync_cache_args,
         component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
         is_transient_route_check_error, manager_runtime_needs_reconcile, route_check_with_retry, route_from_config,
@@ -3598,6 +3630,12 @@ mod tests {
         assert_eq!(model_display_name("claude-opus-4-8"), "Claude Opus 4.8");
         assert_eq!(model_display_name("gemini-2.5-pro"), "Gemini 2.5 Pro");
         assert_eq!(model_display_name("codex-auto-review"), "Codex Auto Review");
+    }
+
+    #[test]
+    fn refreshes_codex_cache_without_restarting_except_after_manager_updates() {
+        assert_eq!(sync_cache_args(false), ["sync-cache"]);
+        assert_eq!(sync_cache_args(true), ["sync-cache", "--restart-codex"]);
     }
 
     #[test]
