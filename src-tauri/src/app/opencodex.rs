@@ -328,22 +328,6 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
             "Manager 更新后 OpenCodex 未加载全部供应商模型，请点击同步重试".to_string(),
         ));
     }
-    let mut failed_routes = Vec::new();
-    for route in routes.iter().filter(|route| route.enabled) {
-        let check = check_route(&route.id, &route.default_model)?;
-        if !check.available {
-            failed_routes.push(format!(
-                "{}/{}：{}",
-                check.route_id, check.model, check.detail
-            ));
-        }
-    }
-    if !failed_routes.is_empty() {
-        return Err(AppError::Engine(format!(
-            "Manager 更新后供应商模型验证未全部通过：{}",
-            failed_routes.join("；")
-        )));
-    }
     if crate::app::codex_theme::codex_running() {
         mark_codex_restart_required_at(&paths)?;
     }
@@ -2755,6 +2739,41 @@ fn normalize_synced_catalog(
         .get_mut("models")
         .and_then(JsonValue::as_array_mut)
         .ok_or_else(|| AppError::Engine("OpenCodex 模型目录缺少 models 数组".to_string()))?;
+    let managed_models = routes
+        .iter()
+        .map(|route| {
+            (
+                route.id.as_str(),
+                route
+                    .models
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<BTreeSet<_>>(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let openai_models = routes
+        .iter()
+        .filter(|route| {
+            let id = route.id.to_ascii_lowercase();
+            let label = route.label.to_ascii_lowercase();
+            id.contains("openai") || label.contains("openai") || label.contains("gpt")
+        })
+        .flat_map(|route| route.models.iter().map(String::as_str))
+        .collect::<BTreeSet<_>>();
+    let before_prune = models.len();
+    models.retain(|entry| {
+        let Some(slug) = entry.get("slug").and_then(JsonValue::as_str) else {
+            return true;
+        };
+        if let Some((provider, model)) = slug.split_once('/') {
+            return managed_models
+                .get(provider)
+                .is_none_or(|allowed| allowed.contains(model));
+        }
+        !managed_models.values().any(|allowed| allowed.contains(slug))
+            || openai_models.contains(slug)
+    });
     let mut existing = models
         .iter()
         .filter_map(|model| model.get("slug").and_then(JsonValue::as_str))
@@ -2813,16 +2832,6 @@ fn normalize_synced_catalog(
     // catalog into a stable platform order. The Codex client keeps the file
     // order when rendering models, so doing this at the source avoids
     // release-to-release selector reshuffling.
-    let openai_models: BTreeSet<String> = routes
-        .iter()
-        .filter(|route| route.enabled)
-        .filter(|route| {
-            let id = route.id.to_ascii_lowercase();
-            let label = route.label.to_ascii_lowercase();
-            id.contains("openai") || label.contains("openai") || label.contains("gpt")
-        })
-        .flat_map(|route| route.models.iter().cloned())
-        .collect();
     for model in models.iter_mut() {
         let Some(slug) = model.get("slug").and_then(JsonValue::as_str) else {
             continue;
@@ -2871,7 +2880,7 @@ fn normalize_synced_catalog(
             )
         })
         .collect::<Vec<_>>();
-    if before_order != after_order {
+    if before_prune != models.len() || before_order != after_order {
         changed = true;
     }
     if changed {
@@ -3461,6 +3470,62 @@ mod tests {
             json!(["gemini-3.7-flash"])
         );
         assert_eq!(config["customModels"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn prunes_stale_managed_catalog_models_after_subscription_refresh() {
+        let root = std::env::temp_dir().join(format!(
+            "opencodex-catalog-prune-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({
+                "models": [
+                    {"slug": "osirapi-gemini/gemini-2.0-flash"},
+                    {"slug": "osirapi-gemini/gemini-3.7-flash"},
+                    {"slug": "osirapi-openai/gpt-5.6-sol"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let routes = vec![
+            OpenCodexRouteInput {
+                id: "osirapi-gemini".into(),
+                label: "Gemini".into(),
+                adapter: "openai-responses".into(),
+                base_url: "https://api.osirclaw.com/v1".into(),
+                api_key: None,
+                models: vec!["gemini-3.7-flash".into()],
+                default_model: "gemini-3.7-flash".into(),
+                enabled: true,
+            },
+            OpenCodexRouteInput {
+                id: "osirapi-openai".into(),
+                label: "GPT".into(),
+                adapter: "openai-responses".into(),
+                base_url: "https://api.osirclaw.com/v1".into(),
+                api_key: None,
+                models: vec!["gpt-5.6-sol".into()],
+                default_model: "gpt-5.6-sol".into(),
+                enabled: true,
+            },
+        ];
+        normalize_synced_catalog(&catalog, &routes).unwrap();
+        let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
+        let slugs = value["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|model| model["slug"].as_str())
+            .collect::<BTreeSet<_>>();
+        assert!(!slugs.contains("osirapi-gemini/gemini-2.0-flash"));
+        assert!(slugs.contains("osirapi-gemini/gemini-3.7-flash"));
+        assert!(slugs.contains("osirapi-openai/gpt-5.6-sol"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
