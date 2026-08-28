@@ -12,6 +12,11 @@ previews/
 *.Zone.Identifier
 *:Zone.Identifier
 
+# Test, CLI, and temporary artifacts
+.playwright-cli/
+output/
+/*.png
+
 .DS_Store
 *.log
 *.tmp
