@@ -21,7 +21,7 @@ const OAUTH_STEPS = [
   { stage: "exchange", label: "读取账户与订阅" },
   { stage: "runtime", label: "准备 OpenCodex" },
   { stage: "config", label: "写入模型配置" },
-  { stage: "verify", label: "验证默认模型" },
+  { stage: "verify", label: "验证供应商模型" },
 ] as const;
 
 const ROUTES = [

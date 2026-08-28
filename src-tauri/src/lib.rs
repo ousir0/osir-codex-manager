@@ -999,6 +999,14 @@ pub fn run() {
                 // a crash mid config.toml mutation (or an unkept try-on left
                 // hot-imported) must resolve before theme ops reopen.
                 crate::app::codex_theme::recover_native_theme_on_startup();
+                // Manager self-updates replace this process, but OpenCodex is
+                // a separate long-lived daemon. Reload its provider registry
+                // before the user can continue with the already-open Codex.
+                // Leave the marker in place on failure so the normal status
+                // command can retry and surface the exact error in the UI.
+                if let Err(error) = crate::app::opencodex::reconcile_after_manager_update() {
+                    log::warn!("OpenCodex post-update reconciliation deferred error={error}");
+                }
                 #[cfg(target_os = "windows")]
                 {
                     let policy_recovery =

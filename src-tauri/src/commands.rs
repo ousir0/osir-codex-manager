@@ -488,10 +488,18 @@ pub async fn manager_install_update(
         )
         .into());
     }
-    update
+    // OpenCodex is a long-lived child service and can outlive this Manager
+    // process. Persist the reload intent before the updater replaces the app;
+    // the new Manager consumes it on first status/launch after relaunch.
+    crate::app::opencodex::mark_manager_update_pending()?;
+    let result = update
         .download_and_install(|_, _| {}, || {})
         .await
-        .map_err(|e| AppError::Engine(format!("install manager update: {e}")))?;
+        .map_err(|e| AppError::Engine(format!("install manager update: {e}")));
+    if result.is_err() {
+        crate::app::opencodex::clear_manager_update_pending();
+    }
+    result?;
     Ok(())
 }
 

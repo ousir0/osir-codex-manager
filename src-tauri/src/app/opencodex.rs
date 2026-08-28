@@ -11,6 +11,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -49,6 +50,7 @@ const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
 const ROUTE_CHECK_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
+static MANAGER_UPDATE_RECONCILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -98,6 +100,257 @@ fn restart_required_path(paths: &IntegrationPaths) -> PathBuf {
 
 fn restart_applied_path(paths: &IntegrationPaths) -> PathBuf {
     paths.state.with_extension("codex-restart-applied")
+}
+
+fn manager_update_reconcile_path(paths: &IntegrationPaths) -> PathBuf {
+    paths.state.with_extension("opencodex-reconcile-required")
+}
+
+fn manager_runtime_version_path(paths: &IntegrationPaths) -> PathBuf {
+    paths.state.with_extension("manager-runtime-version")
+}
+
+fn manager_runtime_needs_reconcile(
+    current_version: &str,
+    recorded_version: Option<&str>,
+    marker_exists: bool,
+) -> bool {
+    marker_exists || recorded_version.map(str::trim) != Some(current_version)
+}
+
+fn osir_model_supported_in_codex(route_id: &str, model: &str) -> bool {
+    if !route_id.starts_with("osirapi-") {
+        return true;
+    }
+    let normalized = model.trim().to_ascii_lowercase();
+    if route_id == "osirapi-gemini" && normalized == "gemini-2.0-flash" {
+        return false;
+    }
+    !normalized.contains("image")
+        && !normalized.contains("video")
+        && !normalized.contains("veo")
+        && !normalized.contains("grok-imagine")
+}
+
+fn preferred_osir_model(route_id: &str, models: &[String]) -> Option<String> {
+    let preferred: &[&str] = match route_id {
+        "osirapi-openai" => &["gpt-5.6-sol", "gpt-5.6", "gpt-5.5"],
+        "osirapi-claude" => &["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8"],
+        "osirapi-gemini" => &[
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+        ],
+        "osirapi-grok" => &["grok-4.6", "grok-4.5", "grok-4.3"],
+        _ => &[],
+    };
+    preferred
+        .iter()
+        .find(|candidate| models.iter().any(|model| model == **candidate))
+        .map(|candidate| (*candidate).to_string())
+        .or_else(|| models.first().cloned())
+}
+
+fn sanitize_osir_routes(routes: &mut Vec<OpenCodexRouteInput>) -> Result<(), AppError> {
+    for route in routes.iter_mut() {
+        route
+            .models
+            .retain(|model| osir_model_supported_in_codex(&route.id, model));
+        if route.models.is_empty() {
+            return Err(AppError::Engine(format!(
+                "{} 没有可用于 Codex Responses 文本调用的模型",
+                route.label
+            )));
+        }
+        if !route.models.iter().any(|model| model == &route.default_model) {
+            route.default_model = preferred_osir_model(&route.id, &route.models)
+                .ok_or_else(|| AppError::Engine(format!("{} 没有可用默认模型", route.label)))?;
+        }
+    }
+    Ok(())
+}
+
+fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result<bool, AppError> {
+    let Some(providers) = config.get_mut("providers").and_then(JsonValue::as_object_mut) else {
+        return Ok(false);
+    };
+    let route_ids = providers
+        .keys()
+        .filter(|id| id.starts_with("osirapi-"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut changed = false;
+    let mut removed_routes = BTreeSet::new();
+    for route_id in &route_ids {
+        let Some(provider) = providers.get_mut(route_id).and_then(JsonValue::as_object_mut) else {
+            continue;
+        };
+        let before = provider
+            .get("models")
+            .and_then(JsonValue::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(JsonValue::as_str)
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        let models = before
+            .iter()
+            .filter(|model| osir_model_supported_in_codex(route_id, model))
+            .cloned()
+            .collect::<Vec<_>>();
+        if models.is_empty() {
+            removed_routes.insert(route_id.clone());
+            continue;
+        }
+        if models != before {
+            provider.insert("models".to_string(), json!(models));
+            changed = true;
+        }
+        let default_is_valid = provider
+            .get("defaultModel")
+            .and_then(JsonValue::as_str)
+            .is_some_and(|default| models.iter().any(|model| model == default));
+        if !default_is_valid {
+            let replacement = preferred_osir_model(route_id, &models)
+                .ok_or_else(|| AppError::Engine(format!("{route_id} 没有可用默认模型")))?;
+            provider.insert("defaultModel".to_string(), JsonValue::String(replacement));
+            changed = true;
+        }
+    }
+    for route_id in &removed_routes {
+        providers.remove(route_id);
+        changed = true;
+    }
+    if let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) {
+        let before = models.len();
+        models.retain(|entry| {
+            let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else {
+                return true;
+            };
+            if removed_routes.contains(provider) {
+                return false;
+            }
+            let Some(model) = entry.get("modelId").and_then(JsonValue::as_str) else {
+                return true;
+            };
+            osir_model_supported_in_codex(provider, model)
+        });
+        changed |= models.len() != before;
+    }
+    if config
+        .get("defaultProvider")
+        .and_then(JsonValue::as_str)
+        .is_some_and(|provider| removed_routes.contains(provider))
+    {
+        if let Some(replacement) = route_ids.iter().find(|id| !removed_routes.contains(*id)) {
+            config.insert("defaultProvider".to_string(), JsonValue::String(replacement.clone()));
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn record_current_manager_runtime(paths: &IntegrationPaths) -> Result<(), AppError> {
+    atomic_file::write_atomic(
+        &manager_runtime_version_path(paths),
+        env!("CARGO_PKG_VERSION").as_bytes(),
+    )
+    .map_err(|error| AppError::Internal(format!("记录 Manager 运行版本失败：{error}")))
+}
+
+/// Persist the intent to reload OpenCodex after a Manager self-update. The
+/// daemon may outlive the Manager process, so the new Manager must explicitly
+/// reload it before exposing the saved provider routes as usable.
+pub(crate) fn mark_manager_update_pending() -> Result<(), AppError> {
+    let paths = integration_paths()?;
+    atomic_file::write_atomic(
+        &manager_update_reconcile_path(&paths),
+        b"manager update pending\n",
+    )
+    .map_err(|error| AppError::Internal(format!("记录 OpenCodex 更新重载状态失败：{error}")))
+}
+
+pub(crate) fn clear_manager_update_pending() {
+    if let Ok(paths) = integration_paths() {
+        let marker = manager_update_reconcile_path(&paths);
+        if marker.is_file() {
+            let _ = fs::remove_file(marker);
+        }
+    }
+}
+
+pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
+    let lock = MANAGER_UPDATE_RECONCILE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock.lock().unwrap_or_else(|poison| poison.into_inner());
+    let paths = integration_paths()?;
+    let marker = manager_update_reconcile_path(&paths);
+    let recorded_version = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
+    if !manager_runtime_needs_reconcile(
+        env!("CARGO_PKG_VERSION"),
+        recorded_version.as_deref(),
+        marker.is_file(),
+    ) {
+        return Ok(());
+    }
+
+    // There may be no OpenCodex installation yet. The marker is harmless in
+    // that case and should not make first-run status fail forever.
+    if ocx_program().is_none() {
+        record_current_manager_runtime(&paths)?;
+        let _ = fs::remove_file(marker);
+        return Ok(());
+    }
+    let mut config = load_config(&paths.opencodex_config)?;
+    if sanitize_saved_osir_config(&mut config)? {
+        write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
+    }
+    let state = effective_state(&paths)?;
+    if !state.enabled {
+        record_current_manager_runtime(&paths)?;
+        let _ = fs::remove_file(marker);
+        return Ok(());
+    }
+
+    restart_service_and_wait_ready()?;
+    ocx_output(&["sync"])?;
+    if !catalog_has_models(&paths.catalog) {
+        return Err(AppError::Engine(
+            "Manager 更新后 OpenCodex 没有生成可用模型目录".to_string(),
+        ));
+    }
+    refresh_codex_catalog_binding(&paths)?;
+    let config = load_config(&paths.opencodex_config)?;
+    let routes = configured_routes_from_config(&config, &state.managed_provider_ids);
+    if !routes.is_empty() && !catalog_contains_enabled_routes(&paths.catalog, &routes) {
+        return Err(AppError::Engine(
+            "Manager 更新后 OpenCodex 未加载全部供应商模型，请点击同步重试".to_string(),
+        ));
+    }
+    let mut failed_routes = Vec::new();
+    for route in routes.iter().filter(|route| route.enabled) {
+        let check = check_route(&route.id, &route.default_model)?;
+        if !check.available {
+            failed_routes.push(format!(
+                "{}/{}：{}",
+                check.route_id, check.model, check.detail
+            ));
+        }
+    }
+    if !failed_routes.is_empty() {
+        return Err(AppError::Engine(format!(
+            "Manager 更新后供应商模型验证未全部通过：{}",
+            failed_routes.join("；")
+        )));
+    }
+    if crate::app::codex_theme::codex_running() {
+        mark_codex_restart_required_at(&paths)?;
+    }
+    record_current_manager_runtime(&paths)?;
+    fs::remove_file(marker)
+        .map_err(|error| AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}")))?;
+    Ok(())
 }
 
 fn codex_configuration_revision(paths: &IntegrationPaths) -> Option<String> {
@@ -1571,6 +1824,7 @@ pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, A
 }
 
 pub fn ensure_ready_for_codex() -> Result<(), AppError> {
+    reconcile_after_manager_update()?;
     let current = status()?;
     if !current.enabled {
         return Ok(());
@@ -1595,7 +1849,7 @@ where
 {
     validate_codex_install_payload(&payload)?;
     let account = payload.account.clone();
-    let routes = payload
+    let mut routes = payload
         .providers
         .into_iter()
         .map(|provider| OpenCodexRouteInput {
@@ -1609,16 +1863,13 @@ where
             enabled: true,
         })
         .collect::<Vec<_>>();
+    sanitize_osir_routes(&mut routes)?;
     let default_route = routes
         .iter()
         .find(|route| route.id.contains("openai"))
         .or_else(|| routes.first())
         .map(|route| format!("{}/{}", route.id, route.default_model))
         .ok_or_else(|| AppError::Engine("OSIRAPI 未返回默认模型".to_string()))?;
-    let (default_route_id, default_model) = default_route
-        .split_once('/')
-        .map(|(route, model)| (route.to_string(), model.to_string()))
-        .ok_or_else(|| AppError::Engine("OSIRAPI 默认模型路由格式无效".to_string()))?;
     progress(oauth_progress(
         "config",
         "running",
@@ -1626,6 +1877,7 @@ where
         "正在写入模型配置",
         "保存订阅 Key、模型路由和 Codex 模型目录。",
     ));
+    let routes_to_verify = routes.clone();
     let configured = save(OpenCodexConfigInput {
         enabled: true,
         port: DEFAULT_PORT,
@@ -1646,18 +1898,27 @@ where
         "verify",
         "running",
         4,
-        "正在验证默认模型",
-        "确认 OpenCodex 服务和默认模型路由可以直接使用。",
+        "正在验证订阅模型",
+        "确认每个供应商的推荐模型都能通过 OpenCodex 正确路由。",
     ));
-    let check = check_route(&default_route_id, &default_model)?;
+    let mut checks = Vec::new();
+    for route in routes_to_verify.iter().filter(|route| route.enabled) {
+        checks.push(check_route(&route.id, &route.default_model)?);
+    }
     let mut verified = status()?;
     verified.error = configured.error;
-    if !check.available {
-        if check.retryable {
-            verified.error = Some(format!("授权和模型同步已完成，但默认路由遇到临时网络异常：{}", check.detail));
+    let failures = checks.iter().filter(|check| !check.available).collect::<Vec<_>>();
+    if !failures.is_empty() {
+        let detail = failures
+            .iter()
+            .map(|check| format!("{}/{}：{}", check.route_id, check.model, check.detail))
+            .collect::<Vec<_>>()
+            .join("；");
+        if failures.iter().all(|check| check.retryable) {
+            verified.error = Some(format!("授权和模型同步已完成，但部分供应商遇到临时网络异常：{detail}"));
         } else {
             verified.connection_status = "error".to_string();
-            verified.error = Some(format!("模型已同步，但默认路由验证失败：{}", check.detail));
+            verified.error = Some(format!("模型已同步，但部分供应商路由验证失败：{detail}"));
         }
     }
     Ok(verified)
@@ -1849,35 +2110,20 @@ pub fn start() -> Result<OpenCodexStatus, AppError> {
     }
 }
 
-fn is_management_not_found(error: &AppError) -> bool {
-    let message = error.to_string().to_ascii_lowercase();
-    message.contains("management request failed (404)")
-        || message.contains("unknown endpoint: get /api/models")
-}
-
-fn sync_with_service_recovery() -> Result<Vec<u8>, AppError> {
-    match ocx_output(&["sync"]) {
-        Ok(output) => Ok(output),
-        Err(error) if is_management_not_found(&error) => {
-            // A stale OpenCodex process can still own port 10100 after a first
-            // install or component upgrade. Restart once so the current managed
-            // component, rather than the old process, owns the management API.
-            let _ = ocx_output(&["restart"]);
-            let deadline = std::time::Instant::now() + Duration::from_secs(15);
-            loop {
-                if let Ok(current) = status() {
-                    if current.service_state == "ready" {
-                        break;
-                    }
-                }
-                if std::time::Instant::now() >= deadline {
-                    return Err(error);
-                }
-                thread::sleep(Duration::from_millis(300));
-            }
-            ocx_output(&["sync"])
+fn restart_service_and_wait_ready() -> Result<(), AppError> {
+    ocx_output(&["restart"])?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let (state, detail) = service_state(true);
+        if state == "ready" {
+            return Ok(());
         }
-        Err(error) => Err(error),
+        if std::time::Instant::now() >= deadline {
+            return Err(AppError::Engine(detail.unwrap_or_else(|| {
+                "OpenCodex 重启后未能进入 ready 状态".to_string()
+            })));
+        }
+        thread::sleep(Duration::from_millis(300));
     }
 }
 
@@ -2213,6 +2459,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn status() -> Result<OpenCodexStatus, AppError> {
+    reconcile_after_manager_update()?;
     let paths = integration_paths()?;
     // Repair legacy model ids as part of every status read while OpenCodex
     // owns Codex, so an upgrade self-heals without another mode toggle.
@@ -2227,7 +2474,7 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
         let provider_ids = inferred_managed_provider_ids(&config, &models);
         let routes = configured_routes_from_config(&config, &provider_ids);
         if !routes.is_empty() {
-            append_configured_models_to_catalog(&paths.catalog, &routes)?;
+            normalize_synced_catalog(&paths.catalog, &routes)?;
         }
     }
     status_at(&paths)
@@ -2492,11 +2739,11 @@ fn configured_routes_from_config(
         .collect()
 }
 
-/// OpenCodex may keep a stale/native catalog when provider discovery is
-/// blocked by local DNS or proxy policy. Preserve the configured route list in
-/// the catalog so the user can still select and use every model returned by
-/// the OSIRAPI ticket.
-fn append_configured_models_to_catalog(
+/// Normalize metadata only for models that the running OpenCodex service
+/// actually exposed. Never inject configured-but-unroutable models into the
+/// Codex catalog: doing so creates a selectable model that falls through to the
+/// default provider at request time.
+fn normalize_synced_catalog(
     path: &Path,
     routes: &[OpenCodexRouteInput],
 ) -> Result<(), AppError> {
@@ -2513,54 +2760,11 @@ fn append_configured_models_to_catalog(
         .filter_map(|model| model.get("slug").and_then(JsonValue::as_str))
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
-    let template = models
-        .iter()
-        .find(|model| model.get("slug").and_then(JsonValue::as_str).is_some_and(|slug| slug.contains('/')))
-        .or_else(|| models.first())
-        .cloned()
-        .unwrap_or_else(|| json!({
-            "supported_reasoning_levels": [
-                {"effort": "low", "description": "Fast responses with lighter reasoning"},
-                {"effort": "medium", "description": "Balances speed and reasoning depth"},
-                {"effort": "high", "description": "Greater reasoning depth for complex problems"}
-            ],
-            "input_modalities": ["text", "image"],
-            "supported_in_api": true,
-            "visibility": "list"
-        }));
     let mut changed = false;
-    for route in routes.iter().filter(|route| route.enabled) {
-        for model in &route.models {
-            let slug = format!("{}/{}", route.id, model);
-            if existing.contains(&slug) {
-                continue;
-            }
-            let mut entry = template.clone();
-            let object = entry
-                .as_object_mut()
-                .ok_or_else(|| AppError::Engine("OpenCodex 模型目录条目格式无效".to_string()))?;
-            object.insert("slug".to_string(), JsonValue::String(slug.clone()));
-            object.insert(
-                "display_name".to_string(),
-                JsonValue::String(format!("{} · {}", model, route.label)),
-            );
-            object.insert(
-                "description".to_string(),
-                JsonValue::String(format!("Routed via OpenCodex -> {}.", route.id)),
-            );
-            object.insert("default_reasoning_level".to_string(), JsonValue::String("high".to_string()));
-            object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
-            object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
-            object.insert("hidden".to_string(), JsonValue::Bool(false));
-            models.push(entry);
-            existing.insert(slug);
-            changed = true;
-        }
-    }
     // Older Codex rollouts persist bare OpenAI model ids (for example
     // `gpt-5.5`), while the current catalog uses routed ids such as
-    // `osirapi-openai/gpt-5.5`. Keep a visible compatibility row so old
-    // sessions can resolve model metadata and continue using the same route.
+    // `osirapi-openai/gpt-5.5`. Keep a hidden compatibility row only when the
+    // running service exposed the corresponding routed model.
     for route in routes.iter().filter(|route| route.enabled) {
         let route_id = route.id.to_ascii_lowercase();
         let route_label = route.label.to_ascii_lowercase();
@@ -2578,7 +2782,14 @@ fn append_configured_models_to_catalog(
             if !(model.starts_with("gpt-") || model.starts_with("codex-")) || existing.contains(model) {
                 continue;
             }
-            let mut entry = template.clone();
+            let routed_slug = format!("{}/{}", route.id, model);
+            let Some(mut entry) = models
+                .iter()
+                .find(|entry| entry.get("slug").and_then(JsonValue::as_str) == Some(routed_slug.as_str()))
+                .cloned()
+            else {
+                continue;
+            };
             let object = entry
                 .as_object_mut()
                 .ok_or_else(|| AppError::Engine("OpenCodex 模型目录条目格式无效".to_string()))?;
@@ -2691,7 +2902,7 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
     };
     let configured_routes = configured_routes_from_config(&config, &managed_provider_ids);
     if !configured_routes.is_empty() {
-        append_configured_models_to_catalog(&paths.catalog, &configured_routes)?;
+        normalize_synced_catalog(&paths.catalog, &configured_routes)?;
     }
     let provider_id = if state.codex_provider_id.is_empty() {
         DEFAULT_PROVIDER_ID
@@ -2752,6 +2963,19 @@ fn restore_save_snapshot(
     Ok(())
 }
 
+fn rollback_reloaded_save(
+    paths: &IntegrationPaths,
+    opencodex_config: Option<&[u8]>,
+    codex_config: Option<&[u8]>,
+    catalog: Option<&[u8]>,
+    state: &ManagedState,
+) {
+    let _ = restore_save_snapshot(paths, opencodex_config, codex_config, catalog, state);
+    // The failed candidate may already be loaded in the running process. Load
+    // the restored snapshot as well so disk and runtime cannot diverge.
+    let _ = restart_service_and_wait_ready();
+}
+
 pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     if !input.enabled {
         return Err(AppError::Engine("停用多模型请使用恢复按钮，避免丢失当前配置".to_string()));
@@ -2761,7 +2985,16 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     }
     let paths = integration_paths()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
-    let (provider_id, default_route, routes) = validate_input(&input)?;
+    let (provider_id, requested_default_route, mut routes) = validate_input(&input)?;
+    sanitize_osir_routes(&mut routes)?;
+    let requested_route_id = requested_default_route
+        .split_once('/')
+        .map(|(route, _)| route);
+    let default_route = requested_route_id
+        .and_then(|route_id| routes.iter().find(|route| route.id == route_id && route.enabled))
+        .or_else(|| routes.iter().find(|route| route.enabled))
+        .map(|route| format!("{}/{}", route.id, route.default_model))
+        .ok_or_else(|| AppError::Engine("没有可用默认模型路由".to_string()))?;
     let prior = load_state(&paths.state);
     let previous_config = fs::read(&paths.opencodex_config).ok();
     let previous_codex_config = fs::read(&paths.codex_config).ok();
@@ -2772,7 +3005,6 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     validate_candidate(&paths.opencodex_config, &candidate)?;
     preserve_codex_config_before_takeover(&paths, &prior)?;
     write_json(&paths.opencodex_config, &candidate)?;
-    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
     let state = ManagedState {
         enabled: false,
         port: input.port,
@@ -2786,8 +3018,8 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     let state_json = serde_json::to_value(state)
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
     write_json(&paths.state, &state_json)?;
-    if let Err(error) = ocx_output(&["sync"]) {
-        let _ = restore_save_snapshot(
+    if let Err(error) = restart_service_and_wait_ready() {
+        rollback_reloaded_save(
             &paths,
             previous_config.as_deref(),
             previous_codex_config.as_deref(),
@@ -2796,8 +3028,18 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         );
         return Err(error);
     }
-    if let Err(error) = append_configured_models_to_catalog(&paths.catalog, &routes) {
-        let _ = restore_save_snapshot(
+    if let Err(error) = ocx_output(&["sync"]) {
+        rollback_reloaded_save(
+            &paths,
+            previous_config.as_deref(),
+            previous_codex_config.as_deref(),
+            previous_catalog.as_deref(),
+            &previous_state,
+        );
+        return Err(error);
+    }
+    if let Err(error) = normalize_synced_catalog(&paths.catalog, &routes) {
+        rollback_reloaded_save(
             &paths,
             previous_config.as_deref(),
             previous_codex_config.as_deref(),
@@ -2807,14 +3049,14 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         return Err(error);
     }
     if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
-        let _ = restore_save_snapshot(
+        rollback_reloaded_save(
             &paths,
             previous_config.as_deref(),
             previous_codex_config.as_deref(),
             previous_catalog.as_deref(),
             &previous_state,
         );
-        return Err(AppError::Engine("OpenCodex 同步完成但模型目录不完整；已恢复原配置".to_string()));
+        return Err(AppError::Engine("OpenCodex 运行时未加载全部供应商模型；已恢复原配置".to_string()));
     }
     // Codex observes config.toml, not the generated catalog file. The first
     // config write above can therefore race ahead of `ocx sync` and make the
@@ -2844,7 +3086,11 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
     let codex_was_running = crate::app::codex_theme::codex_running();
-    sync_with_service_recovery()?;
+    // A provider may have been added while the daemon was already running.
+    // Reload disk config before asking the runtime to regenerate Codex's
+    // catalog, otherwise sync can faithfully reproduce a stale provider set.
+    restart_service_and_wait_ready()?;
+    ocx_output(&["sync"])?;
     let paths = integration_paths()?;
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
@@ -2904,9 +3150,13 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
 
     let result: Result<OpenCodexStatus, AppError> = (|| {
         preserve_codex_config_before_takeover(&paths, &prior)?;
-        start()?;
-        sync_with_service_recovery()?;
-        append_configured_models_to_catalog(&paths.catalog, &routes)?;
+        if service_state(true).0 == "ready" {
+            restart_service_and_wait_ready()?;
+        } else {
+            start()?;
+        }
+        ocx_output(&["sync"])?;
+        normalize_synced_catalog(&paths.catalog, &routes)?;
         if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
             return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
         }
@@ -3012,10 +3262,11 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        append_configured_models_to_catalog, build_opencodex_config, catalog_contains_enabled_routes,
+        build_opencodex_config, catalog_contains_enabled_routes, normalize_synced_catalog,
         component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
-        is_transient_route_check_error, route_check_with_retry, route_from_config,
+        is_transient_route_check_error, manager_runtime_needs_reconcile, route_check_with_retry, route_from_config,
+        sanitize_saved_osir_config,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
         validate_codex_install_payload, write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
@@ -3155,6 +3406,64 @@ mod tests {
     }
 
     #[test]
+    fn reconciles_on_first_run_version_change_or_explicit_update_marker() {
+        assert!(manager_runtime_needs_reconcile("0.5.32", None, false));
+        assert!(manager_runtime_needs_reconcile(
+            "0.5.32",
+            Some("0.5.31\n"),
+            false,
+        ));
+        assert!(manager_runtime_needs_reconcile(
+            "0.5.32",
+            Some("0.5.32"),
+            true,
+        ));
+        assert!(!manager_runtime_needs_reconcile(
+            "0.5.32",
+            Some("0.5.32\n"),
+            false,
+        ));
+    }
+
+    #[test]
+    fn sanitizes_legacy_osir_models_and_repairs_a_removed_default() {
+        let mut config = JsonMap::from_iter([
+            ("defaultProvider".to_string(), json!("osirapi-gemini")),
+            (
+                "providers".to_string(),
+                json!({
+                    "osirapi-gemini": {
+                        "label": "Gemini",
+                        "baseUrl": "https://api.osirclaw.com/v1",
+                        "defaultModel": "gemini-2.0-flash",
+                        "models": ["gemini-2.0-flash", "gemini-3.7-flash", "gemini-3.7-flash-image"]
+                    }
+                }),
+            ),
+            (
+                "customModels".to_string(),
+                json!([
+                    {"provider": "osirapi-gemini", "modelId": "gemini-2.0-flash"},
+                    {"provider": "osirapi-gemini", "modelId": "gemini-3.7-flash"},
+                    {"provider": "osirapi-gemini", "modelId": "gemini-3.7-flash-image"}
+                ]),
+            ),
+        ]);
+
+        assert!(sanitize_saved_osir_config(&mut config).unwrap());
+        assert_eq!(config["defaultProvider"], json!("osirapi-gemini"));
+        assert_eq!(
+            config["providers"]["osirapi-gemini"]["defaultModel"],
+            json!("gemini-3.7-flash")
+        );
+        assert_eq!(
+            config["providers"]["osirapi-gemini"]["models"],
+            json!(["gemini-3.7-flash"])
+        );
+        assert_eq!(config["customModels"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
     fn maps_supported_platforms_without_cross_platform_fallbacks() {
         assert_eq!(component_target_for("macos", "aarch64"), Some("darwin-arm64"));
         assert_eq!(component_target_for("windows", "x86_64"), Some("windows-x64"));
@@ -3284,20 +3593,34 @@ mod tests {
     }
 
     #[test]
-    fn appends_configured_routes_when_sync_keeps_only_native_catalog_models() {
+    fn does_not_publish_gemini_models_missing_from_the_runtime_catalog() {
         let root = std::env::temp_dir().join(format!("opencodex-catalog-fallback-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
             &catalog,
-            serde_json::to_vec(&json!({"models":[{"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol"}]})).unwrap(),
+            serde_json::to_vec(&json!({"models":[{"slug":"osirapi-openai/gpt-5.6-sol","display_name":"GPT-5.6-Sol"}]})).unwrap(),
         )
         .unwrap();
-        let routes = vec![input().routes[0].clone()];
-        append_configured_models_to_catalog(&catalog, &routes).unwrap();
-        assert!(catalog_contains_enabled_routes(&catalog, &routes));
+        let mut gpt = input().routes[0].clone();
+        gpt.id = "osirapi-openai".to_string();
+        let gemini = OpenCodexRouteInput {
+            id: "osirapi-gemini".into(),
+            label: "Gemini".into(),
+            adapter: "openai-responses".into(),
+            base_url: "https://api.osirclaw.com/v1".into(),
+            api_key: Some("secret-gemini".into()),
+            models: vec!["gemini-3.7-flash".into()],
+            default_model: "gemini-3.7-flash".into(),
+            enabled: true,
+        };
+        let routes = vec![gpt, gemini];
+        normalize_synced_catalog(&catalog, &routes).unwrap();
+        assert!(!catalog_contains_enabled_routes(&catalog, &routes));
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
-        assert_eq!(value["models"].as_array().unwrap().len(), 2);
+        let slugs = value["models"].as_array().unwrap().iter()
+            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        assert!(!slugs.contains("osirapi-gemini/gemini-3.7-flash"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -3316,8 +3639,9 @@ mod tests {
             }]})).unwrap(),
         ).unwrap();
         let mut route = input().routes[0].clone();
+        route.id = "osirapi-openai".to_string();
         route.models = vec!["gpt-5.5".to_string()];
-        append_configured_models_to_catalog(&catalog, &[route]).unwrap();
+        normalize_synced_catalog(&catalog, &[route]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
         let slugs = value["models"].as_array().unwrap().iter()
             .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
@@ -3326,6 +3650,27 @@ mod tests {
         let alias = value["models"].as_array().unwrap().iter().find(|model| model["slug"] == "gpt-5.5").unwrap();
         assert_eq!(alias["hidden"], json!(true));
         assert_eq!(alias["visibility"], json!("hide"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn does_not_append_a_legacy_alias_for_an_unexposed_openai_model() {
+        let root = std::env::temp_dir().join(format!("opencodex-catalog-no-fake-alias-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":[{"slug":"osirapi-openai/gpt-5.6-sol"}]})).unwrap(),
+        )
+        .unwrap();
+        let mut route = input().routes[0].clone();
+        route.id = "osirapi-openai".to_string();
+        route.models = vec!["gpt-5.5".to_string()];
+        normalize_synced_catalog(&catalog, &[route]).unwrap();
+        let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
+        let slugs = value["models"].as_array().unwrap().iter()
+            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        assert!(!slugs.contains("gpt-5.5"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -3347,7 +3692,7 @@ mod tests {
         gpt.models = vec!["gpt-5.5".to_string()];
         let claude = OpenCodexRouteInput { id: "osirapi-claude".into(), label: "Claude".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["claude-opus-5".into()], default_model: "claude-opus-5".into(), enabled: true };
         let grok = OpenCodexRouteInput { id: "osirapi-grok".into(), label: "Grok".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["grok-4.6".into()], default_model: "grok-4.6".into(), enabled: true };
-        append_configured_models_to_catalog(&catalog, &[gpt, claude, grok]).unwrap();
+        normalize_synced_catalog(&catalog, &[gpt, claude, grok]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
         let models = value["models"].as_array().unwrap();
         let slugs = models.iter().filter_map(|m| m["slug"].as_str()).collect::<Vec<_>>();
