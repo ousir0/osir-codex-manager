@@ -12,6 +12,9 @@ use std::time::Duration;
 
 use codex_theme_engine::codex_theme::{parse_codex_theme, CodexTheme, ValidateOptions};
 use codex_theme_engine::daemon::{run_daemon, DaemonStatus, Directive};
+use codex_theme_engine::layout::{
+    apply_model_picker_layout_fix_once, run_model_picker_layout_daemon,
+};
 use codex_theme_engine::native::{has_backup, NativeSettingsSnapshot, NativeThemePaths};
 use codex_theme_engine::native_hot;
 use codex_theme_engine::theme::{list_themes, load_theme, LoadedTheme, ThemeSummary};
@@ -173,6 +176,7 @@ pub struct ThemeService {
 struct ServiceInner {
     directive_tx: Option<watch::Sender<Directive>>,
     status_rx: Option<watch::Receiver<DaemonStatus>>,
+    model_picker_layout_tx: Option<watch::Sender<bool>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1070,6 +1074,45 @@ impl ThemeService {
         inner.status_rx.as_ref().map(|rx| rx.borrow().clone())
     }
 
+    /// Enable the stock model-picker repair for the OpenCodex launch path.
+    /// It has its own narrow CSS payload, so a missing theme selection cannot
+    /// disable the layout fix.
+    pub async fn enable_model_picker_layout_fix(&self) -> Result<(), AppError> {
+        {
+            let mut inner = self.inner.lock().await;
+            if let Some(tx) = inner
+                .model_picker_layout_tx
+                .as_ref()
+                .filter(|tx| !tx.is_closed())
+            {
+                tx.send(true)
+                    .map_err(|_| AppError::Internal("模型选择器修复守护未运行".to_string()))?;
+            } else {
+                let (tx, rx) = watch::channel(true);
+                tauri::async_runtime::spawn(run_model_picker_layout_daemon(
+                    THEME_CDP_PORT,
+                    rx,
+                ));
+                inner.model_picker_layout_tx = Some(tx);
+            }
+        }
+
+        match apply_model_picker_layout_fix_once(THEME_CDP_PORT, Duration::from_secs(8)).await {
+            Ok(count) => log::info!("model picker layout fix applied to {count} Codex renderer(s)"),
+            Err(error) => log::debug!("model picker layout fix will retry in daemon: {error}"),
+        }
+        Ok(())
+    }
+
+    /// Disable the stock model-picker repair when the manager no longer owns
+    /// the OpenCodex launch path.
+    pub async fn disable_model_picker_layout_fix(&self) {
+        let inner = self.inner.lock().await;
+        if let Some(tx) = &inner.model_picker_layout_tx {
+            let _ = tx.send(false);
+        }
+    }
+
     pub async fn status(&self, settings: &AppSettings) -> ThemeStatusReport {
         let cdp_ready = codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await;
         let native_backup = native_paths().map(|p| has_backup(&p)).unwrap_or(false);
@@ -1348,6 +1391,67 @@ impl ThemeService {
             if native.is_some() { NativeSync::HotThenFile } else { NativeSync::CssOnly },
         )
             .await
+    }
+
+    /// Launch or reconnect Codex with the renderer-only model picker repair.
+    /// OpenCodex needs a debuggable renderer because stock Codex otherwise
+    /// offers no supported way to keep this CSS alive across reloads.
+    pub async fn launch_with_model_picker_layout_fix(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<(), AppError> {
+        if !theme_supported() {
+            return Err(AppError::UnsupportedPlatform);
+        }
+
+        if codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await {
+            self.enable_model_picker_layout_fix().await?;
+            return Ok(());
+        }
+
+        self.launch_debuggable_codex(settings, "启动").await?;
+        self.enable_model_picker_layout_fix().await
+    }
+
+    /// Force a real stop/start cycle while keeping the model picker repair
+    /// enabled. This is the explicit restart counterpart to the launch hook.
+    pub async fn restart_with_model_picker_layout_fix(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<(), AppError> {
+        if !theme_supported() {
+            return Err(AppError::UnsupportedPlatform);
+        }
+
+        self.launch_debuggable_codex(settings, "重启").await?;
+        self.enable_model_picker_layout_fix().await
+    }
+
+    async fn launch_debuggable_codex(
+        &self,
+        settings: &AppSettings,
+        action: &str,
+    ) -> Result<(), AppError> {
+        let disable_self_updates = settings.disable_codex_self_updates;
+        tauri::async_runtime::spawn_blocking(move || -> Result<(), AppError> {
+            let installed = installed_codex_path()?;
+            if codex_running() {
+                quit_codex(&installed)?;
+                std::thread::sleep(CONFIG_SETTLE);
+            }
+            launch_codex_with_cdp(&installed, THEME_CDP_PORT, disable_self_updates)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("模型选择器修复{action}任务失败: {e}")))??;
+
+        let deadline = tokio::time::Instant::now() + CDP_WAIT;
+        while !codex_theme_engine::cdp::cdp_http_ready(THEME_CDP_PORT).await {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(AppError::Engine("Codex 已启动但调试端口未就绪".to_string()));
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        Ok(())
     }
 
     async fn restart_debuggable_and_inject(

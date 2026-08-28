@@ -1276,14 +1276,33 @@ pub async fn mac_launch_codex(state: State<'_, ManagerState>) -> Result<(), Comm
     }
     crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     let settings = PersistedAppSettings::load();
+    let open_codex_enabled = crate::app::opencodex::enabled();
     if settings.codex_theme.is_some() && state.operations.snapshot().is_none() {
         let themed =
             crate::app::codex_theme::launch_with_active_theme(&state.codex_theme, &settings)
                 .await?;
         if themed {
+            if open_codex_enabled {
+                state
+                    .codex_theme
+                    .enable_model_picker_layout_fix()
+                    .await
+                    .map_err(CommandError::from)?;
+            } else {
+                state.codex_theme.disable_model_picker_layout_fix().await;
+            }
             return Ok(());
         }
     }
+    if open_codex_enabled && state.operations.snapshot().is_none() {
+        state
+            .codex_theme
+            .launch_with_model_picker_layout_fix(&settings)
+            .await
+            .map_err(CommandError::from)?;
+        return Ok(());
+    }
+    state.codex_theme.disable_model_picker_layout_fix().await;
     crate::app::mac_update::launch_codex().map_err(Into::into)
 }
 
@@ -1295,15 +1314,39 @@ pub async fn mac_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
     }
     crate::app::opencodex::ensure_ready_for_codex().map_err(CommandError::from)?;
     let settings = PersistedAppSettings::load();
+    let open_codex_enabled = crate::app::opencodex::enabled();
     if settings.codex_theme.is_some() && state.operations.snapshot().is_none() {
         let themed =
             crate::app::codex_theme::restart_with_active_theme(&state.codex_theme, &settings)
                 .await?;
         if themed {
+            if open_codex_enabled {
+                state
+                    .codex_theme
+                    .enable_model_picker_layout_fix()
+                    .await
+                    .map_err(CommandError::from)?;
+            } else {
+                state.codex_theme.disable_model_picker_layout_fix().await;
+            }
             crate::app::opencodex::clear_codex_restart_required().map_err(CommandError::from)?;
             return Ok(());
         }
     }
+    if open_codex_enabled && state.operations.snapshot().is_none() {
+        state
+            .codex_theme
+            .disable_model_picker_layout_fix()
+            .await;
+        state
+            .codex_theme
+            .restart_with_model_picker_layout_fix(&settings)
+            .await
+            .map_err(CommandError::from)?;
+        crate::app::opencodex::clear_codex_restart_required().map_err(CommandError::from)?;
+        return Ok(());
+    }
+    state.codex_theme.disable_model_picker_layout_fix().await;
     tauri::async_runtime::spawn_blocking(crate::app::codex_theme::restart_plain)
         .await
         .map_err(|e| AppError::Internal(format!("join: {e}")))?

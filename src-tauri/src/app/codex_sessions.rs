@@ -108,6 +108,21 @@ fn planned_update(
                 }
                 return Some(ThreadUpdate { id, provider: target_provider.to_string(), model });
             }
+            // Older OpenCodex integrations stored bare OpenAI model ids in
+            // threads and kept a hidden catalog alias to make them resolve.
+            // The picker catalog no longer carries those duplicate aliases,
+            // so migrate an already-routed bare thread to its canonical
+            // provider/model selector at the save boundary.
+            if provider == target_provider {
+                let route = bare_to_full
+                    .get(current_model)
+                    .and_then(|routes| preferred_route(routes, default_route))?;
+                return Some(ThreadUpdate {
+                    id,
+                    provider: target_provider.to_string(),
+                    model: Some(route.to_string()),
+                });
+            }
             if provider != default_provider {
                 return None;
             }
@@ -306,6 +321,46 @@ mod tests {
             ("b".into(), "osir".into(), "unknown".into()),
             ("c".into(), "opencodex".into(), "osirapi-claude/claude-opus-5".into()),
         ]);
+        drop(connection);
+        std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn upgrades_bare_opencodex_threads_without_publishing_picker_aliases() {
+        let (database, backup) = setup();
+        let connection = Connection::open(&database).unwrap();
+        connection
+            .execute(
+                "INSERT INTO threads VALUES ('a','opencodex','gpt-5.6-sol')",
+                [],
+            )
+            .unwrap();
+        drop(connection);
+
+        assert_eq!(
+            migrate_at(
+                &database,
+                &backup,
+                SessionTarget::OpenCodex {
+                    provider: "opencodex",
+                    default_provider: "osir",
+                    default_route: "osirapi-openai/gpt-5.6-sol"
+                },
+                &routes()
+            )
+            .unwrap(),
+            1
+        );
+        let connection = Connection::open(&database).unwrap();
+        let value = connection
+            .query_row(
+                "SELECT model_provider, model FROM threads WHERE id = 'a'",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap();
+        assert_eq!(value, ("opencodex".into(), "osirapi-openai/gpt-5.6-sol".into()));
+        assert!(backup.is_file());
         drop(connection);
         std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
     }

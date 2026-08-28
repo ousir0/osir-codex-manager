@@ -301,133 +301,6 @@ input {
   }
 }
 
-/* ── OpenCodex simplified workbench ─────────────────────────────────────── */
-/* Keep the connected-account card as the trust anchor. The rest of the page
-   should read as one model workspace instead of a stack of status modules. */
-.multi-model-prototype {
-  gap: 10px;
-}
-.multi-model-hero {
-  min-height: 0;
-  grid-template-columns: minmax(0, 1fr);
-  padding: 18px 20px;
-  border-radius: var(--r-lg);
-}
-.multi-model-hero h1 {
-  max-width: 720px;
-  font-size: clamp(25px, 3.2vw, 38px);
-}
-.multi-model-hero p {
-  max-width: 680px;
-  margin-bottom: 12px;
-}
-.multi-model-orbit,
-.multi-model-environment,
-.multi-model-steps,
-.multi-model-connect-panel {
-  display: none;
-}
-.multi-model-notice {
-  min-height: 30px;
-  padding: 6px 9px;
-  font-size: 10.5px;
-}
-.multi-model-account-card {
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: var(--r-lg);
-}
-.multi-model-account-card.status-connected {
-  box-shadow: 0 12px 30px -24px color-mix(in oklch, var(--success) 65%, transparent);
-}
-.multi-model-workgrid {
-  grid-template-columns: minmax(0, 1fr);
-}
-.multi-model-routes-panel {
-  gap: 12px;
-  padding: 15px;
-}
-.multi-model-routes-panel > .multi-model-panel-head h2::before {
-  content: "模型目录 · ";
-  color: var(--text-faint);
-  font-size: .72em;
-  font-weight: 650;
-}
-.multi-model-route-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-.multi-model-route {
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 9px;
-}
-.multi-model-route > svg {
-  display: none;
-}
-.multi-model-route-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  font-size: 11px;
-}
-.multi-model-route-topline em,
-.multi-model-route-state {
-  display: none;
-}
-.multi-model-route-topline strong {
-  font-size: 11px;
-}
-.multi-model-route-model {
-  font-size: 9px;
-}
-.multi-model-route-count {
-  font-size: 11px;
-}
-.multi-model-model-manager {
-  margin-top: 2px;
-  padding-top: 12px;
-}
-.multi-model-model-manager-head {
-  align-items: center;
-}
-.multi-model-model-manager-head .multi-model-method-hint {
-  max-width: 260px;
-  text-align: right;
-}
-.multi-model-default-route {
-  grid-template-columns: minmax(0, 1fr) auto;
-  margin-top: 0;
-  padding: 10px;
-}
-.multi-model-runtime {
-  padding: 10px 13px;
-  border-radius: var(--r-md);
-  box-shadow: none;
-}
-.multi-model-runtime-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  font-size: 9px;
-}
-.multi-model-runtime-actions .btn {
-  min-height: 29px;
-}
-@media (max-width: 680px) {
-  .multi-model-route-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .multi-model-model-manager-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .multi-model-model-manager-head .multi-model-method-hint {
-    max-width: none;
-    text-align: left;
-  }
-}
-
 /* Expanded: a solid desktop window, edge to edge. The compact popover's
    transparent gutter would read as a phantom border here (clicks and edge
    drags land on "air"), so the workbench drops it entirely: no padding, the
@@ -5831,20 +5704,20 @@ button.config-resource-row:hover {
 /* ── OpenCodex multi-model prototype ───────────────────────────────────── */
 .multi-model-prototype {
   display: grid;
-  gap: 13px;
+  gap: 10px;
   padding-bottom: 10px;
 }
 .multi-model-hero {
   position: relative;
-  min-height: 270px;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   align-items: center;
   overflow: hidden;
-  padding: 28px;
+  padding: 18px 20px;
   border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--line));
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background:
     radial-gradient(circle at 84% 20%, color-mix(in oklch, var(--accent) 23%, transparent), transparent 30%),
     radial-gradient(circle at 6% 100%, color-mix(in oklch, var(--success) 10%, transparent), transparent 34%),
@@ -5898,15 +5771,15 @@ button.config-resource-row:hover {
   letter-spacing: 0;
 }
 .multi-model-hero h1 {
-  max-width: 560px;
+  max-width: 720px;
   margin: 0;
-  font-size: clamp(25px, 4vw, 38px);
+  font-size: clamp(25px, 3.2vw, 38px);
   line-height: 1.08;
   letter-spacing: -0.042em;
 }
 .multi-model-hero p {
-  max-width: 570px;
-  margin: 0;
+  max-width: 680px;
+  margin: 0 0 12px;
   color: var(--text-soft);
   font-size: var(--fs-sm);
   line-height: 1.75;
@@ -5916,121 +5789,39 @@ button.config-resource-row:hover {
   flex-wrap: wrap;
   gap: 8px;
 }
-.multi-model-primary,
-.multi-model-secondary {
+.multi-model-primary {
   min-height: 42px;
   padding-inline: 15px;
 }
-.multi-model-primary svg,
-.multi-model-secondary svg {
+.multi-model-primary svg {
   width: 16px;
   height: 16px;
 }
-.multi-model-codebox {
-  max-width: 610px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: color-mix(in oklch, var(--bg) 58%, transparent);
-  animation: multi-model-rise 0.26s var(--ease-out) both;
-}
-.multi-model-codebox .input {
-  border-color: transparent;
-  background: transparent;
-}
-.multi-model-orbit {
-  position: relative;
-  z-index: 1;
-  width: 176px;
-  height: 176px;
-  justify-self: center;
-}
-.multi-model-orbit-ring {
-  position: absolute;
-  border: 1px solid color-mix(in oklch, var(--accent) 38%, transparent);
-  border-radius: 50%;
-}
-.multi-model-orbit-ring.ring-one {
-  inset: 12px;
-  animation: multi-model-spin 20s linear infinite;
-}
-.multi-model-orbit-ring.ring-two {
-  inset: 0;
-  border-style: dashed;
-  opacity: 0.54;
-  animation: multi-model-spin 31s linear infinite reverse;
-}
-.multi-model-orbit-core {
-  position: absolute;
-  inset: 45px;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 2px;
-  border: 1px solid color-mix(in oklch, var(--accent) 48%, var(--line));
-  border-radius: 28px;
-  background: linear-gradient(145deg, color-mix(in oklch, var(--accent) 16%, var(--surface-2-top)), var(--surface));
-  box-shadow: var(--elev-2), 0 0 38px var(--accent-glow);
-  transform: rotate(45deg);
-}
-.multi-model-orbit-core > * {
-  transform: rotate(-45deg);
-}
-.multi-model-orbit-core span:last-child {
-  color: var(--text-faint);
-  font-family: var(--mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-.multi-model-core-mark {
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 28px;
-  font-weight: 850;
-}
-.multi-model-orbit-node {
-  position: absolute;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line-2);
-  border-radius: 12px;
-  background: var(--surface-2-top);
-  box-shadow: var(--elev-1);
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 800;
-}
-.node-gpt { top: 0; left: 71px; color: var(--accent); }
-.node-claude { right: 0; bottom: 26px; color: #eea46f; }
-.node-grok { left: 2px; bottom: 21px; color: var(--success); }
 .multi-model-notice {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 6px 9px;
   border: 1px solid color-mix(in oklch, var(--accent) 22%, var(--line));
   border-radius: var(--r-sm);
   background: var(--accent-tint);
   color: var(--text-soft);
-  font-size: var(--fs-caption);
+  font-size: 10.5px;
 }
 .multi-model-account-card {
   display: grid;
-  gap: 12px;
-  padding: 13px 15px;
+  gap: 10px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
   background: linear-gradient(135deg, color-mix(in oklch, var(--surface-top) 88%, var(--accent-tint)), var(--surface));
   box-shadow: var(--elev-1);
 }
-.multi-model-account-card.status-connected { border-color: color-mix(in oklch, var(--success) 42%, var(--line)); }
+.multi-model-account-card.status-connected {
+  border-color: color-mix(in oklch, var(--success) 42%, var(--line));
+  box-shadow: 0 12px 30px -24px color-mix(in oklch, var(--success) 65%, transparent);
+}
 .multi-model-account-card.status-error { border-color: color-mix(in oklch, #f59e0b 48%, var(--line)); }
 .multi-model-account-card.status-signedOut { opacity: .82; }
 .multi-model-account-status { display: flex; align-items: center; gap: 11px; }
@@ -6139,56 +5930,9 @@ button.config-resource-row:hover {
   color: var(--success);
   background: color-mix(in oklch, var(--success) 13%, transparent);
 }
-.multi-model-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  box-shadow: var(--elev-1);
-}
-.multi-model-step {
-  position: relative;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text-faint);
-  font-size: 10.5px;
-  font-weight: 700;
-}
-.multi-model-step-index {
-  position: relative;
-  z-index: 1;
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--surface-2);
-  font-family: var(--mono);
-  font-size: 9px;
-}
-.multi-model-step.active {
-  color: var(--text);
-}
-.multi-model-step.active .multi-model-step-index {
-  border-color: color-mix(in oklch, var(--accent) 48%, var(--line));
-  background: var(--accent-tint);
-  color: var(--accent-deep);
-}
-.multi-model-step-line {
-  position: absolute;
-  left: 34px;
-  right: 8px;
-  top: 13px;
-  height: 1px;
-  background: var(--line);
-}
 .multi-model-workgrid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .multi-model-panel {
@@ -6232,13 +5976,6 @@ button.config-resource-row:hover {
   letter-spacing: 0.075em;
   text-transform: uppercase;
 }
-.multi-model-panel-index {
-  color: color-mix(in oklch, var(--accent) 45%, var(--text-faint));
-  font-family: var(--mono);
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1;
-}
 .btn.compact {
   min-height: 31px;
   padding: 6px 9px;
@@ -6248,58 +5985,6 @@ button.config-resource-row:hover {
   width: 14px;
   height: 14px;
 }
-.multi-model-connection-card {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  color: var(--text);
-  text-align: start;
-  cursor: pointer;
-  transition: transform 0.16s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
-}
-.multi-model-connection-card:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklch, var(--accent) 45%, var(--line));
-}
-.multi-model-connection-card.active {
-  border-color: color-mix(in oklch, var(--accent) 70%, var(--line));
-  background: color-mix(in oklch, var(--accent) 9%, var(--surface-2));
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 13%, transparent);
-}
-.multi-model-methods {
-  display: grid;
-  gap: 7px;
-}
-.multi-model-method-panel {
-  display: grid;
-  gap: 9px;
-  padding: 11px;
-  border: 1px solid color-mix(in oklch, var(--accent) 28%, var(--line));
-  border-radius: var(--r-md);
-  background: color-mix(in oklch, var(--accent) 5%, var(--surface-2));
-  animation: multi-model-rise 0.2s var(--ease-out) both;
-}
-.multi-model-method-panel > div:first-child {
-  display: grid;
-  gap: 3px;
-}
-.multi-model-method-panel strong {
-  font-size: var(--fs-label);
-}
-.multi-model-method-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
-}
-.multi-model-method-form .input {
-  min-width: 0;
-}
 .multi-model-method-hint {
   color: var(--text-faint);
   font-size: 10px;
@@ -6308,15 +5993,19 @@ button.config-resource-row:hover {
 .multi-model-model-manager {
   display: grid;
   gap: 8px;
-  margin-top: 9px;
-  padding-top: 10px;
+  margin-top: 2px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
 }
 .multi-model-model-manager-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+.multi-model-model-manager-head .multi-model-method-hint {
+  max-width: 260px;
+  text-align: right;
 }
 .multi-model-model-manager-head > div {
   display: grid;
@@ -6354,6 +6043,9 @@ button.config-resource-row:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.multi-model-runtime-actions .btn {
+  min-height: 29px;
 }
 .multi-model-modal {
   display: grid;
@@ -6434,7 +6126,6 @@ button.config-resource-row:hover {
 .multi-model-oauth-progress-list > div.active > span { border-color: var(--accent); }
 .multi-model-oauth-progress-list > div.complete { color: var(--success); }
 .multi-model-oauth-progress-list > div.complete > span { border-color: var(--success); }
-.multi-model-modal-field,
 .multi-model-manual-form label {
   display: grid;
   gap: 5px;
@@ -6453,51 +6144,6 @@ button.config-resource-row:hover {
   gap: 8px;
   padding-top: 4px;
 }
-.multi-model-connection-card.featured {
-  border-color: color-mix(in oklch, var(--accent) 42%, var(--line));
-  background: linear-gradient(120deg, color-mix(in oklch, var(--accent) 15%, var(--surface-2)), var(--surface-2));
-}
-.multi-model-connection-icon {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 12px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 9px 22px -11px var(--accent);
-}
-.multi-model-connection-icon.quiet {
-  background: var(--surface-3);
-  color: var(--text-soft);
-  box-shadow: none;
-}
-.multi-model-connection-icon svg {
-  width: 17px;
-  height: 17px;
-}
-.multi-model-connection-copy {
-  min-width: 0;
-  flex: 1;
-  display: grid;
-  gap: 3px;
-}
-.multi-model-connection-copy strong {
-  font-size: var(--fs-label);
-}
-.multi-model-connection-copy span {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.multi-model-card-arrow {
-  color: var(--text-faint);
-  font-family: var(--mono);
-  font-size: 14px;
-}
 .multi-model-safe-note {
   display: flex;
   align-items: flex-start;
@@ -6515,17 +6161,18 @@ button.config-resource-row:hover {
 }
 .multi-model-route-list {
   display: grid;
-  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 .multi-model-route {
   position: relative;
   width: 100%;
   min-width: 0;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto 17px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 9px;
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface-2);
@@ -6545,15 +6192,15 @@ button.config-resource-row:hover {
 .multi-model-route.route-peach { --route-color: #eea46f; }
 .multi-model-route.route-lime { --route-color: var(--success); }
 .multi-model-route-avatar {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 9px;
   background: color-mix(in oklch, var(--route-color) 18%, var(--surface-3));
   color: var(--route-color);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 850;
 }
 .multi-model-route-body {
@@ -6567,14 +6214,16 @@ button.config-resource-row:hover {
   gap: 7px;
 }
 .multi-model-route-topline strong {
-  font-size: var(--fs-label);
+  font-size: 11px;
 }
 .multi-model-route-topline em {
+  display: none;
   color: var(--text-faint);
   font-size: 9.5px;
   font-style: normal;
 }
 .multi-model-route-state {
+  display: none;
   padding: 2px 5px;
   border-radius: var(--r-pill);
   background: var(--surface-3);
@@ -6603,14 +6252,14 @@ button.config-resource-row:hover {
   overflow: hidden;
   color: var(--text-faint);
   font-family: var(--mono);
-  font-size: 9.5px;
+  font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .multi-model-route-count {
   color: var(--route-color);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -6621,6 +6270,7 @@ button.config-resource-row:hover {
   font-weight: 600;
 }
 .multi-model-route > svg {
+  display: none;
   width: 15px;
   height: 15px;
   color: var(--route-color);
@@ -6630,8 +6280,8 @@ button.config-resource-row:hover {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 3px 8px;
-  margin-top: 2px;
-  padding: 11px;
+  margin-top: 0;
+  padding: 10px;
   border: 1px dashed var(--line-2);
   border-radius: var(--r-md);
   background: color-mix(in oklch, var(--bg) 35%, transparent);
@@ -6667,11 +6317,11 @@ button.config-resource-row:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 15px;
+  padding: 10px 13px;
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   background: linear-gradient(100deg, var(--surface-2-top), var(--surface));
-  box-shadow: var(--elev-1);
+  box-shadow: none;
 }
 .multi-model-runtime-main {
   min-width: 0;
@@ -6688,17 +6338,17 @@ button.config-resource-row:hover {
   font-size: var(--fs-label);
 }
 .multi-model-runtime-mark {
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   flex: 0 0 auto;
   border: 1px solid color-mix(in oklch, var(--success) 38%, var(--line));
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--success-tint);
   color: var(--success-deep);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 850;
 }
 .multi-model-runtime-meta {
@@ -6810,23 +6460,22 @@ button.config-resource-row:hover {
   }
 }
 @media (max-width: 680px) {
+  .multi-model-route-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .multi-model-model-manager-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .multi-model-model-manager-head .multi-model-method-hint {
+    max-width: none;
+    text-align: left;
+  }
   .multi-model-hero {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
     padding: 20px;
   }
-  .multi-model-orbit {
-    display: none;
-  }
-  .multi-model-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-  }
-  .multi-model-step-line {
-    display: none;
-  }
-  .multi-model-codebox,
-  .multi-model-method-form,
   .multi-model-manual-form,
   .multi-model-advanced,
   .multi-model-key-editor {
@@ -6845,8 +6494,6 @@ button.config-resource-row:hover {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .multi-model-orbit-ring,
-  .multi-model-codebox,
   .multi-model-advanced {
     animation: none;
   }

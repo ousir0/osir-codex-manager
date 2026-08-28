@@ -251,11 +251,8 @@ describe("Codex configuration workbench", () => {
 
     renderConfig();
     await screen.findByRole("heading", { name: "把所有模型，装进 Codex 选择器。" });
-    const connectCard = (await screen.findAllByRole("button", { name: /连接 OSIRAPI/ }))
-      .find((button) => button.classList.contains("multi-model-connection-card"));
-    expect(connectCard).toBeDefined();
-    await user.click(connectCard!);
-    await user.click(screen.getByRole("button", { name: "浏览器登录并连接" }));
+    await user.click(await screen.findByRole("button", { name: "管理连接" }));
+    await user.click(await screen.findByRole("button", { name: "浏览器登录并连接" }));
 
     expect(await screen.findByRole("heading", { name: "OSIRAPI 已授权，等待模型复检" })).toBeInTheDocument();
     expect(screen.getByText("授权与模型同步已经完成，无需重新授权")).toBeInTheDocument();

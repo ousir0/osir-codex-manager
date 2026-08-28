@@ -1816,6 +1816,17 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         let _ = restore();
         return Err(error);
     }
+    let config = load_config(&paths.opencodex_config)?;
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let provider_ids = inferred_managed_provider_ids(&config, &models);
+    let routes = configured_routes_from_config(&config, &provider_ids);
+    if !routes.is_empty() {
+        normalize_synced_catalog(&paths.catalog, &routes)?;
+    }
     sync_codex_model_cache(false)?;
     let locked_route = state
         .locked_route
@@ -1921,6 +1932,17 @@ pub fn ensure_ready_for_codex() -> Result<(), AppError> {
         return Err(AppError::Engine("OpenCodex 多模型已启用，但服务未 ready；为避免 Codex 启动后不可用，已阻止启动。请先修复或恢复备份。".to_string()));
     }
     Ok(())
+}
+
+/// Fast, side-effect-free ownership check for Codex launch routing. The full
+/// status read may refresh OpenCodex's catalog and can fail while the service
+/// is recovering; launch routing must still honor the durable enabled state.
+pub fn enabled() -> bool {
+    let Ok(paths) = integration_paths() else {
+        return false;
+    };
+    let state = load_state(&paths.state);
+    state.enabled || codex_uses_opencodex(&paths)
 }
 
 fn apply_codex_install_payload_with_progress<F>(
@@ -2568,8 +2590,14 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
             .unwrap_or_default();
         let provider_ids = inferred_managed_provider_ids(&config, &models);
         let routes = configured_routes_from_config(&config, &provider_ids);
-        if !routes.is_empty() {
-            normalize_synced_catalog(&paths.catalog, &routes)?;
+        if ocx_program().is_some()
+            && !routes.is_empty()
+            && normalize_synced_catalog(&paths.catalog, &routes)?
+        {
+            // Codex reads models_cache.json in long-lived processes. Keep it
+            // in lockstep with the repaired catalog so a stale hidden alias
+            // cannot return after the next Manager launch.
+            sync_codex_model_cache(false)?;
         }
     }
     status_at(&paths)
@@ -2841,7 +2869,7 @@ fn configured_routes_from_config(
 fn normalize_synced_catalog(
     path: &Path,
     routes: &[OpenCodexRouteInput],
-) -> Result<(), AppError> {
+) -> Result<bool, AppError> {
     let raw = fs::read(path)
         .map_err(|error| AppError::Internal(format!("读取 OpenCodex 模型目录失败：{error}")))?;
     let mut catalog = serde_json::from_slice::<JsonValue>(&raw)
@@ -2877,72 +2905,32 @@ fn normalize_synced_catalog(
         let Some(slug) = entry.get("slug").and_then(JsonValue::as_str) else {
             return true;
         };
+        // A managed OpenAI model has one canonical selector: provider/model.
+        // Bare aliases were once added for old sessions, but Codex Desktop can
+        // ignore `visibility = "hide"` and render them as duplicate rows.
+        // Session migration now owns that compatibility, so the picker catalog
+        // must not contain both identities.
+        let is_legacy_alias = !slug.contains('/')
+            && (openai_models.contains(slug)
+                || entry
+                    .get("description")
+                    .and_then(JsonValue::as_str)
+                    .is_some_and(|description| description.starts_with("历史会话兼容别名 · OpenCodex ->")));
+        if is_legacy_alias {
+            return false;
+        }
         if let Some((provider, model)) = slug.split_once('/') {
             return managed_models
                 .get(provider)
                 .is_none_or(|allowed| allowed.contains(model));
         }
         !managed_models.values().any(|allowed| allowed.contains(slug))
-            || openai_models.contains(slug)
     });
-    let mut existing = models
-        .iter()
-        .filter_map(|model| model.get("slug").and_then(JsonValue::as_str))
-        .map(str::to_string)
-        .collect::<BTreeSet<_>>();
-    let mut changed = false;
-    // Older Codex rollouts persist bare OpenAI model ids (for example
-    // `gpt-5.5`), while the current catalog uses routed ids such as
-    // `osirapi-openai/gpt-5.5`. Keep a hidden compatibility row only when the
-    // running service exposed the corresponding routed model.
-    for route in routes.iter().filter(|route| route.enabled) {
-        let route_id = route.id.to_ascii_lowercase();
-        let route_label = route.label.to_ascii_lowercase();
-        let is_openai_route = route_id.contains("openai")
-            || route_label.contains("openai")
-            || route_label.contains("gpt")
-            || route
-                .models
-                .iter()
-                .any(|model| model.starts_with("gpt-") || model.starts_with("codex-"));
-        if !is_openai_route {
-            continue;
-        }
-        for model in &route.models {
-            if !(model.starts_with("gpt-") || model.starts_with("codex-")) || existing.contains(model) {
-                continue;
-            }
-            let routed_slug = format!("{}/{}", route.id, model);
-            let Some(mut entry) = models
-                .iter()
-                .find(|entry| entry.get("slug").and_then(JsonValue::as_str) == Some(routed_slug.as_str()))
-                .cloned()
-            else {
-                continue;
-            };
-            let object = entry
-                .as_object_mut()
-                .ok_or_else(|| AppError::Engine("OpenCodex 模型目录条目格式无效".to_string()))?;
-            object.insert("slug".to_string(), JsonValue::String(model.clone()));
-            object.insert("display_name".to_string(), JsonValue::String(format!("{} · {}", model, route.label)));
-            object.insert("description".to_string(), JsonValue::String(format!("历史会话兼容别名 · OpenCodex -> {}", route.id)));
-            object.insert("default_reasoning_level".to_string(), JsonValue::String("high".to_string()));
-            object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
-            // Keep the alias resolvable for legacy sessions, but do not show
-            // it as a second selectable row in the current model picker.
-            object.insert("visibility".to_string(), JsonValue::String("hide".to_string()));
-            object.insert("hidden".to_string(), JsonValue::Bool(true));
-            models.push(entry);
-            existing.insert(model.clone());
-            changed = true;
-        }
-    }
+    let mut changed = before_prune != models.len();
 
-    // Existing catalogs may already contain bare aliases from an earlier
-    // Manager release. Normalize them too, then sort the complete managed
-    // catalog into a stable platform order. The Codex client keeps the file
-    // order when rendering models, so doing this at the source avoids
-    // release-to-release selector reshuffling.
+    // Normalize the remaining routed rows, then sort the visible catalog into
+    // a stable platform order. The Codex client keeps the file order when
+    // rendering models, so doing this at the source avoids reshuffling.
     for model in models.iter_mut() {
         let Some(slug) = model
             .get("slug")
@@ -2962,16 +2950,6 @@ fn normalize_synced_catalog(
                         object.insert("display_name".to_string(), JsonValue::String(expected));
                         changed = true;
                     }
-                }
-            }
-        }
-        if openai_models.contains(slug.as_str()) && !slug.contains('/') {
-            if let Some(object) = model.as_object_mut() {
-                let already_hidden = object.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
-                if !already_hidden || object.get("visibility").and_then(JsonValue::as_str) != Some("hide") {
-                    object.insert("visibility".to_string(), JsonValue::String("hide".to_string()));
-                    object.insert("hidden".to_string(), JsonValue::Bool(true));
-                    changed = true;
                 }
             }
         }
@@ -3009,7 +2987,7 @@ fn normalize_synced_catalog(
             )
         })
         .collect::<Vec<_>>();
-    if before_prune != models.len() || before_order != after_order {
+    if before_order != after_order {
         changed = true;
     }
     if changed {
@@ -3018,7 +2996,7 @@ fn normalize_synced_catalog(
         atomic_file::write_atomic(path, &bytes)
             .map_err(|error| AppError::Internal(format!("保存 OpenCodex 模型目录失败：{error}")))?;
     }
-    Ok(())
+    Ok(changed)
 }
 
 fn refresh_codex_catalog_binding(
@@ -3861,18 +3839,27 @@ mod tests {
     }
 
     #[test]
-    fn appends_bare_openai_aliases_for_legacy_sessions() {
+    fn removes_bare_openai_aliases_from_the_picker_catalog() {
         let root = std::env::temp_dir().join(format!("opencodex-catalog-legacy-alias-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
             &catalog,
-            serde_json::to_vec(&json!({"models":[{
-                "slug":"osirapi-openai/gpt-5.5",
-                "display_name":"gpt-5.5 · GPT",
-                "supported_reasoning_levels":[{"effort":"high","description":"High"}],
-                "visibility":"list"
-            }]})).unwrap(),
+            serde_json::to_vec(&json!({"models":[
+                {
+                    "slug":"osirapi-openai/gpt-5.5",
+                    "display_name":"gpt-5.5 · GPT",
+                    "supported_reasoning_levels":[{"effort":"high","description":"High"}],
+                    "visibility":"list"
+                },
+                {
+                    "slug":"gpt-5.5",
+                    "display_name":"gpt-5.5 · GPT",
+                    "description":"历史会话兼容别名 · OpenCodex -> osirapi-openai",
+                    "visibility":"hide",
+                    "hidden":true
+                }
+            ]})).unwrap(),
         ).unwrap();
         let mut route = input().routes[0].clone();
         route.id = "osirapi-openai".to_string();
@@ -3882,10 +3869,7 @@ mod tests {
         let slugs = value["models"].as_array().unwrap().iter()
             .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
         assert!(slugs.contains("osirapi-openai/gpt-5.5"));
-        assert!(slugs.contains("gpt-5.5"));
-        let alias = value["models"].as_array().unwrap().iter().find(|model| model["slug"] == "gpt-5.5").unwrap();
-        assert_eq!(alias["hidden"], json!(true));
-        assert_eq!(alias["visibility"], json!("hide"));
+        assert!(!slugs.contains("gpt-5.5"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -3911,14 +3895,14 @@ mod tests {
     }
 
     #[test]
-    fn sorts_visible_models_by_provider_and_hides_legacy_aliases() {
+    fn sorts_visible_models_by_provider_and_drops_legacy_aliases() {
         let root = std::env::temp_dir().join(format!("opencodex-catalog-sort-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
             &catalog,
             serde_json::to_vec(&json!({"models":[
-                {"slug":"gpt-5.5"},
+                {"slug":"gpt-5.5","visibility":"hide","hidden":true},
                 {"slug":"osirapi-grok/grok-4.6"},
                 {"slug":"osirapi-openai/gpt-5.5"},
                 {"slug":"osirapi-claude/claude-opus-5"}
@@ -3934,8 +3918,7 @@ mod tests {
         let models = value["models"].as_array().unwrap();
         let slugs = models.iter().filter_map(|m| m["slug"].as_str()).collect::<Vec<_>>();
         assert_eq!(slugs[..3], ["osirapi-openai/gpt-5.5", "osirapi-claude/claude-opus-5", "osirapi-grok/grok-4.6"]);
-        let alias = models.iter().find(|m| m["slug"] == "gpt-5.5").unwrap();
-        assert_eq!(alias["hidden"], json!(true));
+        assert!(!slugs.contains(&"gpt-5.5"));
         let routed = models
             .iter()
             .find(|m| m["slug"] == "osirapi-openai/gpt-5.5")
