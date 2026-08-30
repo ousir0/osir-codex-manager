@@ -116,7 +116,8 @@ fn planned_update(
             if provider == target_provider {
                 let route = bare_to_full
                     .get(current_model)
-                    .and_then(|routes| preferred_route(routes, default_route))?;
+                    .and_then(|routes| preferred_route(routes, default_route))
+                    .unwrap_or(default_route);
                 return Some(ThreadUpdate {
                     id,
                     provider: target_provider.to_string(),
@@ -127,16 +128,18 @@ fn planned_update(
                 return None;
             }
             let route = if current_model.is_empty() {
-                Some(default_route)
+                default_route.to_string()
             } else {
                 bare_to_full
                     .get(current_model)
                     .and_then(|routes| preferred_route(routes, default_route))
-            }?;
+                    .unwrap_or(default_route)
+                    .to_string()
+            };
             Some(ThreadUpdate {
                 id,
                 provider: target_provider.to_string(),
-                model: Some(route.to_string()),
+                model: Some(route),
             })
         }
     }
@@ -311,14 +314,14 @@ mod tests {
         connection.execute("INSERT INTO threads VALUES ('c','other','osirapi-claude/claude-opus-5')", []).unwrap();
         drop(connection);
 
-        assert_eq!(migrate_at(&database, &backup, SessionTarget::OpenCodex { provider: "opencodex", default_provider: "osir", default_route: "osirapi-openai/gpt-5.6-sol" }, &routes()).unwrap(), 2);
+        assert_eq!(migrate_at(&database, &backup, SessionTarget::OpenCodex { provider: "opencodex", default_provider: "osir", default_route: "osirapi-openai/gpt-5.6-sol" }, &routes()).unwrap(), 3);
         let connection = Connection::open(&database).unwrap();
         let values = connection.prepare("SELECT id, model_provider, model FROM threads ORDER BY id").unwrap()
             .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))).unwrap()
             .collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(values, vec![
             ("a".into(), "opencodex".into(), "osirapi-openai/gpt-5.6-sol".into()),
-            ("b".into(), "osir".into(), "unknown".into()),
+            ("b".into(), "opencodex".into(), "osirapi-openai/gpt-5.6-sol".into()),
             ("c".into(), "opencodex".into(), "osirapi-claude/claude-opus-5".into()),
         ]);
         drop(connection);

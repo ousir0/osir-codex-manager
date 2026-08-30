@@ -64,6 +64,7 @@ pub struct CodexConfigReport {
     pub image_generation_api_key_configured: bool,
     pub image_generation_model: String,
     pub image_generation_base_url: String,
+    pub active_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -543,6 +544,17 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
             String::new(),
         ),
     };
+    let active_mode = if parse_error.is_some() {
+        "unavailable".to_string()
+    } else if provider == "opencodex"
+        || crate::app::opencodex::status()
+        .map(|status| status.enabled)
+        .unwrap_or(false)
+    {
+        "opencodex".to_string()
+    } else {
+        "default".to_string()
+    };
     Ok(CodexConfigReport {
         path: path.display().to_string(),
         auth_path: auth_path.display().to_string(),
@@ -569,6 +581,7 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         image_generation_api_key_configured: image_api_key_configured,
         image_generation_model: image_model,
         image_generation_base_url: image_base_url,
+        active_mode,
     })
 }
 

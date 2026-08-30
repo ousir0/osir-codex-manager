@@ -51,6 +51,14 @@ const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
 const ROUTE_CHECK_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
 static MANAGER_UPDATE_RECONCILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+static CONFIG_SWITCH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn config_switch_lock() -> Result<std::sync::MutexGuard<'static, ()>, AppError> {
+    CONFIG_SWITCH_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| AppError::Internal("配置切换锁状态损坏".to_string()))
+}
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -197,10 +205,52 @@ fn model_display_name(model: &str) -> String {
     result
 }
 
+fn provider_display_name(provider_id: &str, base_url: &str, fallback: &str) -> String {
+    let normalized_id = provider_id.trim().to_ascii_lowercase();
+    let normalized_url = base_url.trim().to_ascii_lowercase();
+    if normalized_id.starts_with("osirapi-")
+        || normalized_id.starts_with("osir-")
+        || normalized_url.contains("osirclaw.com")
+    {
+        return "osir".to_string();
+    }
+    let fallback = fallback.trim();
+    if fallback.is_empty() {
+        provider_id.trim().to_string()
+    } else {
+        fallback.to_string()
+    }
+}
+
+fn model_display_name_for_route(provider_id: &str, base_url: &str, label: &str, model: &str) -> String {
+    let model_name = model_display_name(model);
+    let provider = provider_display_name(provider_id, base_url, label);
+    if provider.is_empty() {
+        model_name
+    } else {
+        format!("{model_name} · {provider}")
+    }
+}
+
 fn normalize_saved_model_display_names(
     config: &mut JsonMap<String, JsonValue>,
     managed_provider_ids: &BTreeSet<String>,
 ) -> bool {
+    let provider_names = config
+        .get("providers")
+        .and_then(JsonValue::as_object)
+        .map(|providers| {
+            providers
+                .iter()
+                .filter_map(|(id, provider)| {
+                    let provider = provider.as_object()?;
+                    let label = provider.get("label").and_then(JsonValue::as_str).unwrap_or(id);
+                    let base_url = provider.get("baseUrl").and_then(JsonValue::as_str).unwrap_or_default();
+                    Some((id.clone(), provider_display_name(id, base_url, label)))
+                })
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
     let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) else {
         return false;
     };
@@ -215,7 +265,8 @@ fn normalize_saved_model_display_names(
         let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else {
             continue;
         };
-        let expected = model_display_name(model_id);
+        let provider_name = provider_names.get(provider).map(String::as_str).unwrap_or(provider);
+        let expected = format!("{} · {}", model_display_name(model_id), provider_name);
         if entry.get("displayName").and_then(JsonValue::as_str) != Some(expected.as_str()) {
             if let Some(object) = entry.as_object_mut() {
                 object.insert("displayName".to_string(), JsonValue::String(expected));
@@ -564,14 +615,27 @@ pub struct OpenCodexSubscriptionSummary {
 pub struct OpenCodexRoute {
     pub id: String,
     pub label: String,
+    pub provider_name: String,
     pub adapter: String,
     pub base_url: String,
     pub default_model: String,
     pub models: Vec<String>,
+    pub model_capabilities: Vec<OpenCodexModelCapability>,
     pub enabled: bool,
     pub api_key_configured: bool,
     pub availability: String,
     pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenCodexModelCapability {
+    pub model_id: String,
+    pub display_name: String,
+    pub provider_name: String,
+    pub supported_reasoning_efforts: Vec<String>,
+    pub default_reasoning_effort: Option<String>,
+    pub reasoning_supported: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -902,6 +966,7 @@ fn preserve_codex_config_before_takeover(
 /// Leave OpenCodex installed, but release ownership of Codex's active provider.
 /// This is used whenever the user switches back to single-provider mode.
 pub fn disable_for_single_provider() -> Result<(), AppError> {
+    let _switch_lock = config_switch_lock()?;
     let paths = integration_paths()?;
     let mut state = load_state(&paths.state);
     let takeover_active = state.enabled || codex_proxy_provider_is_loopback(&paths.codex_config);
@@ -1652,6 +1717,16 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
     loop {
         match listener.accept() {
             Ok((mut stream, _)) => {
+                // TcpListener is intentionally non-blocking so the callback
+                // loop can enforce its deadline. Accepted sockets inherit
+                // that mode on some platforms, so make the request read
+                // blocking with a bounded timeout before consuming bytes.
+                stream
+                    .set_nonblocking(false)
+                    .map_err(|error| AppError::Engine(format!("设置 OAuth 回调连接失败：{error}")))?;
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(8)))
+                    .map_err(|error| AppError::Engine(format!("设置 OAuth 回调读取超时失败：{error}")))?;
                 let mut buffer = [0u8; 8192];
                 let size = stream
                     .read(&mut buffer)
@@ -2300,6 +2375,17 @@ fn route_from_config(
     route_health: &BTreeMap<String, String>,
 ) -> Option<OpenCodexRoute> {
     let provider = config.get("providers")?.as_object()?.get(id)?.as_object()?;
+    let label = provider
+        .get("label")
+        .and_then(JsonValue::as_str)
+        .unwrap_or(id)
+        .to_string();
+    let base_url = provider
+        .get("baseUrl")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let provider_name = provider_display_name(id, &base_url, &label);
     // `customModels` is the normal synced representation, but a provider
     // added or authorized directly inside OpenCodex can be visible in the
     // provider config before the next catalog sync. Read its authoritative
@@ -2321,6 +2407,49 @@ fn route_from_config(
     }
     models.sort();
     models.dedup();
+    let model_capabilities = models
+        .iter()
+        .map(|model_id| {
+            let catalog_entry = catalog_models.iter().find(|entry| {
+                (entry.get("provider").and_then(JsonValue::as_str) == Some(id)
+                    && entry.get("modelId").and_then(JsonValue::as_str) == Some(model_id.as_str()))
+                    || entry
+                        .get("slug")
+                        .and_then(JsonValue::as_str)
+                        .is_some_and(|slug| slug == format!("{id}/{model_id}"))
+            });
+            let supported = catalog_entry
+                .and_then(|entry| entry.get("supported_reasoning_levels").or_else(|| entry.get("reasoningEfforts")))
+                .and_then(JsonValue::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|level| {
+                    level
+                        .get("effort")
+                        .and_then(JsonValue::as_str)
+                        .or_else(|| level.as_str())
+                })
+                .map(str::to_ascii_lowercase)
+                .collect::<Vec<_>>();
+            let default_effort = catalog_entry
+                .and_then(|entry| {
+                    entry
+                        .get("default_reasoning_effort")
+                        .or_else(|| entry.get("defaultReasoningEffort"))
+                        .and_then(JsonValue::as_str)
+                })
+                .map(str::to_ascii_lowercase)
+                .filter(|effort| supported.iter().any(|item| item == effort));
+            OpenCodexModelCapability {
+                model_id: model_id.clone(),
+                display_name: model_display_name_for_route(id, &base_url, &label, model_id),
+                provider_name: provider_name.clone(),
+                supported_reasoning_efforts: supported.clone(),
+                default_reasoning_effort: default_effort,
+                reasoning_supported: !supported.is_empty(),
+            }
+        })
+        .collect::<Vec<_>>();
     let api_key_configured = provider
         .get("apiKey")
         .and_then(JsonValue::as_str)
@@ -2331,27 +2460,21 @@ fn route_from_config(
             .is_some_and(|mode| !matches!(mode.to_ascii_lowercase().as_str(), "" | "key" | "none"));
     Some(OpenCodexRoute {
         id: id.to_string(),
-        label: provider
-            .get("label")
-            .and_then(JsonValue::as_str)
-            .unwrap_or(id)
-            .to_string(),
+        label,
+        provider_name,
         adapter: provider
             .get("adapter")
             .and_then(JsonValue::as_str)
             .unwrap_or("openai-responses")
             .to_string(),
-        base_url: provider
-            .get("baseUrl")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default()
-            .to_string(),
+        base_url,
         default_model: provider
             .get("defaultModel")
             .and_then(JsonValue::as_str)
             .unwrap_or_default()
             .to_string(),
         models,
+        model_capabilities,
         enabled: provider.get("disabled").and_then(JsonValue::as_bool) != Some(true),
         api_key_configured,
         availability: if provider.get("disabled").and_then(JsonValue::as_bool) == Some(true) {
@@ -2494,6 +2617,13 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         .and_then(JsonValue::as_array)
         .cloned()
         .unwrap_or_default();
+    let catalog_models = fs::read(&paths.catalog)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<JsonValue>(&raw).ok())
+        .and_then(|value| value.get("models").and_then(JsonValue::as_array).cloned())
+        .unwrap_or_default();
+    let mut model_metadata = models.clone();
+    model_metadata.extend(catalog_models);
     let discovered_provider_ids = inferred_managed_provider_ids(&config, &models);
     let display_provider_ids = state
         .managed_provider_ids
@@ -2503,7 +2633,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         .collect::<BTreeSet<_>>();
     let routes = display_provider_ids
         .iter()
-        .filter_map(|id| route_from_config(id, &config, &models, state.locked_route.as_deref(), &state.route_health))
+        .filter_map(|id| route_from_config(id, &config, &model_metadata, state.locked_route.as_deref(), &state.route_health))
         .collect::<Vec<_>>();
     let port = config
         .get("port")
@@ -2581,6 +2711,13 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
     // Repair legacy model ids as part of every status read while OpenCodex
     // owns Codex, so an upgrade self-heals without another mode toggle.
     let state = effective_state(&paths)?;
+    if state.enabled {
+        let mut config = load_config(&paths.opencodex_config)?;
+        let managed_provider_ids = state.managed_provider_ids.iter().cloned().collect::<BTreeSet<_>>();
+        if normalize_saved_model_display_names(&mut config, &managed_provider_ids) {
+            write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
+        }
+    }
     if state.enabled && paths.catalog.is_file() {
         let config = load_config(&paths.opencodex_config)?;
         let models = config
@@ -2600,6 +2737,7 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
             sync_codex_model_cache(false)?;
         }
     }
+    let _ = normalize_saved_model_capabilities(&paths);
     status_at(&paths)
 }
 
@@ -2667,6 +2805,24 @@ fn build_opencodex_config(
     prior_managed: &[String],
     port: u16,
 ) -> Result<JsonValue, AppError> {
+    let existing_model_metadata = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let provider = entry.get("provider").and_then(JsonValue::as_str)?;
+            let model = entry.get("modelId").and_then(JsonValue::as_str)?;
+            let mut metadata = JsonMap::new();
+            if let Some(efforts) = entry.get("reasoningEfforts").and_then(JsonValue::as_array) {
+                metadata.insert("reasoningEfforts".to_string(), JsonValue::Array(efforts.clone()));
+            }
+            if let Some(default) = entry.get("defaultReasoningEffort").and_then(JsonValue::as_str) {
+                metadata.insert("defaultReasoningEffort".to_string(), JsonValue::String(default.to_string()));
+            }
+            Some((format!("{provider}/{model}"), JsonValue::Object(metadata)))
+        })
+        .collect::<BTreeMap<_, _>>();
     {
         let providers = config
             .entry("providers")
@@ -2714,16 +2870,28 @@ fn build_opencodex_config(
         });
         for route in routes {
             for model in &route.models {
-                models.push(json!({
+                let mut entry = json!({
                     "id": Uuid::new_v4().to_string(),
                     "provider": route.id,
                     "modelId": model,
-                    "displayName": model_display_name(model),
+                    "displayName": model_display_name_for_route(&route.id, &route.base_url, &route.label, model),
                     "contextWindow": 200000,
                     "inputModalities": ["text", "image"],
-                    "reasoningEfforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
-                    "defaultReasoningEffort": "high",
-                }));
+                    "reasoningEfforts": [],
+                });
+                if let Some(metadata) = existing_model_metadata.get(&format!("{}/{}", route.id, model)).and_then(JsonValue::as_object) {
+                    if let Some(efforts) = metadata.get("reasoningEfforts").filter(|value| value.as_array().is_some_and(|items| !items.is_empty())) {
+                        entry["reasoningEfforts"] = efforts.clone();
+                    } else {
+                        entry.as_object_mut().map(|object| object.remove("reasoningEfforts"));
+                    }
+                    if let Some(default) = metadata.get("defaultReasoningEffort") {
+                        entry["defaultReasoningEffort"] = default.clone();
+                    }
+                } else {
+                    entry.as_object_mut().map(|object| object.remove("reasoningEfforts"));
+                }
+                models.push(entry);
             }
         }
     }
@@ -2945,10 +3113,31 @@ fn normalize_synced_catalog(
                 .any(|route| route.id == provider && route.models.iter().any(|model| model == model_id))
             {
                 if let Some(object) = model.as_object_mut() {
-                    let expected = model_display_name(model_id);
+                    let route = routes.iter().find(|route| route.id == provider);
+                    let expected = route
+                        .map(|route| model_display_name_for_route(&route.id, &route.base_url, &route.label, model_id))
+                        .unwrap_or_else(|| model_display_name(model_id));
                     if object.get("display_name").and_then(JsonValue::as_str) != Some(expected.as_str()) {
                         object.insert("display_name".to_string(), JsonValue::String(expected));
                         changed = true;
+                    }
+                    let supported = object
+                        .get("supported_reasoning_levels")
+                        .and_then(JsonValue::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|level| level.get("effort").and_then(JsonValue::as_str))
+                        .map(str::to_ascii_lowercase)
+                        .collect::<BTreeSet<_>>();
+                    if let Some(default) = object
+                        .get("default_reasoning_effort")
+                        .and_then(JsonValue::as_str)
+                        .map(str::to_ascii_lowercase)
+                    {
+                        if !supported.contains(&default) {
+                            object.remove("default_reasoning_effort");
+                            changed = true;
+                        }
                     }
                 }
             }
@@ -2995,6 +3184,67 @@ fn normalize_synced_catalog(
             .map_err(|error| AppError::Internal(format!("序列化 OpenCodex 模型目录失败：{error}")))?;
         atomic_file::write_atomic(path, &bytes)
             .map_err(|error| AppError::Internal(format!("保存 OpenCodex 模型目录失败：{error}")))?;
+    }
+    Ok(changed)
+}
+
+fn normalize_saved_model_capabilities(paths: &IntegrationPaths) -> Result<bool, AppError> {
+    let catalog_models = fs::read(&paths.catalog)
+        .ok()
+        .and_then(|raw| serde_json::from_slice::<JsonValue>(&raw).ok())
+        .and_then(|value| value.get("models").and_then(JsonValue::as_array).cloned())
+        .unwrap_or_default();
+    if catalog_models.is_empty() {
+        return Ok(false);
+    }
+    let mut config = load_config(&paths.opencodex_config)?;
+    let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) else {
+        return Ok(false);
+    };
+    let mut changed = false;
+    for entry in models {
+        let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else { continue };
+        let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else { continue };
+        let Some(catalog_entry) = catalog_models.iter().find(|candidate| {
+            candidate
+                .get("slug")
+                .and_then(JsonValue::as_str)
+                .is_some_and(|slug| slug == format!("{provider}/{model_id}"))
+        }) else { continue };
+        let supported = catalog_entry
+            .get("supported_reasoning_levels")
+            .and_then(JsonValue::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|level| level.get("effort").and_then(JsonValue::as_str))
+            .map(str::to_ascii_lowercase)
+            .collect::<Vec<_>>();
+        let Some(object) = entry.as_object_mut() else { continue };
+        if !supported.is_empty() {
+            if object.get("reasoningEfforts") != Some(&json!(supported)) {
+                object.insert("reasoningEfforts".to_string(), json!(supported.clone()));
+                changed = true;
+            }
+            let default = catalog_entry
+                .get("default_reasoning_effort")
+                .and_then(JsonValue::as_str)
+                .map(str::to_ascii_lowercase)
+                .filter(|effort| supported.iter().any(|item| item == effort));
+            match default {
+                Some(default) if object.get("defaultReasoningEffort").and_then(JsonValue::as_str) != Some(default.as_str()) => {
+                    object.insert("defaultReasoningEffort".to_string(), JsonValue::String(default));
+                    changed = true;
+                }
+                None if object.remove("defaultReasoningEffort").is_some() => changed = true,
+                _ => {}
+            }
+        } else {
+            if object.remove("reasoningEfforts").is_some() { changed = true; }
+            if object.remove("defaultReasoningEffort").is_some() { changed = true; }
+        }
+    }
+    if changed {
+        write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
     }
     Ok(changed)
 }
@@ -3126,6 +3376,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     let previous_codex_config = fs::read(&paths.codex_config).ok();
     let previous_catalog = fs::read(&paths.catalog).ok();
     let previous_state = prior.clone();
+    let default_provider = config_provider(&default_codex_config_bytes(&paths)?)?;
     let config = load_config(&paths.opencodex_config)?;
     let candidate = build_opencodex_config(config, &routes, &prior.managed_provider_ids, input.port)?;
     validate_candidate(&paths.opencodex_config, &candidate)?;
@@ -3199,13 +3450,23 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         );
         return Err(error);
     }
+    if let Err(error) = normalize_saved_model_capabilities(&paths) {
+        rollback_reloaded_save(
+            &paths,
+            previous_config.as_deref(),
+            previous_codex_config.as_deref(),
+            previous_catalog.as_deref(),
+            &previous_state,
+        );
+        return Err(error);
+    }
     if codex_was_running {
         mark_codex_restart_required_at(&paths)?;
     }
     let enabled_state = ManagedState {
         enabled: true,
         port: input.port,
-        codex_provider_id: provider_id,
+        codex_provider_id: provider_id.clone(),
         managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
         locked_route: None,
         route_health: BTreeMap::new(),
@@ -3215,8 +3476,25 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     write_json(
         &paths.state,
         &serde_json::to_value(enabled_state)
-            .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
+        .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
     )?;
+    if let Err(error) = codex_sessions::migrate(
+        codex_sessions::SessionTarget::OpenCodex {
+            provider: &provider_id,
+            default_provider: &default_provider,
+            default_route: &default_route,
+        },
+        &session_routes(&routes),
+    ) {
+        rollback_reloaded_save(
+            &paths,
+            previous_config.as_deref(),
+            previous_codex_config.as_deref(),
+            previous_catalog.as_deref(),
+            &previous_state,
+        );
+        return Err(error);
+    }
     status_at(&paths)
 }
 
@@ -3241,6 +3519,7 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
 /// Activate the last saved OpenCodex routes without asking the user to enter
 /// them again. This is the explicit mode switch from the default config.
 pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     if ocx_program().is_none() {
         return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
     }
@@ -3599,7 +3878,7 @@ mod tests {
             json!(["gemini-3.7-flash"])
         );
         assert_eq!(config["customModels"].as_array().unwrap().len(), 1);
-        assert_eq!(config["customModels"][0]["displayName"], json!("Gemini 3.7 Flash"));
+        assert_eq!(config["customModels"][0]["displayName"], json!("Gemini 3.7 Flash · osir"));
     }
 
     #[test]
@@ -3758,7 +4037,7 @@ mod tests {
             .iter()
             .find(|model| model["provider"] == "osir-gpt")
             .unwrap();
-        assert_eq!(generated["displayName"], json!("GPT-5.6 Sol"));
+        assert_eq!(generated["displayName"], json!("GPT-5.6 Sol · osir"));
     }
 
     #[test]
@@ -3923,8 +4202,33 @@ mod tests {
             .iter()
             .find(|m| m["slug"] == "osirapi-openai/gpt-5.5")
             .unwrap();
-        assert_eq!(routed["display_name"], json!("GPT-5.5"));
+        assert_eq!(routed["display_name"], json!("GPT-5.5 · osir"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn exposes_provider_names_and_only_supported_reasoning_efforts() {
+        let config = JsonMap::from_iter([(
+            "providers".to_string(),
+            json!({
+                "osirapi-openai": {
+                    "label": "GPT",
+                    "baseUrl": "https://api.osirclaw.com/v1",
+                    "defaultModel": "gpt-5.5",
+                    "models": ["gpt-5.5"]
+                }
+            }),
+        )]);
+        let catalog = vec![json!({
+            "slug": "osirapi-openai/gpt-5.5",
+            "supported_reasoning_levels": [{"effort": "high"}],
+            "default_reasoning_effort": "medium"
+        })];
+        let route = route_from_config("osirapi-openai", &config, &catalog, None, &BTreeMap::new()).unwrap();
+        assert_eq!(route.provider_name, "osir");
+        assert_eq!(route.model_capabilities[0].display_name, "GPT-5.5 · osir");
+        assert_eq!(route.model_capabilities[0].supported_reasoning_efforts, vec!["high"]);
+        assert_eq!(route.model_capabilities[0].default_reasoning_effort, None);
     }
 
     #[test]

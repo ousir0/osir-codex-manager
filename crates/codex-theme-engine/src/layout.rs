@@ -19,14 +19,26 @@ const TICK: Duration = Duration::from_millis(900);
 pub const MODEL_PICKER_LAYOUT_FIX_EXPRESSION: &str = r##"(() => {
   const id = 'codex-manager-model-picker-layout-fix';
   const css = [
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([cmdk-item]),',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([cmdk-item]),',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([role="menuitem"]),',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([role="menuitem"]),',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([role="option"]),',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([role="option"]) {',
+    '  height: fit-content !important;',
+    '  max-height: min(66.666vh, 640px) !important;',
+    '  overflow-y: auto !important;',
+    '}',
     '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([cmdk-item]) [cmdk-item],',
-    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([role="menuitem"]) [role="menuitem"],',
     '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([cmdk-item]) [cmdk-item],',
-    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([role="menuitem"]) [role="menuitem"] {',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([role="menuitem"]) [role="menuitem"],',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([role="menuitem"]) [role="menuitem"],',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class~="w-[280px]"]:has([role="option"]) [role="option"],',
+    '[data-codex-window-type="electron"] body:has([data-codex-intelligence-trigger]) [class*="w-[280px]"]:has([role="option"]) [role="option"] {',
     '  flex: 0 0 auto !important;',
     '  flex-shrink: 0 !important;',
     '  min-height: var(--menu-item-height, 36px) !important;',
-    '}'
+    '}',
   ].join('\n');
   let style = document.getElementById(id);
   if (!(style instanceof HTMLStyleElement)) {
@@ -169,6 +181,11 @@ mod tests {
         assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("w-[280px]"));
         assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("data-codex-intelligence-trigger"));
         assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("flex-shrink: 0"));
+        assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("height: fit-content"));
+        assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("66.666vh"));
+        assert!(MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("var(--menu-item-height, 36px)"));
+        assert!(!MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("width: min(360px"));
+        assert!(!MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("display: flex"));
         assert!(
             MODEL_PICKER_LAYOUT_FIX_EXPRESSION.contains("codex-manager-model-picker-layout-fix")
         );

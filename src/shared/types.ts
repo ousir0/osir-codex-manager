@@ -709,6 +709,7 @@ export interface CodexConfigReport {
   imageGenerationApiKeyConfigured?: boolean;
   imageGenerationModel?: string;
   imageGenerationBaseUrl?: string;
+  activeMode?: "default" | "opencodex" | "unavailable";
   openCodex?: OpenCodexStatus;
 }
 
@@ -717,14 +718,25 @@ export type OpenCodexServiceState = "missing" | "stopped" | "starting" | "ready"
 export interface OpenCodexRoute {
   id: string;
   label: string;
+  providerName?: string;
   adapter: string;
   baseUrl: string;
   defaultModel: string;
   models: string[];
+  modelCapabilities?: OpenCodexModelCapability[];
   enabled: boolean;
   apiKeyConfigured: boolean;
   availability: "configured" | "verified" | "degraded" | "offline" | "unknown";
   locked: boolean;
+}
+
+export interface OpenCodexModelCapability {
+  modelId: string;
+  displayName: string;
+  providerName: string;
+  supportedReasoningEfforts: string[];
+  defaultReasoningEffort?: string | null;
+  reasoningSupported: boolean;
 }
 
 export interface OpenCodexRouteCheck {

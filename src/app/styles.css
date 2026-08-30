@@ -6013,8 +6013,8 @@ button.config-resource-row:hover {
 }
 .multi-model-model-list {
   display: grid;
-  gap: 5px;
-  max-height: 220px;
+  gap: 3px;
+  max-height: min(66.666vh, 640px);
   overflow: auto;
   padding-right: 2px;
 }
@@ -6023,8 +6023,8 @@ button.config-resource-row:hover {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 32px;
-  padding: 6px 8px;
+  min-height: 30px;
+  padding: 5px 8px;
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--surface-2);

@@ -151,18 +151,19 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     setImageApiKey("");
     setShowApiKey(false);
     setSelectedProviderId(next.provider && next.provider !== "opencodex" ? next.provider : (next.providers[0]?.id || ""));
-    if (next.provider === "opencodex" || next.openCodex?.enabled) setConnectionView("multi");
   }, []);
 
   const load = useCallback(async () => {
     setBusy("load");
     setError(null);
     try {
-      applyReport(await managerApi.codexConfigGet());
-      try {
-        const nextOpenCodex = await managerApi.openCodexStatus();
-        setOpenCodex(nextOpenCodex);
-        setRestartRequired(Boolean(nextOpenCodex.requiresCodexRestart));
+        const nextReport = await managerApi.codexConfigGet();
+        applyReport(nextReport);
+        try {
+          const nextOpenCodex = await managerApi.openCodexStatus();
+          setOpenCodex(nextOpenCodex);
+          setConnectionView(nextReport.activeMode === "opencodex" || nextReport.provider === "opencodex" || nextOpenCodex.enabled ? "multi" : "single");
+          setRestartRequired(Boolean(nextOpenCodex.requiresCodexRestart));
       } catch { /* OpenCodex may not exist yet. */ }
     } catch (cause) {
       setError(errorMessage(cause));
@@ -174,9 +175,8 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
-    if (openCodex?.enabled) setConnectionView("multi");
     if (openCodex?.requiresCodexRestart) setRestartRequired(true);
-  }, [openCodex?.enabled, openCodex?.requiresCodexRestart]);
+  }, [openCodex?.requiresCodexRestart]);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
@@ -189,6 +189,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     try {
       const next = await action();
       applyReport(next);
+      if (next.codexRunning) setRestartRequired(true);
       setNotice(success);
       return next;
     } catch (cause) {
@@ -211,7 +212,19 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
       setRestartRequired(next.codexRunning);
       setNotice(report?.codexRunning ? copy.savedRunning : copy.defaultModeHint);
     } catch (cause) {
-      setError(errorMessage(cause));
+      const message = errorMessage(cause);
+      setError(message);
+      try {
+        const current = await managerApi.codexConfigGet();
+        applyReport(current);
+        if (current.activeMode === "opencodex" || current.provider === "opencodex") {
+          setConnectionView("multi");
+          setNotice("默认配置未切换，OpenCodex 多模型仍在生效。");
+        }
+      } catch {
+        // Keep the original transition error when the follow-up status read
+        // is unavailable.
+      }
     } finally {
       setBusy(null);
     }
@@ -305,9 +318,19 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
   const locked = Boolean(busy);
   const modelsReady = modelsBaseUrl === basic.baseUrl && models.length > 0;
   const dangerousCombination = basic.approvalPolicy === "never" && basic.sandboxMode === "danger-full-access";
-  const multiActive = Boolean(report?.provider === "opencodex" || report?.openCodex?.enabled || openCodex?.enabled);
-  const singleReady = Boolean(!multiActive && report?.model && report.apiKeyConfigured);
-  const effectiveMode = multiActive ? "multi" : singleReady ? "single" : "none";
+  const backendMode = report?.activeMode;
+  const multiActive = Boolean(backendMode === "opencodex" || report?.provider === "opencodex" || report?.openCodex?.enabled || openCodex?.enabled);
+  const singleReady = Boolean((backendMode === "default" || (!backendMode && !multiActive)) && report?.model && report.apiKeyConfigured);
+  const effectiveMode = backendMode === "unavailable" ? "none" : multiActive ? "multi" : singleReady ? "single" : "none";
+  const activeModel = effectiveMode === "multi"
+    ? openCodex?.routes.find((route) => route.locked)?.defaultModel || report?.model || ""
+    : report?.model || "";
+  const activeModelCapability = openCodex?.routes
+    .flatMap((route) => route.modelCapabilities || [])
+    .find((model) => model.modelId === activeModel);
+  const reasoningEfforts = effectiveMode === "multi"
+    ? activeModelCapability?.supportedReasoningEfforts || []
+    : ["minimal", "low", "medium", "high", "xhigh"];
   const modeLabel = effectiveMode === "multi" ? copy.multiMode : effectiveMode === "single" ? copy.singleMode : copy.notConfigured;
   const statusTone = report?.parseError ? "error" : effectiveMode === "none" ? "neutral" : "ok";
   const statusLabel = report?.parseError ? copy.connectionError : effectiveMode === "none" ? copy.notConfigured : copy.available;
@@ -329,7 +352,14 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     setModelsBaseUrl(null);
     setDialog("provider");
   };
-  const openBehavior = () => { setDialogBaseline((current) => ({ ...current, behavior: basic })); setDialog("behavior"); };
+  const openBehavior = () => {
+    if (multiActive) {
+      setNotice("OpenCodex 模式下，推理强度由当前模型目录决定；请在 Codex 模型选择器中调整。");
+      return;
+    }
+    setDialogBaseline((current) => ({ ...current, behavior: basic }));
+    setDialog("behavior");
+  };
   const openCredential = () => { setApiKey(""); setShowApiKey(false); setDialog("credential"); };
   const openImage = () => {
     const model = report?.imageGenerationModel || "gpt-image-2";
@@ -464,7 +494,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                   {connectionView === "multi" && effectiveMode !== "multi" && openCodex?.routes.length ? <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: "switch-multi" })}><Icon name={busy === "mode" ? "loader" : "grid"} />{copy.enableMulti}</button> : null}
                   {restartRequired ? <><span className="config-restart-hint"><Icon name="info" />{copy.restartHint}</span><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void restartCodex()}><Icon name={busy === "restart" ? "loader" : "refresh"} />{copy.restartCodex}</button></> : null}
                 </div>
-                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={(next) => { setOpenCodex(next); if (next.requiresCodexRestart) setRestartRequired(true); }} />}
+                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={(next) => { setOpenCodex(next); if (next.requiresCodexRestart) setRestartRequired(true); if (next.enabled) void managerApi.codexConfigGet().then(applyReport).catch(() => undefined); }} />}
               </section>
             ) : null}
             {module === "behavior" ? <BehaviorView report={report} copy={copy} onEdit={openBehavior} /> : null}
@@ -476,7 +506,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
       </div>
       {confirm === null ? <>
         <ProviderDialog open={dialog === "provider"} copy={copy} report={report} providers={providerProfiles} basic={basic} setBasic={setBasic} step={providerStep} setStep={setProviderStep} apiKey={providerApiKey} setApiKey={setProviderApiKey} models={models} modelsReady={modelsReady} busy={busy} locked={locked} onFetch={fetchModels} onSave={saveProvider} onDismiss={requestDialogDismiss} />
-        <BehaviorDialog open={dialog === "behavior"} copy={copy} basic={basic} setBasic={setBasic} dirty={behaviorDirty} dangerous={dangerousCombination} locked={locked} busy={busy} onSave={saveBehavior} onDismiss={requestDialogDismiss} />
+        <BehaviorDialog open={dialog === "behavior"} copy={copy} basic={basic} setBasic={setBasic} reasoningEfforts={reasoningEfforts} dirty={behaviorDirty} dangerous={dangerousCombination} locked={locked} busy={busy} onSave={saveBehavior} onDismiss={requestDialogDismiss} />
         <CredentialDialog open={dialog === "credential"} copy={copy} configured={Boolean(report?.apiKeyConfigured)} apiKey={apiKey} setApiKey={setApiKey} show={showApiKey} setShow={setShowApiKey} dirty={credentialDirty} locked={locked} busy={busy} onSave={saveCredential} onDelete={() => { setDialog(null); setConfirm({ kind: "delete-api-key" }); }} onDismiss={requestDialogDismiss} />
         <ImageDialog open={dialog === "image"} copy={copy} report={report} apiKey={imageApiKey} setApiKey={setImageApiKey} model={imageModel} setModel={setImageModel} baseUrl={imageBaseUrl} setBaseUrl={setImageBaseUrl} models={imageModels} locked={locked} busy={busy} onFetch={fetchImageModels} onSave={saveImage} onDelete={() => { setDialog(null); setConfirm({ kind: "delete-image-api-key" }); }} onDismiss={requestDialogDismiss} />
         <McpDialog open={dialog === "mcp"} copy={copy} draft={draft} setDraft={setDraft} original={report?.mcpServers.find((server) => server.name === draft?.originalName)} dirty={mcpDirty} locked={locked} busy={busy} onSave={saveMcp} onDismiss={requestDialogDismiss} />
@@ -547,8 +577,8 @@ function ProviderDialog({ open, copy, report, providers, basic, setBasic, step, 
   </ConfigDialog>;
 }
 
-function BehaviorDialog({ open, copy, basic, setBasic, dirty, dangerous, locked, busy, onSave, onDismiss }: { open: boolean; copy: Copy; basic: CodexBasicConfigInput; setBasic: (value: CodexBasicConfigInput) => void; dirty: boolean; dangerous: boolean; locked: boolean; busy: string | null; onSave: () => void; onDismiss: () => void }) {
-  return <ConfigDialog open={open} eyebrow={copy.behaviorSummary} title={copy.editBehavior} titleId="config-behavior-dialog-title" onDismiss={onDismiss} wide actions={<><button className="btn ghost" type="button" onClick={onDismiss}>{copy.cancel}</button><button className="btn primary" type="button" disabled={locked || !dirty} onClick={onSave}><Icon name={busy === "behavior" ? "loader" : "check"} />{copy.saveBehavior}</button></>}><div className="config-dialog-form two-columns"><label className="config-field"><span>{copy.reasoning}</span><select className="input config-select" value={basic.reasoningEffort} onChange={(event) => setBasic({ ...basic, reasoningEffort: event.target.value })}><option value="">{copy.automatic}</option><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">XHigh</option></select></label><label className="config-field"><span>{copy.personality}</span><select className="input config-select" value={basic.personality} onChange={(event) => setBasic({ ...basic, personality: event.target.value })}><option value="">{copy.automatic}</option><option value="none">none</option><option value="friendly">friendly</option><option value="pragmatic">pragmatic</option></select></label><label className="config-field"><span>{copy.approvalPolicy}</span><select className="input config-select mono" value={basic.approvalPolicy} onChange={(event) => setBasic({ ...basic, approvalPolicy: event.target.value })}><option value="">{copy.automatic}</option><option value="untrusted">untrusted</option><option value="on-request">on-request</option><option value="never">never</option></select></label><label className="config-field"><span>{copy.sandboxMode}</span><select className="input config-select mono" value={basic.sandboxMode} onChange={(event) => setBasic({ ...basic, sandboxMode: event.target.value })}><option value="">{copy.automatic}</option><option value="read-only">read-only</option><option value="workspace-write">workspace-write</option><option value="danger-full-access">danger-full-access</option></select></label></div><div className="config-dialog-switches"><div><span>{copy.goalMode}</span><Toggle checked={basic.goalMode} ariaLabel={copy.goalMode} onChange={(goalMode) => setBasic({ ...basic, goalMode })} /></div><div><span>{copy.disableResponseStorage}</span><Toggle checked={basic.disableResponseStorage} ariaLabel={copy.disableResponseStorage} onChange={(disableResponseStorage) => setBasic({ ...basic, disableResponseStorage })} /></div><div><span><strong>{copy.imageGenerationCompatibility}</strong><small>{copy.imageGenerationCompatibilityHint}</small></span><Toggle checked={basic.imageGenerationCompatibility} ariaLabel={copy.imageGenerationCompatibility} onChange={(imageGenerationCompatibility) => setBasic({ ...basic, imageGenerationCompatibility })} /></div></div>{dangerous ? <div className="config-danger-note" role="alert"><Icon name="alert" /><span>{copy.dangerousCombination}</span></div> : null}</ConfigDialog>;
+function BehaviorDialog({ open, copy, basic, setBasic, reasoningEfforts, dirty, dangerous, locked, busy, onSave, onDismiss }: { open: boolean; copy: Copy; basic: CodexBasicConfigInput; setBasic: (value: CodexBasicConfigInput) => void; reasoningEfforts: string[]; dirty: boolean; dangerous: boolean; locked: boolean; busy: string | null; onSave: () => void; onDismiss: () => void }) {
+  return <ConfigDialog open={open} eyebrow={copy.behaviorSummary} title={copy.editBehavior} titleId="config-behavior-dialog-title" onDismiss={onDismiss} wide actions={<><button className="btn ghost" type="button" onClick={onDismiss}>{copy.cancel}</button><button className="btn primary" type="button" disabled={locked || !dirty} onClick={onSave}><Icon name={busy === "behavior" ? "loader" : "check"} />{copy.saveBehavior}</button></>}><div className="config-dialog-form two-columns"><label className="config-field"><span>{copy.reasoning}</span><select className="input config-select" value={basic.reasoningEffort} onChange={(event) => setBasic({ ...basic, reasoningEffort: event.target.value })}><option value="">{copy.automatic}</option>{reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}</select></label><label className="config-field"><span>{copy.personality}</span><select className="input config-select" value={basic.personality} onChange={(event) => setBasic({ ...basic, personality: event.target.value })}><option value="">{copy.automatic}</option><option value="none">none</option><option value="friendly">friendly</option><option value="pragmatic">pragmatic</option></select></label><label className="config-field"><span>{copy.approvalPolicy}</span><select className="input config-select mono" value={basic.approvalPolicy} onChange={(event) => setBasic({ ...basic, approvalPolicy: event.target.value })}><option value="">{copy.automatic}</option><option value="untrusted">untrusted</option><option value="on-request">on-request</option><option value="never">never</option></select></label><label className="config-field"><span>{copy.sandboxMode}</span><select className="input config-select mono" value={basic.sandboxMode} onChange={(event) => setBasic({ ...basic, sandboxMode: event.target.value })}><option value="">{copy.automatic}</option><option value="read-only">read-only</option><option value="workspace-write">workspace-write</option><option value="danger-full-access">danger-full-access</option></select></label></div><div className="config-dialog-switches"><div><span>{copy.goalMode}</span><Toggle checked={basic.goalMode} ariaLabel={copy.goalMode} onChange={(goalMode) => setBasic({ ...basic, goalMode })} /></div><div><span>{copy.disableResponseStorage}</span><Toggle checked={basic.disableResponseStorage} ariaLabel={copy.disableResponseStorage} onChange={(disableResponseStorage) => setBasic({ ...basic, disableResponseStorage })} /></div><div><span><strong>{copy.imageGenerationCompatibility}</strong><small>{copy.imageGenerationCompatibilityHint}</small></span><Toggle checked={basic.imageGenerationCompatibility} ariaLabel={copy.imageGenerationCompatibility} onChange={(imageGenerationCompatibility) => setBasic({ ...basic, imageGenerationCompatibility })} /></div></div>{dangerous ? <div className="config-danger-note" role="alert"><Icon name="alert" /><span>{copy.dangerousCombination}</span></div> : null}</ConfigDialog>;
 }
 
 function CredentialDialog({ open, copy, configured, apiKey, setApiKey, show, setShow, dirty, locked, busy, onSave, onDelete, onDismiss }: { open: boolean; copy: Copy; configured: boolean; apiKey: string; setApiKey: (value: string) => void; show: boolean; setShow: (value: boolean) => void; dirty: boolean; locked: boolean; busy: string | null; onSave: () => void; onDelete: () => void; onDismiss: () => void }) {

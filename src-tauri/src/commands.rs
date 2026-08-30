@@ -2404,8 +2404,13 @@ pub fn codex_config_set_api_key(
     api_key: String,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::codex_config::set_api_key(&api_key, crate::app::codex_theme::codex_running())
-        .map_err(Into::into)
+    let codex_running = crate::app::codex_theme::codex_running();
+    let report = crate::app::codex_config::set_api_key(&api_key, codex_running)
+        .map_err(CommandError::from)?;
+    if codex_running {
+        crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -2413,8 +2418,13 @@ pub fn codex_config_delete_api_key(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::codex_config::delete_api_key(crate::app::codex_theme::codex_running())
-        .map_err(Into::into)
+    let codex_running = crate::app::codex_theme::codex_running();
+    let report = crate::app::codex_config::delete_api_key(codex_running)
+        .map_err(CommandError::from)?;
+    if codex_running {
+        crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
+    }
+    Ok(report)
 }
 
 #[tauri::command]
