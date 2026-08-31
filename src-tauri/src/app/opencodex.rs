@@ -50,6 +50,7 @@ const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
 const ROUTE_CHECK_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
+const OCX_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 static MANAGER_UPDATE_RECONCILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static CONFIG_SWITCH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -708,10 +709,23 @@ struct EncryptedBundle {
 struct CodexInstallProvider {
     platform: String,
     provider: String,
+    #[serde(alias = "apiKey")]
     api_key: String,
     adapter: String,
+    #[serde(alias = "baseUrl")]
     base_url: String,
     models: Vec<String>,
+    #[serde(alias = "recommendedModel")]
+    recommended_model: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CodexInstallProviderSummary {
+    platform: String,
+    provider: String,
+    #[serde(default)]
+    models: Vec<String>,
+    #[serde(default, alias = "recommendedModel")]
     recommended_model: String,
 }
 
@@ -729,6 +743,8 @@ struct RedeemResponse {
 #[derive(Debug, Deserialize)]
 struct DesktopExchangeResponse {
     encrypted_bundle: EncryptedBundle,
+    #[serde(default)]
+    providers: Vec<CodexInstallProviderSummary>,
 }
 
 #[derive(Debug)]
@@ -1633,12 +1649,14 @@ fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), A
             payload.providers.len()
         )));
     }
-    let mut platforms = BTreeSet::new();
     let mut provider_ids = BTreeSet::new();
     for provider in &payload.providers {
         let platform = provider.platform.trim();
         let provider_id = checked_id(&provider.provider, "OSIRAPI Provider ID")?;
-        if platform.is_empty() || !platforms.insert(platform) || !provider_ids.insert(provider_id) {
+        // A subscription may expose more than one provider/group for the
+        // same platform. Provider IDs are the routing identity; platform is
+        // only display metadata and must not collapse valid entries.
+        if platform.is_empty() || !provider_ids.insert(provider_id) {
             return Err(AppError::Engine("OSIRAPI 返回了重复或无效的订阅平台路由".to_string()));
         }
         if provider.api_key.trim().is_empty() || provider.models.is_empty() {
@@ -1655,6 +1673,54 @@ fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), A
                 platform_label(platform)
             )));
         }
+    }
+    Ok(())
+}
+
+fn validate_exchange_provider_summary(
+    summaries: &[CodexInstallProviderSummary],
+    payload: &CodexInstallPayload,
+) -> Result<(), AppError> {
+    if summaries.is_empty() {
+        return Ok(());
+    }
+    let summary = summaries
+        .iter()
+        .map(|provider| {
+            let mut models = provider.models.clone();
+            models.sort();
+            models.dedup();
+            (
+                provider.provider.trim().to_string(),
+                (
+                    provider.platform.trim().to_ascii_lowercase(),
+                    models,
+                    provider.recommended_model.trim().to_string(),
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let encrypted = payload
+        .providers
+        .iter()
+        .map(|provider| {
+            let mut models = provider.models.clone();
+            models.sort();
+            models.dedup();
+            (
+                provider.provider.trim().to_string(),
+                (
+                    provider.platform.trim().to_ascii_lowercase(),
+                    models,
+                    provider.recommended_model.trim().to_string(),
+                ),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    if summary != encrypted || summary.len() != summaries.len() || encrypted.len() != payload.providers.len() {
+        return Err(AppError::Engine(
+            "OSIRAPI 返回的供应商摘要与加密模型配置不一致，已停止写入本地配置".to_string(),
+        ));
     }
     Ok(())
 }
@@ -1966,14 +2032,23 @@ where
     }
 }
 
-pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, AppError> {
+fn check_route_with_timeout(
+    route_id: &str,
+    model: &str,
+    timeout: Duration,
+    retry_delays: &[Duration],
+) -> Result<OpenCodexRouteCheck, AppError> {
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     let route = format!("{route_id}/{model}");
-    let retry_delays = ROUTE_CHECK_RETRY_DELAYS_MS.map(Duration::from_millis);
     let check = match route_check_with_retry(
-        || ocx_output(&["access", "test", &route, "--protocol", "responses", "--json"]),
-        &retry_delays,
+        || {
+            ocx_output_with_timeout(
+                &["access", "test", &route, "--protocol", "responses", "--json"],
+                timeout,
+            )
+        },
+        retry_delays,
     ) {
         Ok(_) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: true, retryable: false, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() },
         Err(error) => {
@@ -1990,6 +2065,11 @@ pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, A
         }
     }
     Ok(check)
+}
+
+pub fn check_route(route_id: &str, model: &str) -> Result<OpenCodexRouteCheck, AppError> {
+    let retry_delays = ROUTE_CHECK_RETRY_DELAYS_MS.map(Duration::from_millis);
+    check_route_with_timeout(route_id, model, OCX_COMMAND_TIMEOUT, &retry_delays)
 }
 
 pub fn ensure_ready_for_codex() -> Result<(), AppError> {
@@ -2057,7 +2137,6 @@ where
         "正在写入模型配置",
         "保存订阅 Key、模型路由和 Codex 模型目录。",
     ));
-    let routes_to_verify = routes.clone();
     let configured = save(OpenCodexConfigInput {
         enabled: true,
         port: DEFAULT_PORT,
@@ -2078,29 +2157,11 @@ where
         "verify",
         "running",
         4,
-        "正在验证订阅模型",
-        "确认每个供应商的推荐模型都能通过 OpenCodex 正确路由。",
+        "正在完成订阅同步",
+        "已直接采用订阅返回的完整供应商和模型列表，不再用上游连通性检测阻断授权。",
     ));
-    let mut checks = Vec::new();
-    for route in routes_to_verify.iter().filter(|route| route.enabled) {
-        checks.push(check_route(&route.id, &route.default_model)?);
-    }
     let mut verified = status()?;
     verified.error = configured.error;
-    let failures = checks.iter().filter(|check| !check.available).collect::<Vec<_>>();
-    if !failures.is_empty() {
-        let detail = failures
-            .iter()
-            .map(|check| format!("{}/{}：{}", check.route_id, check.model, check.detail))
-            .collect::<Vec<_>>()
-            .join("；");
-        if failures.iter().all(|check| check.retryable) {
-            verified.error = Some(format!("授权和模型同步已完成，但部分供应商遇到临时网络异常：{detail}"));
-        } else {
-            verified.connection_status = "error".to_string();
-            verified.error = Some(format!("模型已同步，但部分供应商路由验证失败：{detail}"));
-        }
-    }
     Ok(verified)
 }
 
@@ -2176,6 +2237,7 @@ where
         &redemption,
     )?;
     let payload = decrypt_bundle(&redemption, response.encrypted_bundle)?;
+    validate_exchange_provider_summary(&response.providers, &payload)?;
     if payload.account.is_none() {
         return Err(AppError::Engine(
             "OSIRAPI 授权成功，但服务端未返回账户摘要；已停止写入本地配置，请重新连接"
@@ -2308,29 +2370,83 @@ fn restart_service_and_wait_ready() -> Result<(), AppError> {
 }
 
 fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
+    ocx_output_with_timeout(args, OCX_COMMAND_TIMEOUT)
+}
+
+fn read_child_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    pipe.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, AppError> {
     let (program, prefix) = ocx_invocation().ok_or_else(|| {
         AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string())
     })?;
     let mut command = Command::new(program);
     configure_background_command(&mut command);
     configure_opencodex_environment(&mut command);
-    let output = command
+    let mut child = command
         .args(prefix)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .map_err(|error| AppError::Engine(format!("无法执行 OpenCodex：{error}")))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(AppError::Engine(if detail.is_empty() {
-            format!("OpenCodex 命令失败：{}", output.status)
-        } else {
-            format!("OpenCodex 命令失败：{detail}")
-        }));
+    // Drain both pipes concurrently while the process runs. Waiting for the
+    // child before reading them can deadlock when a sync/validate command
+    // emits more than the OS pipe buffer.
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|pipe| thread::spawn(move || read_child_pipe(pipe)));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|pipe| thread::spawn(move || read_child_pipe(pipe)));
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = stdout_reader
+                    .and_then(|reader| reader.join().ok())
+                    .transpose()
+                    .map_err(|error| AppError::Engine(format!("读取 OpenCodex 输出失败：{error}")))?
+                    .unwrap_or_default();
+                let stderr = stderr_reader
+                    .and_then(|reader| reader.join().ok())
+                    .transpose()
+                    .map_err(|error| AppError::Engine(format!("读取 OpenCodex 错误输出失败：{error}")))?
+                    .unwrap_or_default();
+                if !status.success() {
+                    let detail = String::from_utf8_lossy(&stderr).trim().to_string();
+                    return Err(AppError::Engine(if detail.is_empty() {
+                        format!("OpenCodex 命令失败：{status}")
+                    } else {
+                        format!("OpenCodex 命令失败：{detail}")
+                    }));
+                }
+                return Ok(stdout);
+            }
+            Ok(None) if std::time::Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(AppError::Engine(format!(
+                    "OpenCodex 命令超时（{} 秒），请检查服务或上游网络后重试",
+                    timeout.as_secs()
+                )));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(AppError::Engine(format!("等待 OpenCodex 命令失败：{error}")));
+            }
+        }
     }
-    Ok(output.stdout)
 }
 
 fn sync_cache_args(restart_codex: bool) -> &'static [&'static str] {
@@ -2566,7 +2682,7 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
     if inferred_ids.is_empty() || !codex_uses_opencodex(paths) {
         return Ok(state);
     }
-    let mut adopted = state;
+    let mut adopted = state.clone();
     adopted.enabled = true;
     adopted.port = config
         .get("port")
@@ -2581,16 +2697,17 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
         .and_then(JsonValue::as_str)
         .filter(|id| adopted.managed_provider_ids.iter().any(|managed| managed == *id))
         .map(str::to_string);
-    if let Some(default_route) = inferred_default_route(&config, &adopted.managed_provider_ids) {
-        write_codex_proxy_config(
-            &paths.codex_config,
-            &paths.catalog,
-            &adopted.codex_provider_id,
-            adopted.port,
-            &default_route,
-        )?;
-    }
-    if adopted != load_state(&paths.state) {
+    let state_changed = adopted != state;
+    if state_changed {
+        if let Some(default_route) = inferred_default_route(&config, &adopted.managed_provider_ids) {
+            write_codex_proxy_config(
+                &paths.codex_config,
+                &paths.catalog,
+                &adopted.codex_provider_id,
+                adopted.port,
+                &default_route,
+            )?;
+        }
         write_json(
             &paths.state,
             &serde_json::to_value(&adopted)
@@ -2646,14 +2763,16 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     } else {
         state.codex_provider_id
     };
-    let routes_ready = service_state == "ready" && !routes.is_empty();
+    let routes_present = !routes.is_empty();
     let has_configured_credentials = routes.iter().any(|route| route.enabled && route.api_key_configured);
     let connection_status = if state.signed_out {
         "signedOut"
-    } else if routes_ready && (state.connection.is_some() || has_configured_credentials) {
+    } else if routes_present && (state.connection.is_some() || has_configured_credentials) {
         // `ocx login` or the OpenCodex dashboard can create valid provider
         // credentials without Manager's OSIR account exchange. Treat those
         // routes as connected while leaving account billing details empty.
+        // A slow local health probe must not turn a completed authorization
+        // into a failed login; service_state remains available separately.
         "connected"
     } else if state.enabled { "error" } else { "notConnected" }.to_string();
     let platform = std::env::consts::OS.to_string();
@@ -2708,36 +2827,9 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
 pub fn status() -> Result<OpenCodexStatus, AppError> {
     reconcile_after_manager_update()?;
     let paths = integration_paths()?;
-    // Repair legacy model ids as part of every status read while OpenCodex
-    // owns Codex, so an upgrade self-heals without another mode toggle.
-    let state = effective_state(&paths)?;
-    if state.enabled {
-        let mut config = load_config(&paths.opencodex_config)?;
-        let managed_provider_ids = state.managed_provider_ids.iter().cloned().collect::<BTreeSet<_>>();
-        if normalize_saved_model_display_names(&mut config, &managed_provider_ids) {
-            write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
-        }
-    }
-    if state.enabled && paths.catalog.is_file() {
-        let config = load_config(&paths.opencodex_config)?;
-        let models = config
-            .get("customModels")
-            .and_then(JsonValue::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let provider_ids = inferred_managed_provider_ids(&config, &models);
-        let routes = configured_routes_from_config(&config, &provider_ids);
-        if ocx_program().is_some()
-            && !routes.is_empty()
-            && normalize_synced_catalog(&paths.catalog, &routes)?
-        {
-            // Codex reads models_cache.json in long-lived processes. Keep it
-            // in lockstep with the repaired catalog so a stale hidden alias
-            // cannot return after the next Manager launch.
-            sync_codex_model_cache(false)?;
-        }
-    }
-    let _ = normalize_saved_model_capabilities(&paths);
+    // Status is read frequently by the UI. Keep it observational: catalog
+    // repair and cache synchronization belong to explicit save/sync flows,
+    // otherwise every focus event can launch a blocking OpenCodex command.
     status_at(&paths)
 }
 
@@ -3575,16 +3667,6 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
             return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
         }
-        let (default_route_id, default_model) = default_route
-            .split_once('/')
-            .ok_or_else(|| AppError::Engine("OpenCodex 默认模型路由无效".to_string()))?;
-        let route_check = check_route(default_route_id, default_model)?;
-        if !route_check.available {
-            return Err(AppError::Engine(format!(
-                "OpenCodex 默认模型验证失败，已保持当前配置：{}",
-                route_check.detail
-            )));
-        }
         write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, port, &default_route)?;
         sync_codex_model_cache(false)?;
         write_json(
@@ -3686,7 +3768,9 @@ mod tests {
         sanitize_saved_osir_config,
         should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
         node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
-        validate_codex_install_payload, write_codex_proxy_config, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput, RedemptionState,
+        validate_codex_install_payload, validate_exchange_provider_summary, write_codex_proxy_config,
+        CodexInstallProvider, CodexInstallProviderSummary, EncryptedBundle, OpenCodexConfigInput,
+        OpenCodexRouteInput, RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Nonce};
@@ -3981,6 +4065,69 @@ mod tests {
                     base_url: "https://api.osirclaw.com/v1".into(),
                     models: vec!["gemini-2.5-pro".into(), "gemini-2.5-flash".into()],
                     recommended_model: "gemini-2.5-pro".into(),
+                },
+            ],
+            account: None,
+        };
+        assert!(validate_codex_install_payload(&payload).is_ok());
+    }
+
+    #[test]
+    fn rejects_an_exchange_summary_that_drops_gemini() {
+        let payload = CodexInstallPayload {
+            providers: vec![
+                CodexInstallProvider {
+                    platform: "openai".into(),
+                    provider: "osirapi-openai".into(),
+                    api_key: "secret-openai".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gpt-5.6-sol".into()],
+                    recommended_model: "gpt-5.6-sol".into(),
+                },
+                CodexInstallProvider {
+                    platform: "gemini".into(),
+                    provider: "osirapi-gemini".into(),
+                    api_key: "secret-gemini".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gemini-2.5-pro".into()],
+                    recommended_model: "gemini-2.5-pro".into(),
+                },
+            ],
+            account: None,
+        };
+        let summaries = vec![CodexInstallProviderSummary {
+            platform: "openai".into(),
+            provider: "osirapi-openai".into(),
+            models: vec!["gpt-5.6-sol".into()],
+            recommended_model: "gpt-5.6-sol".into(),
+        }];
+
+        assert!(validate_exchange_provider_summary(&summaries, &payload).is_err());
+    }
+
+    #[test]
+    fn accepts_multiple_subscription_providers_for_one_platform() {
+        let payload = CodexInstallPayload {
+            providers: vec![
+                super::CodexInstallProvider {
+                    platform: "openai".into(),
+                    provider: "osirapi-openai-primary".into(),
+                    api_key: "secret-primary".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gpt-5.6-sol".into()],
+                    recommended_model: "gpt-5.6-sol".into(),
+                },
+                super::CodexInstallProvider {
+                    platform: "openai".into(),
+                    provider: "osirapi-openai-fallback".into(),
+                    api_key: "secret-fallback".into(),
+                    adapter: "openai-responses".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    models: vec!["gpt-5.5".into()],
+                    recommended_model: "gpt-5.5".into(),
                 },
             ],
             account: None,

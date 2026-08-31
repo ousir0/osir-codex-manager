@@ -2487,8 +2487,11 @@ pub fn codex_config_restore_backup(
 // ── OpenCodex multi-model integration ────────────────────────────────────
 
 #[tauri::command]
-pub fn opencodex_status() -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
-    crate::app::opencodex::status().map_err(Into::into)
+pub async fn opencodex_status() -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::status)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2514,23 +2517,29 @@ pub async fn opencodex_start(
 }
 
 #[tauri::command]
-pub fn opencodex_select_route(
+pub async fn opencodex_select_route(
     state: State<'_, ManagerState>,
     route_id: String,
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::select_route(&route_id, &model).map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::select_route(&route_id, &model))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
-pub fn opencodex_remove_model(
+pub async fn opencodex_remove_model(
     state: State<'_, ManagerState>,
     route_id: String,
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::remove_model(&route_id, &model).map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::remove_model(&route_id, &model))
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2600,11 +2609,14 @@ pub async fn opencodex_connect_osir_oauth(
 }
 
 #[tauri::command]
-pub fn opencodex_disconnect_osir(
+pub async fn opencodex_disconnect_osir(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::disconnect_osir().map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::disconnect_osir)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2635,18 +2647,32 @@ pub async fn opencodex_activate_saved(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    tauri::async_runtime::spawn_blocking(crate::app::opencodex::activate_saved)
+    let status = tauri::async_runtime::spawn_blocking(crate::app::opencodex::activate_saved)
         .await
         .map_err(|error| AppError::Internal(format!("join: {error}")))?
-        .map_err(Into::into)
+        .map_err(CommandError::from)?;
+    // Apply the native picker repair immediately when activation succeeds.
+    // This covers an already-running Codex window; the normal launch path
+    // still reapplies it after a full restart or renderer reload.
+    if status.enabled {
+        state
+            .codex_theme
+            .enable_model_picker_layout_fix()
+            .await
+            .map_err(CommandError::from)?;
+    }
+    Ok(status)
 }
 
 #[tauri::command]
-pub fn opencodex_restore(
+pub async fn opencodex_restore(
     state: State<'_, ManagerState>,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    crate::app::opencodex::restore().map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(crate::app::opencodex::restore)
+        .await
+        .map_err(|error| AppError::Internal(format!("join: {error}")))?
+        .map_err(Into::into)
 }
 
 // ── Codex UI themes ──────────────────────────────────────────────────────────

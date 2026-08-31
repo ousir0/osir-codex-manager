@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 
 import { errorMessage, managerApi } from "../../services/managerApi";
@@ -21,7 +21,7 @@ const OAUTH_STEPS = [
   { stage: "exchange", label: "读取账户与订阅" },
   { stage: "runtime", label: "准备 OpenCodex" },
   { stage: "config", label: "写入模型配置" },
-  { stage: "verify", label: "验证供应商模型" },
+  { stage: "verify", label: "同步供应商模型" },
 ] as const;
 
 const ROUTES = [
@@ -52,16 +52,29 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
     model: "",
     apiKey: "",
   });
+  const refreshInFlight = useRef<Promise<OpenCodexStatus | null> | null>(null);
+  const lastRefreshAt = useRef(0);
 
-  const refreshStatus = async () => {
+  const refreshStatus = async (force = false) => {
+    if (!force && Date.now() - lastRefreshAt.current < 1000) return null;
+    if (refreshInFlight.current) return refreshInFlight.current;
+    lastRefreshAt.current = Date.now();
+    const request = (async () => {
+      try {
+        const next = await managerApi.openCodexStatus();
+        setStatus(next);
+        setNotice(next.installed ? "已检测到 OpenCodex；可以继续连接供应商或管理模型。" : "尚未安装 OpenCodex；点击主按钮即可开始安装。");
+        return next;
+      } catch (cause) {
+        setNotice(errorMessage(cause));
+        return null;
+      }
+    })();
+    refreshInFlight.current = request;
     try {
-      const next = await managerApi.openCodexStatus();
-      setStatus(next);
-      setNotice(next.installed ? "已检测到 OpenCodex；可以继续连接供应商或管理模型。" : "尚未安装 OpenCodex；点击主按钮即可开始安装。");
-      return next;
-    } catch (cause) {
-      setNotice(errorMessage(cause));
-      return null;
+      return await request;
+    } finally {
+      if (refreshInFlight.current === request) refreshInFlight.current = null;
     }
   };
 
@@ -270,7 +283,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
     setRouteCheckBusy(true);
     try {
       const result = await managerApi.openCodexCheckRoute(selected.id, selected.model);
-      await refreshStatus();
+      await refreshStatus(true);
       setNotice(result.available ? "路由验证成功：" + selected.label + " / " + selected.model : "路由验证失败：" + result.detail);
     } catch (cause) {
       setNotice(errorMessage(cause));
@@ -370,7 +383,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
 
       <div className="multi-model-workgrid">
         <section className="multi-model-panel multi-model-routes-panel">
-          <div className="multi-model-panel-head"><div><span className="multi-model-label">模型路由</span><h2>已准备 {status?.modelCount || 18} 个模型</h2></div><div className="multi-model-route-head-actions"><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void refreshStatus()}><Icon name={busy === "load" ? "loader" : "refresh"} /> 刷新配置</button><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void run("sync", () => managerApi.openCodexSync(), "模型目录已同步；请完全退出后重新打开 Codex。")}><Icon name={busy === "sync" ? "loader" : "refresh"} /> 同步</button></div></div>
+          <div className="multi-model-panel-head"><div><span className="multi-model-label">模型路由</span><h2>已准备 {status?.modelCount || 18} 个模型</h2></div><div className="multi-model-route-head-actions"><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void refreshStatus(true)}><Icon name={busy === "load" ? "loader" : "refresh"} /> 刷新配置</button><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void run("sync", () => managerApi.openCodexSync(), "模型目录已同步；请完全退出后重新打开 Codex。")}><Icon name={busy === "sync" ? "loader" : "refresh"} /> 同步</button></div></div>
           <div className="multi-model-route-list">{displayRoutes.map((route) => { const isSelected = route.id === selectedRoute; return <button className={"multi-model-route route-" + route.accent + (isSelected ? " selected" : "")} type="button" key={route.id} onClick={() => setSelectedRoute(route.id)}><span className="multi-model-route-avatar">{route.initials}</span><span className="multi-model-route-body"><span className="multi-model-route-topline"><strong>{route.label}</strong><em>{route.provider}</em><small className={"multi-model-route-state state-" + route.availability}>{route.availability === "verified" ? "已验证" : route.availability === "degraded" ? "临时异常" : route.availability === "offline" ? "不可用" : route.availability === "configured" ? "已配置" : "待验证"}</small></span><span className="multi-model-route-model">默认 · {route.model}</span></span><span className="multi-model-route-count">{route.count}<small> 个模型</small></span><Icon name={route.locked || isSelected ? "check" : "chevron"} /></button>; })}</div>
           <div className="multi-model-model-manager"><div className="multi-model-model-manager-head"><div><span className="multi-model-label">模型管理</span><strong>{selected.label} · {selected.models.length} 个模型</strong></div><span className="multi-model-method-hint">移除后会同步 OpenCodex 和 Codex 目录</span></div><div className="multi-model-model-list">{selected.models.map((model) => { const capability = selected.modelCapabilities?.find((item: OpenCodexModelCapability) => item.modelId === model); return <div className="multi-model-model-row" key={model}><span className="mono" title={capability?.displayName || model}>{capability?.displayName || model}</span><button className="btn ghost compact danger-text" type="button" disabled={Boolean(busy)} onClick={() => setRemoveModel({ routeId: selected.id, model })}><Icon name="trash" />移除</button></div>; })}</div></div>
           <div className="multi-model-default-route"><span className="multi-model-label">当前默认模型</span><strong>{selected.model}</strong><span className="multi-model-route-badge">{selected.label}</span><div className="multi-model-route-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void selectCurrentRoute()}>{selected.locked ? "已锁定" : "锁定此路由"}</button><button className="btn ghost compact" type="button" disabled={routeCheckBusy || !installed} onClick={() => void checkCurrentRoute()}>{routeCheckBusy ? "验证中…" : "验证可用性"}</button></div></div>

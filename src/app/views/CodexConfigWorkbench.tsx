@@ -172,6 +172,12 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
     }
   }, [applyReport]);
 
+  const handleOpenCodexStatusChange = useCallback((next: OpenCodexStatus) => {
+    setOpenCodex(next);
+    if (next.requiresCodexRestart) setRestartRequired(true);
+    if (next.enabled) void managerApi.codexConfigGet().then(applyReport).catch(() => undefined);
+  }, [applyReport]);
+
   useEffect(() => { void load(); }, [load]);
 
   useEffect(() => {
@@ -494,7 +500,7 @@ export function CodexConfigWorkbench({ onBack }: { onBack: () => void }) {
                   {connectionView === "multi" && effectiveMode !== "multi" && openCodex?.routes.length ? <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={() => setConfirm({ kind: "switch-multi" })}><Icon name={busy === "mode" ? "loader" : "grid"} />{copy.enableMulti}</button> : null}
                   {restartRequired ? <><span className="config-restart-hint"><Icon name="info" />{copy.restartHint}</span><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void restartCodex()}><Icon name={busy === "restart" ? "loader" : "refresh"} />{copy.restartCodex}</button></> : null}
                 </div>
-                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={(next) => { setOpenCodex(next); if (next.requiresCodexRestart) setRestartRequired(true); if (next.enabled) void managerApi.codexConfigGet().then(applyReport).catch(() => undefined); }} />}
+                {connectionView === "single" ? <SingleConnectionView report={report} providers={providerProfiles} copy={copy} singleReady={singleReady} selectedProviderId={selectedProviderId} providerHealth={providerHealth} busy={busy} onSelectProvider={setSelectedProviderId} onCheckProvider={checkProvider} onActivateProvider={activateProvider} onProvider={openProvider} onCredential={openCredential} /> : <OpenCodexPrototype onStatusChange={handleOpenCodexStatusChange} />}
               </section>
             ) : null}
             {module === "behavior" ? <BehaviorView report={report} copy={copy} onEdit={openBehavior} /> : null}
