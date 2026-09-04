@@ -18,6 +18,59 @@ const target = value("--target");
 const output = resolve(value("--output", `dist/opencodex-${target}.zip`));
 const nodeVersion = value("--node-version", "22.19.0");
 
+function peMachine(bytes) {
+  if (bytes.length < 0x40 || bytes.toString("ascii", 0, 2) !== "MZ") return null;
+  const peOffset = bytes.readUInt32LE(0x3c);
+  if (peOffset + 6 > bytes.length || bytes.toString("ascii", peOffset, peOffset + 4) !== "PE\0\0") return null;
+  return bytes.readUInt16LE(peOffset + 4);
+}
+
+function expectedMachine(target) {
+  return target === "windows-arm64" ? 0xaa64 : 0x8664;
+}
+
+// The Bun package's postinstall chooses a binary for the machine running npm,
+// not for the target selected with npm's --os/--cpu flags. That is fine for a
+// native install, but it produces a host binary when this component is built
+// for Windows on macOS/Linux. Always copy the target optional dependency into
+// the published package explicitly.
+const bunTargets = {
+  "darwin-arm64": { packageName: "@oven/bun-darwin-aarch64", executable: "bin/bun" },
+  // Baseline builds run on more Intel Macs and avoid requiring AVX2.
+  "darwin-x64": { packageName: "@oven/bun-darwin-x64-baseline", executable: "bin/bun" },
+  "windows-x64": { packageName: "@oven/bun-windows-x64-baseline", executable: "bin/bun.exe" },
+  "windows-arm64": { packageName: "@oven/bun-windows-aarch64", executable: "bin/bun.exe" },
+  "linux-x64": { packageName: "@oven/bun-linux-x64-baseline", executable: "bin/bun" },
+  "linux-arm64": { packageName: "@oven/bun-linux-aarch64", executable: "bin/bun" },
+};
+
+async function installTargetBun(target, packageRoot) {
+  const selected = bunTargets[target];
+  if (!selected) throw new Error("unsupported Bun target: " + target);
+
+  const bunRoot = join(packageRoot, "node_modules", "bun", "bin");
+  const source = join(packageRoot, "node_modules", selected.packageName, selected.executable);
+  const destination = join(bunRoot, selected.executable.split("/").at(-1));
+  await mkdir(bunRoot, { recursive: true });
+  if (target.startsWith("windows-")) {
+    await rm(join(bunRoot, "bun"), { force: true });
+  } else {
+    await rm(join(bunRoot, "bun.exe"), { force: true });
+  }
+  try {
+    await cp(source, destination);
+  } catch (error) {
+    throw new Error("target Bun runtime is missing (" + selected.packageName + "): " + error);
+  }
+
+  const binary = await readFile(destination);
+  const machine = peMachine(binary);
+  if (target.startsWith("windows-") && machine !== expectedMachine(target)) {
+    throw new Error("target Bun runtime has the wrong executable format for " + target);
+  }
+  console.log("Using target Bun runtime " + selected.packageName + " for " + target);
+}
+
 const nodeArchives = {
   "darwin-arm64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-darwin-arm64.tar.gz`,
   "darwin-x64": `https://nodejs.org/dist/v${nodeVersion}/node-v${nodeVersion}-darwin-x64.tar.gz`,
@@ -68,6 +121,7 @@ const targetOs = target.startsWith("windows-") ? "win32" : target.startsWith("li
 const targetCpu = target.endsWith("arm64") ? "arm64" : "x64";
 installArgs.push("--os=" + targetOs, "--cpu=" + targetCpu);
 run(npm, installArgs, { env: { ...process.env, npm_config_fund: "false", npm_config_audit: "false" } });
+await installTargetBun(target, packageRoot);
 
 const metadata = {
   schemaVersion: 1,

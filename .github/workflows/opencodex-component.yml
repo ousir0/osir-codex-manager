@@ -50,6 +50,8 @@ jobs:
             --version "$OPENCODEX_VERSION" \
             --target "$TARGET" \
             --output "dist/opencodex-$TARGET.zip"
+          node scripts/smoke-opencodex-clean-component.mjs \
+            "$TARGET" "dist/opencodex-$TARGET.zip"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
