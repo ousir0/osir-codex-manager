@@ -8,6 +8,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(target_os = "windows")]
+use std::io::{Seek, SeekFrom};
 use std::net::TcpListener;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -1138,19 +1140,115 @@ fn managed_component_roots() -> Vec<PathBuf> {
     let Some(data_dir) = paths::data_dir() else { return Vec::new() };
     let Ok(target) = component_target() else { return Vec::new() };
     let components = data_dir.join("opencodex").join("components");
-    vec![
+    let roots = vec![
         components.join("current").join(target),
         components.join(DEFAULT_VERSION).join(target),
-    ]
+    ];
+    // v0.5.38 and earlier stored the component directly under x64 or arm64.
+    // Keep these installations recoverable after the Manager update; otherwise
+    // the new component detector would skip the broken Bun binary shown in the
+    // Windows authorization error.
+    #[cfg(target_os = "windows")]
+    {
+        let mut roots = roots;
+        if let Some(legacy_target) = match target {
+            "windows-x64" => Some("x64"),
+            "windows-arm64" => Some("arm64"),
+            _ => None,
+        } {
+            roots.push(data_dir.join("opencodex").join(legacy_target));
+        }
+        roots
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        roots
+    }
 }
 
 fn managed_component_invocation() -> Option<(String, Vec<String>)> {
     managed_component_roots().into_iter().find_map(|root| {
         let node = root.join(if cfg!(target_os = "windows") { "runtime/node.exe" } else { "runtime/bin/node" });
         let launcher = root.join("opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
-        (node.is_file() && launcher.is_file())
+        let bun_ready = {
+            #[cfg(target_os = "windows")]
+            {
+                repair_windows_bun_runtime(&root).unwrap_or(false)
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let bun = root.join("opencodex/node_modules/bun/bin/bun");
+                bun.is_file()
+            }
+        };
+        (node.is_file() && launcher.is_file() && bun_ready)
             .then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
     })
+}
+
+#[cfg(target_os = "windows")]
+fn pe_machine(file: &mut fs::File) -> Option<u16> {
+    let mut dos_header = [0_u8; 0x40];
+    file.read_exact(&mut dos_header).ok()?;
+    if &dos_header[..2] != b"MZ" {
+        return None;
+    }
+    let pe_offset = u32::from_le_bytes(dos_header[0x3c..0x40].try_into().ok()?) as u64;
+    file.seek(SeekFrom::Start(pe_offset)).ok()?;
+    let mut pe_header = [0_u8; 6];
+    file.read_exact(&mut pe_header).ok()?;
+    if &pe_header[..4] != b"PE\0\0" {
+        return None;
+    }
+    Some(u16::from_le_bytes(pe_header[4..6].try_into().ok()?))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_pe_machine(path: &Path) -> Option<u16> {
+    let mut file = fs::File::open(path).ok()?;
+    pe_machine(&mut file)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_pe_executable(path: &Path) -> bool {
+    windows_pe_machine(path).is_some_and(|machine| {
+        (std::env::consts::ARCH == "aarch64" && machine == 0xaa64)
+            || (std::env::consts::ARCH != "aarch64" && machine == 0x8664)
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn repair_windows_bun_runtime(root: &Path) -> Result<bool, AppError> {
+    let bun_dir = root.join("opencodex/node_modules/bun/bin");
+    let destination = bun_dir.join("bun.exe");
+    if windows_pe_executable(&destination) {
+        return Ok(true);
+    }
+
+    let packages: &[&str] = if std::env::consts::ARCH == "aarch64" {
+        &["@oven/bun-windows-aarch64"]
+    } else {
+        // Older components contain both packages, while the broken launcher
+        // binary was copied from the build host into bun/bin. Prefer the
+        // baseline build and keep the regular x64 package as a compatibility
+        // fallback for components built before the baseline bundle existed.
+        &["@oven/bun-windows-x64-baseline", "@oven/bun-windows-x64"]
+    };
+    let source = packages
+        .iter()
+        .map(|package| {
+            root.join("opencodex/node_modules")
+                .join(package)
+                .join("bin/bun.exe")
+        })
+        .find(|candidate| windows_pe_executable(candidate));
+    let Some(source) = source else { return Ok(false) };
+    fs::create_dir_all(&bun_dir)
+        .map_err(|error| AppError::Engine(format!("创建 Bun 运行时目录失败：{error}")))?;
+    fs::copy(&source, &destination)
+        .map_err(|error| AppError::Engine(format!("修复 Windows Bun 运行时失败：{error}")))?;
+    log::warn!("repaired invalid Windows Bun runtime from {}", source.display());
+    Ok(windows_pe_executable(&destination))
 }
 
 fn command_version(program: &Path, args: &[&str]) -> Option<String> {
