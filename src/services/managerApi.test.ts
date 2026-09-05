@@ -126,6 +126,19 @@ describe("settings API", () => {
   });
 });
 
+describe("OpenCodex browser fallback", () => {
+  it("persists OSIRAPI sign-out so the next status read stays signed out", async () => {
+    const disconnected = await managerApi.openCodexDisconnectOsir();
+    expect(disconnected.connectionStatus).toBe("signedOut");
+    expect(disconnected.account).toBeNull();
+    await expect(managerApi.openCodexStatus()).resolves.toMatchObject({
+      connectionStatus: "signedOut",
+      account: null,
+      enabled: false,
+    });
+  });
+});
+
 describe("diagnostics API", () => {
   it("returns browser fallbacks without invoking Tauri", async () => {
     const consoleError = vi

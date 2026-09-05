@@ -6164,6 +6164,24 @@ button.config-resource-row:hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.multi-model-empty-state {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  padding: 24px 16px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--bg) 38%, transparent);
+}
+.multi-model-empty-state strong {
+  font-size: 13px;
+}
+.multi-model-empty-state span {
+  max-width: 440px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.55;
+}
 .multi-model-route {
   position: relative;
   width: 100%;

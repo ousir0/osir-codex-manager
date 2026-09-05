@@ -3136,6 +3136,19 @@ fn build_opencodex_config(
     prior_managed: &[String],
     port: u16,
 ) -> Result<JsonValue, AppError> {
+    let existing_provider_keys = config
+        .get("providers")
+        .and_then(JsonValue::as_object)
+        .map(|providers| {
+            providers
+                .iter()
+                .filter_map(|(id, provider)| {
+                    let key = provider.get("apiKey").and_then(JsonValue::as_str)?.trim();
+                    (!key.is_empty()).then(|| (id.clone(), key.to_string()))
+                })
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default();
     let existing_model_metadata = config
         .get("customModels")
         .and_then(JsonValue::as_array)
@@ -3181,7 +3194,13 @@ fn build_opencodex_config(
             if !route.enabled {
                 provider.insert("disabled".to_string(), JsonValue::Bool(true));
             }
-            if let Some(api_key) = route.api_key.as_deref().map(str::trim).filter(|key| !key.is_empty()) {
+            if let Some(api_key) = route
+                .api_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+                .or_else(|| existing_provider_keys.get(&route.id).map(String::as_str))
+            {
                 provider.insert("apiKey".to_string(), JsonValue::String(api_key.to_string()));
             }
             providers.insert(route.id.clone(), JsonValue::Object(provider));
@@ -3193,11 +3212,16 @@ fn build_opencodex_config(
             .or_insert_with(|| JsonValue::Array(Vec::new()))
             .as_array_mut()
             .ok_or_else(|| AppError::Engine("OpenCodex customModels 必须是数组".to_string()))?;
+        let replaced_provider_ids = prior_managed
+            .iter()
+            .cloned()
+            .chain(routes.iter().map(|route| route.id.clone()))
+            .collect::<BTreeSet<_>>();
         models.retain(|model| {
             model
                 .get("provider")
                 .and_then(JsonValue::as_str)
-                .is_none_or(|provider| !prior_managed.iter().any(|id| id == provider))
+                .is_none_or(|provider| !replaced_provider_ids.contains(provider))
         });
         for route in routes {
             for model in &route.models {
@@ -4526,6 +4550,26 @@ mod tests {
             .find(|model| model["provider"] == "osir-gpt")
             .unwrap();
         assert_eq!(generated["displayName"], json!("GPT-5.6 Sol · osir"));
+    }
+
+    #[test]
+    fn preserves_existing_provider_keys_when_the_editor_does_not_send_them() {
+        let mut value = input();
+        value.routes[0].api_key = None;
+        let (_, _, routes) = validate_input(&value).unwrap();
+        let config = JsonMap::from_iter([
+            ("providers".to_string(), json!({
+                "osir-gpt": {
+                    "adapter": "openai-responses",
+                    "baseUrl": "https://api.osirclaw.com/v1",
+                    "defaultModel": "gpt-5.6-sol",
+                    "apiKey": "existing-secret",
+                    "models": ["gpt-5.6-sol"]
+                }
+            })),
+        ]);
+        let value = build_opencodex_config(config, &routes, &["osir-gpt".to_string()], 10100).unwrap();
+        assert_eq!(value["providers"]["osir-gpt"]["apiKey"], json!("existing-secret"));
     }
 
     #[test]

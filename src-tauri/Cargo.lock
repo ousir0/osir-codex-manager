@@ -3033,7 +3033,7 @@ dependencies = [
 
 [[package]]
 name = "osir-codex-manager"
-version = "0.5.42"
+version = "0.5.43"
 dependencies = [
  "aes-gcm",
  "base64 0.23.0",

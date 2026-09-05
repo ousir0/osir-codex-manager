@@ -260,6 +260,18 @@ describe("Codex configuration workbench", () => {
     expect(await screen.findByRole("heading", { name: "连接 OSIRAPI" })).toBeInTheDocument();
   });
 
+  it("shows an honest empty route state instead of example models", async () => {
+    api.openCodexStatus.mockResolvedValue({
+      enabled: false, installed: true, version: "2.22.0", port: 10100, serviceState: "ready",
+      codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json",
+      modelCount: 0, routes: [], backupAvailable: true, error: null, connectionStatus: "notConnected", account: null,
+    });
+    render(<OpenCodexPrototype />);
+    expect(await screen.findByText("尚未配置模型路由")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "0 个模型" })).toBeInTheDocument();
+    expect(screen.queryByText("已准备 18 个模型")).not.toBeInTheDocument();
+  });
+
   it("shows the detected platform and automatic install strategy", async () => {
     api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null, environment: { platform: "windows", architecture: "x86_64", supported: true, runtimeState: "missing", installStrategy: "managedComponent", nodeVersion: null, npmAvailable: false, detail: "可自动准备私有运行时" } });
     const user = userEvent.setup();

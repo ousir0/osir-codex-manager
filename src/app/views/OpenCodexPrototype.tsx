@@ -59,7 +59,7 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
   const actionError = useRef<string | null>(null);
 
   useEffect(() => {
-    if (externalStatus) {
+    if (externalStatus && !actionInFlight.current) {
       statusRevision.current += 1;
       setStatus(externalStatus);
     }
@@ -159,34 +159,43 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
   };
 
   const routeInput = (): OpenCodexConfigInput => {
-    const routes: OpenCodexConfigInput["routes"] = ROUTES.map((route) => ({
-      id: route.id,
-      label: route.label,
-      adapter: "openai-responses",
-      baseUrl: "https://api.osirclaw.com/v1",
-      apiKey: routeKeys[route.id] || undefined,
-      models: [route.model],
-      defaultModel: route.model,
-      enabled: Boolean(routeKeys[route.id]?.trim()),
+    const currentRoutes = status?.routes ?? [];
+    const routes: OpenCodexConfigInput["routes"] = currentRoutes.map((route) => ({
+      id: route.id, label: route.label, adapter: route.adapter, baseUrl: route.baseUrl,
+      models: route.models, defaultModel: route.defaultModel, enabled: route.enabled,
     }));
-    if (customEnabled) {
-      routes.push({
-        id: customRoute.id,
-        label: customRoute.label,
-        adapter: "openai-responses",
-        baseUrl: customRoute.baseUrl,
-        apiKey: customRoute.apiKey || undefined,
-        models: [customRoute.model],
-        defaultModel: customRoute.model,
-        enabled: true,
+    const upsert = (route: OpenCodexConfigInput["routes"][number]) => {
+      const index = routes.findIndex((item) => item.id === route.id);
+      if (index >= 0) routes[index] = route;
+      else routes.push(route);
+    };
+    for (const route of ROUTES) {
+      const key = routeKeys[route.id]?.trim();
+      if (!key) continue;
+      const existing = currentRoutes.find((item) => item.id === route.id);
+      upsert({
+        id: route.id, label: existing?.label || route.label, adapter: existing?.adapter || "openai-responses",
+        baseUrl: existing?.baseUrl || "https://api.osirclaw.com/v1", apiKey: key,
+        models: existing?.models?.length ? existing.models : [route.model],
+        defaultModel: existing?.defaultModel || route.model, enabled: true,
       });
     }
-    const osirReady = ROUTES.every((route) => Boolean(routeKeys[route.id]?.trim()));
+    if (customEnabled && customReady) {
+      upsert({
+        id: customRoute.id.trim(), label: customRoute.label.trim(), adapter: "openai-responses",
+        baseUrl: customRoute.baseUrl.trim(), apiKey: customRoute.apiKey.trim(),
+        models: [customRoute.model.trim()], defaultModel: customRoute.model.trim(), enabled: true,
+      });
+    }
+    const enabledRoutes = routes.filter((route) => route.enabled);
+    const preferred = currentRoutes.find((route) => route.locked && route.enabled)
+      || enabledRoutes[0];
+    const defaultRoute = preferred ? `${preferred.id}/${preferred.defaultModel}` : "";
     return {
       enabled: true,
       port: status?.port || 10100,
       codexProviderId: status?.codexProviderId || "opencodex",
-      defaultRoute: osirReady ? "osir-gpt/gpt-5.6-sol" : customRoute.id + "/" + customRoute.model,
+      defaultRoute,
       routes,
     };
   };
@@ -276,12 +285,12 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
       initials: index === 0 ? "G" : index === 1 ? "C" : "X",
       accent: index === 0 ? "blue" : index === 1 ? "peach" : "lime",
     }))
-    : ROUTES.map((route) => ({ ...route, provider: route.provider, models: [route.model], modelCapabilities: [] as OpenCodexModelCapability[], availability: "configured" as const, locked: route.id === selectedRoute }));
+    : [];
   const selected = displayRoutes.find((route) => route.id === selectedRoute) ?? displayRoutes[0];
   const installed = status?.installed ?? false;
   const serviceReady = status?.serviceState === "ready";
   const osirReady = ROUTES.some((route) => Boolean(routeKeys[route.id]?.trim()));
-  const customReady = customEnabled && Boolean(customRoute.id && customRoute.label && customRoute.baseUrl && customRoute.model && customRoute.apiKey);
+  const customReady = customEnabled && [customRoute.id, customRoute.label, customRoute.baseUrl, customRoute.model, customRoute.apiKey].every((value) => Boolean(value.trim()));
   const canSave = osirReady || customReady;
   const connectionStatus = status?.connectionStatus || "notConnected";
   const environment = status?.environment;
@@ -300,6 +309,7 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
             ? "当前系统或 CPU 暂无可用安装包"
             : "等待环境检测";
   const selectCurrentRoute = async () => {
+    if (!selected) return;
     if (!status?.enabled) {
       setSelectedRoute(selected.id);
       setNotice("预览：启用 OpenCodex 后，这里会锁定默认路由并关闭自动切换。");
@@ -318,6 +328,7 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
   };
 
   const checkCurrentRoute = async () => {
+    if (!selected) return;
     setRouteCheckBusy(true);
     try {
       const result = await managerApi.openCodexCheckRoute(selected.id, selected.model);
@@ -421,10 +432,8 @@ export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatu
 
       <div className="multi-model-workgrid">
         <section className="multi-model-panel multi-model-routes-panel">
-          <div className="multi-model-panel-head"><div><span className="multi-model-label">模型路由</span><h2>已准备 {status?.modelCount || 18} 个模型</h2></div><div className="multi-model-route-head-actions"><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void refreshStatus(true)}><Icon name={busy === "load" ? "loader" : "refresh"} /> 刷新配置</button><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void run("sync", () => managerApi.openCodexSync(), "模型目录已同步；请完全退出后重新打开 Codex。")}><Icon name={busy === "sync" ? "loader" : "refresh"} /> 同步</button></div></div>
-          <div className="multi-model-route-list">{displayRoutes.map((route) => { const isSelected = route.id === selectedRoute; return <button className={"multi-model-route route-" + route.accent + (isSelected ? " selected" : "")} type="button" key={route.id} onClick={() => setSelectedRoute(route.id)}><span className="multi-model-route-avatar">{route.initials}</span><span className="multi-model-route-body"><span className="multi-model-route-topline"><strong>{route.label}</strong><em>{route.provider}</em><small className={"multi-model-route-state state-" + route.availability}>{route.availability === "verified" ? "已验证" : route.availability === "degraded" ? "临时异常" : route.availability === "offline" ? "不可用" : route.availability === "configured" ? "已配置" : "待验证"}</small></span><span className="multi-model-route-model">默认 · {route.model}</span></span><span className="multi-model-route-count">{route.count}<small> 个模型</small></span><Icon name={route.locked || isSelected ? "check" : "chevron"} /></button>; })}</div>
-          <div className="multi-model-model-manager"><div className="multi-model-model-manager-head"><div><span className="multi-model-label">模型管理</span><strong>{selected.label} · {selected.models.length} 个模型</strong></div><span className="multi-model-method-hint">移除后会同步 OpenCodex 和 Codex 目录</span></div><div className="multi-model-model-list">{selected.models.map((model) => { const capability = selected.modelCapabilities?.find((item: OpenCodexModelCapability) => item.modelId === model); return <div className="multi-model-model-row" key={model}><span className="mono" title={capability?.displayName || model}>{capability?.displayName || model}</span><button className="btn ghost compact danger-text" type="button" disabled={Boolean(busy)} onClick={() => setRemoveModel({ routeId: selected.id, model })}><Icon name="trash" />移除</button></div>; })}</div></div>
-          <div className="multi-model-default-route"><span className="multi-model-label">当前默认模型</span><strong>{selected.model}</strong><span className="multi-model-route-badge">{selected.label}</span><div className="multi-model-route-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy)} onClick={() => void selectCurrentRoute()}>{selected.locked ? "已锁定" : "锁定此路由"}</button><button className="btn ghost compact" type="button" disabled={routeCheckBusy || !installed} onClick={() => void checkCurrentRoute()}>{routeCheckBusy ? "验证中…" : "验证可用性"}</button></div></div>
+          <div className="multi-model-panel-head"><div><span className="multi-model-label">模型路由</span><h2>{status?.modelCount ?? 0} 个模型</h2></div><div className="multi-model-route-head-actions"><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void refreshStatus(true)}><Icon name={busy === "load" ? "loader" : "refresh"} /> 刷新配置</button><button className="btn ghost compact" type="button" disabled={!installed || Boolean(busy)} onClick={() => void run("sync", () => managerApi.openCodexSync(), "模型目录已同步；请完全退出后重新打开 Codex。")}><Icon name={busy === "sync" ? "loader" : "refresh"} /> 同步</button></div></div>
+          {displayRoutes.length === 0 ? <div className="multi-model-empty-state" role="status"><strong>尚未配置模型路由</strong><span>连接 OSIRAPI 或手动添加供应商后，模型会显示在这里。</span><button className="btn primary compact" type="button" disabled={Boolean(busy)} onClick={connect}>{connectionStatus === "signedOut" ? "重新登录 OSIRAPI" : "开始配置模型"}</button></div> : <><div className="multi-model-route-list">{displayRoutes.map((route) => { const isSelected = route.id === selectedRoute; return <button className={"multi-model-route route-" + route.accent + (isSelected ? " selected" : "")} aria-pressed={isSelected} type="button" key={route.id} onClick={() => setSelectedRoute(route.id)}><span className="multi-model-route-avatar">{route.initials}</span><span className="multi-model-route-body"><span className="multi-model-route-topline"><strong>{route.label}</strong><em>{route.provider}</em><small className={"multi-model-route-state state-" + route.availability}>{route.availability === "verified" ? "已验证" : route.availability === "degraded" ? "临时异常" : route.availability === "offline" ? "不可用" : route.availability === "configured" ? "已配置" : "待验证"}</small></span><span className="multi-model-route-model">默认 · {route.model}</span></span><span className="multi-model-route-count">{route.count}<small> 个模型</small></span><Icon name={route.locked ? "check" : "chevron"} /></button>; })}</div>{selected ? <><div className="multi-model-model-manager"><div className="multi-model-model-manager-head"><div><span className="multi-model-label">模型管理</span><strong>{selected.label} · {selected.models.length} 个模型</strong></div><span className="multi-model-method-hint">移除后会同步 OpenCodex 和 Codex 目录</span></div><div className="multi-model-model-list">{selected.models.map((model) => { const capability = selected.modelCapabilities?.find((item: OpenCodexModelCapability) => item.modelId === model); return <div className="multi-model-model-row" key={model}><span className="mono" title={capability?.displayName || model}>{capability?.displayName || model}</span><button className="btn ghost compact danger-text" type="button" disabled={Boolean(busy)} onClick={() => setRemoveModel({ routeId: selected.id, model })}><Icon name="trash" />移除</button></div>; })}</div></div><div className="multi-model-default-route"><span className="multi-model-label">{selected.locked ? "当前默认模型" : "选中路由的默认模型"}</span><strong>{selected.model}</strong><span className="multi-model-route-badge">{selected.label}</span><div className="multi-model-route-actions"><button className="btn ghost compact" type="button" disabled={Boolean(busy) || selected.locked} onClick={() => void selectCurrentRoute()}>{selected.locked ? "已锁定" : "锁定此路由"}</button><button className="btn ghost compact" type="button" disabled={routeCheckBusy || !installed || !selected.enabled} onClick={() => void checkCurrentRoute()}>{routeCheckBusy ? "验证中…" : "验证可用性"}</button></div></div></> : null}</>}
         </section>
       </div>
 

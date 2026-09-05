@@ -1615,7 +1615,9 @@ export const managerApi = {
   },
   openCodexDisconnectOsir(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve({ ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), connectionStatus: "signedOut", account: null });
+      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), connectionStatus: "signedOut" as const, account: null, enabled: false };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return Promise.resolve(status);
     }
     return invoke<OpenCodexStatus>("opencodex_disconnect_osir");
   },
