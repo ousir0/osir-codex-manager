@@ -6,7 +6,7 @@ name = "osir-codex-manager"
 # would otherwise ride along in the production app. default-run is kept
 # defensively to pin `cargo run` to the app should another src/bin/* be added.
 default-run = "osir-codex-manager"
-version = "0.5.46"
+version = "0.5.47"
 description = "A personal cross-platform manager for installing, updating, configuring, and theming the official Codex desktop app."
 authors = ["ousir0"]
 edition = "2021"
@@ -34,7 +34,7 @@ reqwest = { version = "0.13.4", default-features = false, features = ["blocking"
 rusqlite = { version = "0.37", features = ["bundled"] }
 rsa = { version = "0.9", features = ["pem", "sha2"] }
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["raw_value"] }
 sha2 = "0.11"
 tauri = { version = "2.11.2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-autostart = "2"

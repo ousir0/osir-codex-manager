@@ -76,6 +76,20 @@ fn replace_rollout(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 
 type ByteShifts = Vec<(i64, i64)>;
 
+#[derive(Deserialize)]
+struct RolloutKind<'a> {
+    #[serde(borrow, rename = "type")]
+    kind: &'a str,
+    #[serde(borrow)]
+    payload: &'a serde_json::value::RawValue,
+}
+
+#[derive(Deserialize)]
+struct EventKind<'a> {
+    #[serde(borrow, rename = "type")]
+    kind: Option<&'a str>,
+}
+
 fn transform(
     bytes: &[u8],
     id: &str,
@@ -87,7 +101,18 @@ fn transform(
     let mut end = 0_i64;
     for line in bytes.split_inclusive(|byte| *byte == b'\n') {
         end += line.len() as i64;
-        // Parse every line so malformed/truncated histories fail without writing.
+        // Validate every line, but avoid allocating message/tool trees. Real
+        // histories can total several GiB; only route metadata needs a Value.
+        let envelope: RolloutKind<'_> = serde_json::from_slice(line).map_err(fail)?;
+        let settings = envelope.kind == "event_msg"
+            && serde_json::from_str::<EventKind<'_>>(envelope.payload.get())
+                .map_err(fail)?
+                .kind
+                == Some("thread_settings_applied");
+        if envelope.kind != "session_meta" && !settings {
+            output.extend_from_slice(line);
+            continue;
+        }
         let mut item: serde_json::Value = serde_json::from_slice(line).map_err(fail)?;
         let mut changed = false;
         if item["type"] == "session_meta"
@@ -317,12 +342,24 @@ fn repair_at(
     repair_with_guard(database, root, target, routes, || true)
 }
 
-pub(super) fn repair_with_guard(
+#[cfg(test)]
+fn repair_with_guard(
     database: &Path,
     root: &Path,
     target: SessionTarget<'_>,
     routes: &[SessionRoute],
     idle: impl Fn() -> bool,
+) -> Result<usize, AppError> {
+    repair_with_progress(database, root, target, routes, idle, |_, _, _| {})
+}
+
+pub(super) fn repair_with_progress(
+    database: &Path,
+    root: &Path,
+    target: SessionTarget<'_>,
+    routes: &[SessionRoute],
+    idle: impl Fn() -> bool,
+    progress: impl Fn(usize, usize, usize),
 ) -> Result<usize, AppError> {
     if !database.is_file() {
         return Ok(0);
@@ -334,7 +371,7 @@ pub(super) fn repair_with_guard(
             let path = entry.map_err(fail)?.path();
             if path.extension().is_some_and(|ext| ext == "pending") {
                 if !idle() {
-                    return Err(fail("Codex 已启动，待关闭后继续修复"));
+                    return Err(fail("Codex 在修复期间被打开，修复已安全暂停，已完成进度和备份均保留。请再次点击“重启 Codex”，等待修复完成后自动打开；期间请勿手动打开 Codex。"));
                 }
                 let repair: Repair =
                     serde_json::from_slice(&fs::read(&path).map_err(fail)?).map_err(fail)?;
@@ -359,8 +396,31 @@ pub(super) fn repair_with_guard(
         return Ok(0);
     }
     let (full_to_bare, bare_to_full) = known_models(routes);
+    let columns = connection
+        .prepare("PRAGMA table_info(threads)")
+        .map_err(fail)?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(fail)?
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(fail)?;
+    let time_expr = if columns.contains("recency_at_ms") {
+        "CASE WHEN recency_at_ms > 0 THEN recency_at_ms ELSE 0 END"
+    } else if columns.contains("updated_at_ms") {
+        "CASE WHEN updated_at_ms > 0 THEN updated_at_ms ELSE 0 END"
+    } else if columns.contains("created_at_ms") {
+        "CASE WHEN created_at_ms > 0 THEN created_at_ms ELSE 0 END"
+    } else if columns.contains("recency_at") {
+        "CASE WHEN recency_at > 0 THEN recency_at * 1000 ELSE 0 END"
+    } else if columns.contains("updated_at") {
+        "CASE WHEN updated_at > 0 THEN updated_at * 1000 ELSE 0 END"
+    } else if columns.contains("created_at") {
+        "CASE WHEN created_at > 0 THEN created_at * 1000 ELSE 0 END"
+    } else {
+        "0"
+    };
+    let query = format!("SELECT id,model_provider,model,rollout_path FROM threads ORDER BY {time_expr} DESC, id DESC LIMIT 100");
     let rows = connection
-        .prepare("SELECT id,model_provider,model,rollout_path FROM threads")
+        .prepare(&query)
         .map_err(fail)?
         .query_map([], |row| {
             Ok((
@@ -374,7 +434,10 @@ pub(super) fn repair_with_guard(
         .collect::<Result<Vec<_>, _>>()
         .map_err(fail)?;
     let mut count = 0;
-    for (id, provider, model, rollout) in rows {
+    let total = rows.len();
+    progress(0, total, 0);
+    for (scanned, (id, provider, model, rollout)) in rows.into_iter().enumerate() {
+        progress(scanned, total, count);
         let update = planned_update(
             id.clone(),
             provider.clone(),
@@ -413,7 +476,7 @@ pub(super) fn repair_with_guard(
             continue;
         }
         if !idle() {
-            return Err(fail("Codex 已启动，待关闭后继续修复"));
+            return Err(fail("Codex 在修复期间被打开，修复已安全暂停，已完成进度和备份均保留。请再次点击“重启 Codex”，等待修复完成后自动打开；期间请勿手动打开 Codex。"));
         }
         let needed = (before.len() as u64)
             .saturating_mul(2)
@@ -452,11 +515,12 @@ pub(super) fn repair_with_guard(
         atomic_file::write_atomic(&journal, &serde_json::to_vec(&repair).map_err(fail)?)
             .map_err(fail)?;
         if !idle() {
-            return Err(fail("Codex 已启动，待关闭后继续修复"));
+            return Err(fail("Codex 在修复期间被打开，修复已安全暂停，已完成进度和备份均保留。请再次点击“重启 Codex”，等待修复完成后自动打开；期间请勿手动打开 Codex。"));
         }
         finish(database, &history, &repair, &journal)?;
         count += 1;
     }
+    progress(total, total, count);
     Ok(count)
 }
 

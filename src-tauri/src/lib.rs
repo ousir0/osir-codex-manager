@@ -160,11 +160,29 @@ fn tray_status_text() -> (String, String, String) {
                 .and_then(|account| account.subscriptions.first())
                 .map(|subscription| format!("${:.2}", subscription.monthly_remaining_usd))
                 .unwrap_or_else(|| "额度未知".to_string());
-            ("● 已连接".to_string(), plan, format!("本月剩余 {remaining}"))
+            (
+                "● 已连接".to_string(),
+                plan,
+                format!("本月剩余 {remaining}"),
+            )
         }
-        Ok(status) if status.connection_status == "signedOut" => ("○ 已退出".to_string(), "需要重新登录".to_string(), "".to_string()),
-        Ok(status) if status.installed => ("△ 连接异常".to_string(), "OpenCodex 已安装".to_string(), status.error.unwrap_or_else(|| "请打开管理器检查".to_string())),
-        _ => ("○ 未连接".to_string(), "OpenCodex 未连接".to_string(), "点击打开管理器".to_string()),
+        Ok(status) if status.connection_status == "signedOut" => (
+            "○ 已退出".to_string(),
+            "需要重新登录".to_string(),
+            "".to_string(),
+        ),
+        Ok(status) if status.installed => (
+            "△ 连接异常".to_string(),
+            "OpenCodex 已安装".to_string(),
+            status
+                .error
+                .unwrap_or_else(|| "请打开管理器检查".to_string()),
+        ),
+        _ => (
+            "○ 未连接".to_string(),
+            "OpenCodex 未连接".to_string(),
+            "点击打开管理器".to_string(),
+        ),
     }
 }
 
@@ -194,7 +212,8 @@ fn install_macos_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         .enabled(false)
         .build(app)?;
     let open_item = MenuItemBuilder::with_id("cam-tray-open", "打开 Codex Manager").build(app)?;
-    let open_codex_item = MenuItemBuilder::with_id("cam-tray-open-codex", "打开 OpenCodex").build(app)?;
+    let open_codex_item =
+        MenuItemBuilder::with_id("cam-tray-open-codex", "打开 OpenCodex").build(app)?;
     let quit_item = MenuItemBuilder::with_id("cam-tray-quit", "退出 Codex Manager").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&status_item)
@@ -237,8 +256,16 @@ fn install_macos_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(move |tray, event| {
-            if matches!(event, TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }) {
-                refresh_macos_tray_status(tray, &status_for_click, &plan_for_click, &usage_for_click);
+            if matches!(
+                event,
+                TrayIconEvent::Click { .. } | TrayIconEvent::DoubleClick { .. }
+            ) {
+                refresh_macos_tray_status(
+                    tray,
+                    &status_for_click,
+                    &plan_for_click,
+                    &usage_for_click,
+                );
             }
         })
         .build(app)?;
@@ -881,6 +908,7 @@ pub fn run() {
             commands::get_autostart,
             commands::set_autostart,
             commands::set_window_mode,
+            commands::codex_resume_repair_progress,
             commands::codex_config_get,
             commands::codex_config_activate_default,
             commands::codex_config_fetch_models,

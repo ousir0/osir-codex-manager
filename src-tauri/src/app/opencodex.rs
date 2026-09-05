@@ -46,7 +46,8 @@ const MANAGED_NODE_VERSION: &str = "22.19.0";
 const COMPONENT_MANIFEST_URL: &str = "https://app.osirclaw.com/components/opencodex/index.json";
 const COMPONENT_MANIFEST_FALLBACK_URL: &str = "https://raw.githubusercontent.com/ousir0/osir-codex-manager/main/components/opencodex/index.json";
 const OSIRAPI_DESKTOP_CONNECT_URL: &str = "https://osirclaw.com/codex-manager/connect";
-const OSIRAPI_DESKTOP_EXCHANGE_URL: &str = "https://api.osirclaw.com/api/v1/codex-install/desktop/exchange";
+const OSIRAPI_DESKTOP_EXCHANGE_URL: &str =
+    "https://api.osirclaw.com/api/v1/codex-install/desktop/exchange";
 const MAX_ROUTE_COUNT: usize = 32;
 const MAX_MODELS_PER_ROUTE: usize = 256;
 const MAX_ID_LEN: usize = 96;
@@ -180,7 +181,11 @@ fn model_display_name(model: &str) -> String {
     let family = parts.remove(0);
     let mut result = title_case_model_token(family);
     if family.eq_ignore_ascii_case("gpt") {
-        if let Some(version) = parts.first().copied().filter(|part| part.chars().any(|ch| ch.is_ascii_digit())) {
+        if let Some(version) = parts
+            .first()
+            .copied()
+            .filter(|part| part.chars().any(|ch| ch.is_ascii_digit()))
+        {
             result.push('-');
             result.push_str(version);
             parts.remove(0);
@@ -191,7 +196,9 @@ fn model_display_name(model: &str) -> String {
     for part in parts {
         if part.chars().all(|ch| ch.is_ascii_digit())
             && part.len() == 1
-            && suffix.last().is_some_and(|previous: &String| previous.len() == 1 && previous.chars().all(|ch| ch.is_ascii_digit()))
+            && suffix.last().is_some_and(|previous: &String| {
+                previous.len() == 1 && previous.chars().all(|ch| ch.is_ascii_digit())
+            })
         {
             if let Some(previous) = suffix.last_mut() {
                 previous.push('.');
@@ -225,7 +232,12 @@ fn provider_display_name(provider_id: &str, base_url: &str, fallback: &str) -> S
     }
 }
 
-fn model_display_name_for_route(provider_id: &str, base_url: &str, label: &str, model: &str) -> String {
+fn model_display_name_for_route(
+    provider_id: &str,
+    base_url: &str,
+    label: &str,
+    model: &str,
+) -> String {
     let model_name = model_display_name(model);
     let provider = provider_display_name(provider_id, base_url, label);
     if provider.is_empty() {
@@ -247,14 +259,23 @@ fn normalize_saved_model_display_names(
                 .iter()
                 .filter_map(|(id, provider)| {
                     let provider = provider.as_object()?;
-                    let label = provider.get("label").and_then(JsonValue::as_str).unwrap_or(id);
-                    let base_url = provider.get("baseUrl").and_then(JsonValue::as_str).unwrap_or_default();
+                    let label = provider
+                        .get("label")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or(id);
+                    let base_url = provider
+                        .get("baseUrl")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or_default();
                     Some((id.clone(), provider_display_name(id, base_url, label)))
                 })
                 .collect::<BTreeMap<_, _>>()
         })
         .unwrap_or_default();
-    let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) else {
+    let Some(models) = config
+        .get_mut("customModels")
+        .and_then(JsonValue::as_array_mut)
+    else {
         return false;
     };
     let mut changed = false;
@@ -268,7 +289,10 @@ fn normalize_saved_model_display_names(
         let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else {
             continue;
         };
-        let provider_name = provider_names.get(provider).map(String::as_str).unwrap_or(provider);
+        let provider_name = provider_names
+            .get(provider)
+            .map(String::as_str)
+            .unwrap_or(provider);
         let expected = format!("{} · {}", model_display_name(model_id), provider_name);
         if entry.get("displayName").and_then(JsonValue::as_str) != Some(expected.as_str()) {
             if let Some(object) = entry.as_object_mut() {
@@ -312,7 +336,11 @@ fn sanitize_osir_routes(routes: &mut [OpenCodexRouteInput]) -> Result<(), AppErr
                 route.label
             )));
         }
-        if !route.models.iter().any(|model| model == &route.default_model) {
+        if !route
+            .models
+            .iter()
+            .any(|model| model == &route.default_model)
+        {
             route.default_model = preferred_osir_model(&route.id, &route.models)
                 .ok_or_else(|| AppError::Engine(format!("{} 没有可用默认模型", route.label)))?;
         }
@@ -321,7 +349,10 @@ fn sanitize_osir_routes(routes: &mut [OpenCodexRouteInput]) -> Result<(), AppErr
 }
 
 fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result<bool, AppError> {
-    let Some(providers) = config.get_mut("providers").and_then(JsonValue::as_object_mut) else {
+    let Some(providers) = config
+        .get_mut("providers")
+        .and_then(JsonValue::as_object_mut)
+    else {
         return Ok(false);
     };
     let route_ids = providers
@@ -332,7 +363,10 @@ fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result
     let mut changed = false;
     let mut removed_routes = BTreeSet::new();
     for route_id in &route_ids {
-        let Some(provider) = providers.get_mut(route_id).and_then(JsonValue::as_object_mut) else {
+        let Some(provider) = providers
+            .get_mut(route_id)
+            .and_then(JsonValue::as_object_mut)
+        else {
             continue;
         };
         let before = provider
@@ -373,7 +407,10 @@ fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result
     }
     let managed_provider_ids = route_ids.iter().cloned().collect::<BTreeSet<_>>();
     changed |= normalize_saved_model_display_names(config, &managed_provider_ids);
-    if let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) {
+    if let Some(models) = config
+        .get_mut("customModels")
+        .and_then(JsonValue::as_array_mut)
+    {
         let before = models.len();
         models.retain(|entry| {
             let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else {
@@ -395,7 +432,10 @@ fn sanitize_saved_osir_config(config: &mut JsonMap<String, JsonValue>) -> Result
         .is_some_and(|provider| removed_routes.contains(provider))
     {
         if let Some(replacement) = route_ids.iter().find(|id| !removed_routes.contains(*id)) {
-            config.insert("defaultProvider".to_string(), JsonValue::String(replacement.clone()));
+            config.insert(
+                "defaultProvider".to_string(),
+                JsonValue::String(replacement.clone()),
+            );
             changed = true;
         }
     }
@@ -435,14 +475,16 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
     if running {
         let paths = integration_paths()?;
         let recorded = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
-        if manager_runtime_needs_reconcile(env!("CARGO_PKG_VERSION"), recorded.as_deref(), manager_update_reconcile_path(&paths).is_file())
-            && !restart_required_path(&paths).exists() {
+        if manager_runtime_needs_reconcile(
+            env!("CARGO_PKG_VERSION"),
+            recorded.as_deref(),
+            manager_update_reconcile_path(&paths).is_file(),
+        ) && !restart_required_path(&paths).exists()
+        {
             mark_codex_restart_required_at(&paths)?;
         }
     }
-    reconcile_when_codex_idle(running, || {
-        reconcile_after_manager_update_when_idle()
-    })
+    reconcile_when_codex_idle(running, || reconcile_after_manager_update_when_idle())
 }
 
 fn reconcile_when_codex_idle(
@@ -460,6 +502,22 @@ fn reconcile_when_codex_idle(
 fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
     let lock = MANAGER_UPDATE_RECONCILE_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().unwrap_or_else(|poison| poison.into_inner());
+    reconcile_after_manager_update_locked()
+}
+
+/// Hold the same gate through repair AND spawn; another Manager launch cannot
+/// reopen the backend while the offline repair still owns a rollout.
+pub(crate) fn with_codex_launch(
+    launch: impl FnOnce() -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    let lock = MANAGER_UPDATE_RECONCILE_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock.lock().unwrap_or_else(|poison| poison.into_inner());
+    codex_sessions::wait_for_backend_exit()?;
+    reconcile_after_manager_update_locked()?;
+    launch()
+}
+
+fn reconcile_after_manager_update_locked() -> Result<(), AppError> {
     if codex_sessions::runtime_is_running() {
         return Ok(());
     }
@@ -488,7 +546,11 @@ fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
         write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
     }
     let state = effective_state(&paths)?;
-    let managed_provider_ids = state.managed_provider_ids.iter().cloned().collect::<BTreeSet<_>>();
+    let managed_provider_ids = state
+        .managed_provider_ids
+        .iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
     if normalize_saved_model_display_names(&mut config, &managed_provider_ids) {
         write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
     }
@@ -518,8 +580,9 @@ fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
     clear_codex_restart_required()?;
     record_current_manager_runtime(&paths)?;
     if marker.exists() {
-        fs::remove_file(marker)
-            .map_err(|error| AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}")))?;
+        fs::remove_file(marker).map_err(|error| {
+            AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}"))
+        })?;
     }
     Ok(())
 }
@@ -549,8 +612,7 @@ fn configuration_requires_restart(
     codex_running
         && (marker_exists
             || opencodex_enabled
-                && current_revision
-                    .is_some_and(|revision| applied_revision != Some(revision)))
+                && current_revision.is_some_and(|revision| applied_revision != Some(revision)))
 }
 
 fn mark_codex_restart_required_at(paths: &IntegrationPaths) -> Result<(), AppError> {
@@ -898,12 +960,17 @@ pub fn default_codex_config_candidate() -> Result<String, AppError> {
 fn session_routes(routes: &[OpenCodexRouteInput]) -> Vec<codex_sessions::SessionRoute> {
     routes
         .iter()
-        .map(|route| codex_sessions::SessionRoute { id: route.id.clone(), models: route.models.clone() })
+        .map(|route| codex_sessions::SessionRoute {
+            id: route.id.clone(),
+            models: route.models.clone(),
+        })
         .collect()
 }
 
 fn disable_opencodex_history_migration(paths: &IntegrationPaths) -> Result<(), AppError> {
-    if !paths.opencodex_config.is_file() { return Ok(()); }
+    if !paths.opencodex_config.is_file() {
+        return Ok(());
+    }
     let mut config = load_config(&paths.opencodex_config)?;
     if config.get("syncResumeHistory") != Some(&JsonValue::Bool(false)) {
         config.insert("syncResumeHistory".into(), JsonValue::Bool(false));
@@ -914,44 +981,89 @@ fn disable_opencodex_history_migration(paths: &IntegrationPaths) -> Result<(), A
 
 /// Runs at safe launch/update boundaries, including already-current runtimes.
 fn repair_current_session_routes(paths: &IntegrationPaths) -> Result<(), AppError> {
-    if !paths.codex_config.is_file() { return Ok(()); }
-    if codex_sessions::runtime_is_running() { return Err(AppError::Engine("Codex 已启动，旧会话修复将在关闭后继续".into())); }
+    if !paths.codex_config.is_file() {
+        return Ok(());
+    }
+    if codex_sessions::runtime_is_running() {
+        return Err(AppError::Engine(
+            "Codex 已启动，旧会话修复将在关闭后继续".into(),
+        ));
+    }
     let _switch_lock = config_switch_lock()?;
-    let raw = fs::read(&paths.codex_config).map_err(|error| AppError::Internal(error.to_string()))?;
+    let raw =
+        fs::read(&paths.codex_config).map_err(|error| AppError::Internal(error.to_string()))?;
     let provider = config_provider(&raw)?;
     let config = load_config(&paths.opencodex_config)?;
-    let models = config.get("customModels").and_then(JsonValue::as_array).cloned().unwrap_or_default();
+    let models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
     let ids = inferred_managed_provider_ids(&config, &models);
     let routes = session_routes(&configured_routes_from_config(&config, &ids));
     let state = load_state(&paths.state);
     let default_provider = config_provider(&default_codex_config_bytes(paths)?)?;
     let default_route = inferred_default_route(&config, &ids).unwrap_or_default();
     let target = if codex_proxy_provider_is_loopback(&paths.codex_config) {
-        if provider != DEFAULT_PROVIDER_ID && provider != state.codex_provider_id { return Ok(()); }
-        if default_route.is_empty() { return Ok(()); }
-        codex_sessions::SessionTarget::OpenCodex { provider: &provider, default_provider: &default_provider, default_route: &default_route }
+        if provider != DEFAULT_PROVIDER_ID && provider != state.codex_provider_id {
+            return Ok(());
+        }
+        if default_route.is_empty() {
+            return Ok(());
+        }
+        codex_sessions::SessionTarget::OpenCodex {
+            provider: &provider,
+            default_provider: &default_provider,
+            default_route: &default_route,
+        }
     } else {
-        codex_sessions::SessionTarget::Default { provider: &provider, opencodex_provider: DEFAULT_PROVIDER_ID }
+        codex_sessions::SessionTarget::Default {
+            provider: &provider,
+            opencodex_provider: DEFAULT_PROVIDER_ID,
+        }
     };
     let sources = codex_sessions::provider_switch_sources(&paths.codex_config)?;
-    let revision: String = Sha256::digest(format!("{}:{target:?}:{routes:?}:{sources:?}", env!("CARGO_PKG_VERSION")))
-        .iter().map(|byte| format!("{byte:02x}")).collect();
+    let revision: String = Sha256::digest(format!(
+        "{}:{target:?}:{routes:?}:{sources:?}",
+        env!("CARGO_PKG_VERSION")
+    ))
+    .iter()
+    .map(|byte| format!("{byte:02x}"))
+    .collect();
     let marker = paths.state.with_extension("session-routing-revision");
-    if fs::read_to_string(&marker).ok().as_deref() == Some(&revision) { return Ok(()); }
+    if fs::read_to_string(&marker).ok().as_deref() == Some(&revision) {
+        return Ok(());
+    }
     codex_sessions::repair_resume_metadata(target, &routes)?;
     codex_sessions::migrate(target, &routes)?;
     for source in sources.iter().filter(|source| **source != provider) {
         let target = match target {
-            codex_sessions::SessionTarget::OpenCodex { provider, default_route, .. } =>
-                codex_sessions::SessionTarget::OpenCodex { provider, default_route, default_provider: source },
-            codex_sessions::SessionTarget::Default { provider, .. } =>
-                codex_sessions::SessionTarget::Default { provider, opencodex_provider: source },
+            codex_sessions::SessionTarget::OpenCodex {
+                provider,
+                default_route,
+                ..
+            } => codex_sessions::SessionTarget::OpenCodex {
+                provider,
+                default_route,
+                default_provider: source,
+            },
+            codex_sessions::SessionTarget::Default { provider, .. } => {
+                codex_sessions::SessionTarget::Default {
+                    provider,
+                    opencodex_provider: source,
+                }
+            }
         };
         codex_sessions::repair_resume_metadata(target, &routes)?;
         codex_sessions::migrate(target, &routes)?;
     }
-    if codex_sessions::runtime_is_running() { return Err(AppError::Engine("Codex 已启动，旧会话修复将在关闭后继续".into())); }
-    atomic_file::write_atomic(&marker, revision.as_bytes()).map_err(|error| AppError::Internal(error.to_string()))
+    if codex_sessions::runtime_is_running() {
+        return Err(AppError::Engine(
+            "Codex 已启动，旧会话修复将在关闭后继续".into(),
+        ));
+    }
+    atomic_file::write_atomic(&marker, revision.as_bytes())
+        .map_err(|error| AppError::Internal(error.to_string()))
 }
 
 pub fn repair_default_session_index() -> Result<usize, AppError> {
@@ -969,7 +1081,10 @@ pub fn repair_default_session_index() -> Result<usize, AppError> {
         .cloned()
         .unwrap_or_default();
     let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
-    let routes = session_routes(&configured_routes_from_config(&config, &managed_provider_ids));
+    let routes = session_routes(&configured_routes_from_config(
+        &config,
+        &managed_provider_ids,
+    ));
     codex_sessions::migrate(
         codex_sessions::SessionTarget::Default {
             provider: &target_provider,
@@ -998,8 +1113,9 @@ fn restore_optional_file(path: &Path, bytes: Option<&[u8]>) -> Result<(), AppErr
             .map_err(|error| AppError::Internal(format!("恢复切换前文件失败：{error}"))),
         None => {
             if path.exists() {
-                fs::remove_file(path)
-                    .map_err(|error| AppError::Internal(format!("清理切换中间文件失败：{error}")))?;
+                fs::remove_file(path).map_err(|error| {
+                    AppError::Internal(format!("清理切换中间文件失败：{error}"))
+                })?;
             }
             Ok(())
         }
@@ -1007,12 +1123,18 @@ fn restore_optional_file(path: &Path, bytes: Option<&[u8]>) -> Result<(), AppErr
 }
 
 fn codex_proxy_provider_is_loopback(path: &Path) -> bool {
-    let Ok(raw) = fs::read_to_string(path) else { return false };
-    let Ok(document) = raw.parse::<DocumentMut>() else { return false };
+    let Ok(raw) = fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(document) = raw.parse::<DocumentMut>() else {
+        return false;
+    };
     if document
         .get("openai_base_url")
         .and_then(Item::as_str)
-        .is_some_and(|url| url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:"))
+        .is_some_and(|url| {
+            url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:")
+        })
     {
         return true;
     }
@@ -1033,7 +1155,12 @@ fn codex_proxy_provider_is_loopback(path: &Path) -> bool {
                 .map(|parsed| {
                     let is_loopback = parsed
                         .host_str()
-                        .map(|host| matches!(host.to_ascii_lowercase().as_str(), "localhost" | "127.0.0.1" | "::1"))
+                        .map(|host| {
+                            matches!(
+                                host.to_ascii_lowercase().as_str(),
+                                "localhost" | "127.0.0.1" | "::1"
+                            )
+                        })
                         .unwrap_or(false);
                     is_loopback && parsed.path().ends_with("/v1")
                 })
@@ -1096,7 +1223,10 @@ pub fn disable_for_single_provider() -> Result<(), AppError> {
         .cloned()
         .unwrap_or_default();
     let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
-    let routes = session_routes(&configured_routes_from_config(&config, &managed_provider_ids));
+    let routes = session_routes(&configured_routes_from_config(
+        &config,
+        &managed_provider_ids,
+    ));
     let previous_config = fs::read(&paths.codex_config).ok();
     let previous_state = fs::read(&paths.state).ok();
     let previous_backup = fs::read(&backup).ok();
@@ -1108,8 +1238,9 @@ pub fn disable_for_single_provider() -> Result<(), AppError> {
         state.codex_provider_id.clear();
         write_json(
             &paths.state,
-            &serde_json::to_value(state)
-                .map_err(|error| AppError::Internal(format!("保存默认配置模式状态失败：{error}")))?,
+            &serde_json::to_value(state).map_err(|error| {
+                AppError::Internal(format!("保存默认配置模式状态失败：{error}"))
+            })?,
         )?;
         codex_sessions::migrate(
             codex_sessions::SessionTarget::Default {
@@ -1124,7 +1255,9 @@ pub fn disable_for_single_provider() -> Result<(), AppError> {
         let _ = restore_optional_file(&paths.codex_config, previous_config.as_deref());
         let _ = restore_optional_file(&paths.state, previous_state.as_deref());
         let _ = restore_optional_file(&backup, previous_backup.as_deref());
-        return Err(AppError::Engine(format!("切换默认配置失败，已恢复原配置：{error}")));
+        return Err(AppError::Engine(format!(
+            "切换默认配置失败，已恢复原配置：{error}"
+        )));
     }
     let _ = fs::remove_file(&backup);
     Ok(())
@@ -1139,14 +1272,17 @@ fn checked_id(value: &str, label: &str) -> Result<String, AppError> {
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
     {
-        return Err(AppError::Engine(format!("{label}只能包含字母、数字、连字符、下划线或点")));
+        return Err(AppError::Engine(format!(
+            "{label}只能包含字母、数字、连字符、下划线或点"
+        )));
     }
     Ok(trimmed.to_string())
 }
 
 fn checked_text(value: &str, label: &str) -> Result<String, AppError> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.len() > MAX_VALUE_LEN || trimmed.chars().any(char::is_control) {
+    if trimmed.is_empty() || trimmed.len() > MAX_VALUE_LEN || trimmed.chars().any(char::is_control)
+    {
         return Err(AppError::Engine(format!("{label}无效")));
     }
     Ok(trimmed.to_string())
@@ -1156,15 +1292,21 @@ fn checked_url(value: &str) -> Result<String, AppError> {
     let parsed = url::Url::parse(value.trim())
         .map_err(|error| AppError::Engine(format!("Base URL 无效：{error}")))?;
     if !matches!(parsed.scheme(), "https" | "http") {
-        return Err(AppError::Engine("Base URL 仅支持 http 或 https".to_string()));
+        return Err(AppError::Engine(
+            "Base URL 仅支持 http 或 https".to_string(),
+        ));
     }
     let host = parsed.host_str().unwrap_or_default();
     let loopback = matches!(host, "localhost" | "127.0.0.1" | "::1");
     if parsed.scheme() == "http" && !loopback {
-        return Err(AppError::Engine("非本机 Base URL 必须使用 HTTPS".to_string()));
+        return Err(AppError::Engine(
+            "非本机 Base URL 必须使用 HTTPS".to_string(),
+        ));
     }
     if parsed.query().is_some() || parsed.fragment().is_some() {
-        return Err(AppError::Engine("Base URL 不能包含查询参数或片段".to_string()));
+        return Err(AppError::Engine(
+            "Base URL 不能包含查询参数或片段".to_string(),
+        ));
     }
     Ok(parsed.as_str().trim_end_matches('/').to_string())
 }
@@ -1195,7 +1337,9 @@ fn load_config(path: &Path) -> Result<JsonMap<String, JsonValue>, AppError> {
         return Ok(JsonMap::new());
     }
     if path.is_symlink() {
-        return Err(AppError::Engine("OpenCodex 配置是符号链接，拒绝改写".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 配置是符号链接，拒绝改写".to_string(),
+        ));
     }
     let raw = fs::read(path)
         .map_err(|error| AppError::Internal(format!("读取 OpenCodex 配置失败：{error}")))?;
@@ -1244,16 +1388,35 @@ fn discover_provider_models(base_url: &str, api_key: &str) -> Option<Vec<String>
 /// from ever reaching the Codex picker.
 fn refresh_configured_provider_models(paths: &IntegrationPaths) -> Result<bool, AppError> {
     let mut config = load_config(&paths.opencodex_config)?;
-    let Some(providers) = config.get_mut("providers").and_then(JsonValue::as_object_mut) else {
+    let Some(providers) = config
+        .get_mut("providers")
+        .and_then(JsonValue::as_object_mut)
+    else {
         return Ok(false);
     };
     let mut changed = false;
     let mut discovered = Vec::new();
     for (provider_id, provider) in providers.iter_mut() {
-        let Some(provider_object) = provider.as_object_mut() else { continue };
-        let Some(api_key) = provider_object.get("apiKey").and_then(JsonValue::as_str).filter(|key| !key.trim().is_empty()) else { continue };
-        let Some(base_url) = provider_object.get("baseUrl").and_then(JsonValue::as_str).map(str::to_string) else { continue };
-        let Some(models) = discover_provider_models(&base_url, api_key) else { continue };
+        let Some(provider_object) = provider.as_object_mut() else {
+            continue;
+        };
+        let Some(api_key) = provider_object
+            .get("apiKey")
+            .and_then(JsonValue::as_str)
+            .filter(|key| !key.trim().is_empty())
+        else {
+            continue;
+        };
+        let Some(base_url) = provider_object
+            .get("baseUrl")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        let Some(models) = discover_provider_models(&base_url, api_key) else {
+            continue;
+        };
         let models = models
             .into_iter()
             .filter(|model| osir_model_supported_in_codex(provider_id, model))
@@ -1274,15 +1437,23 @@ fn refresh_configured_provider_models(paths: &IntegrationPaths) -> Result<bool, 
                 added.push(model);
             }
         }
-        if added.is_empty() { continue; }
+        if added.is_empty() {
+            continue;
+        }
         let mut all = configured_ids.into_iter().collect::<Vec<_>>();
         all.sort();
         provider_object.insert("models".to_string(), json!(all));
-        let label = provider_object.get("label").and_then(JsonValue::as_str).unwrap_or(provider_id).to_string();
+        let label = provider_object
+            .get("label")
+            .and_then(JsonValue::as_str)
+            .unwrap_or(provider_id)
+            .to_string();
         discovered.push((provider_id.clone(), base_url, label, added));
         changed = true;
     }
-    if !changed { return Ok(false); }
+    if !changed {
+        return Ok(false);
+    }
 
     let custom_models = config.entry("customModels").or_insert_with(|| json!([]));
     let custom_models = custom_models
@@ -1293,19 +1464,37 @@ fn refresh_configured_provider_models(paths: &IntegrationPaths) -> Result<bool, 
             if custom_models.iter().any(|entry| {
                 entry.get("provider").and_then(JsonValue::as_str) == Some(provider_id.as_str())
                     && entry.get("modelId").and_then(JsonValue::as_str) == Some(model_id.as_str())
-            }) { continue; }
+            }) {
+                continue;
+            }
             let mut entry = custom_models
                 .iter()
-                .find(|entry| entry.get("provider").and_then(JsonValue::as_str) == Some(provider_id.as_str()))
+                .find(|entry| {
+                    entry.get("provider").and_then(JsonValue::as_str) == Some(provider_id.as_str())
+                })
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            let object = entry
-                .as_object_mut()
-                .ok_or_else(|| AppError::Engine("OpenCodex customModels 包含无效条目".to_string()))?;
-            object.insert("id".to_string(), JsonValue::String(Uuid::new_v4().to_string()));
-            object.insert("provider".to_string(), JsonValue::String(provider_id.clone()));
+            let object = entry.as_object_mut().ok_or_else(|| {
+                AppError::Engine("OpenCodex customModels 包含无效条目".to_string())
+            })?;
+            object.insert(
+                "id".to_string(),
+                JsonValue::String(Uuid::new_v4().to_string()),
+            );
+            object.insert(
+                "provider".to_string(),
+                JsonValue::String(provider_id.clone()),
+            );
             object.insert("modelId".to_string(), JsonValue::String(model_id.clone()));
-            object.insert("displayName".to_string(), JsonValue::String(model_display_name_for_route(&provider_id, &base_url, &label, &model_id)));
+            object.insert(
+                "displayName".to_string(),
+                JsonValue::String(model_display_name_for_route(
+                    &provider_id,
+                    &base_url,
+                    &label,
+                    &model_id,
+                )),
+            );
             custom_models.push(entry);
         }
     }
@@ -1331,8 +1520,12 @@ fn component_target() -> Result<&'static str, AppError> {
 }
 
 fn managed_component_roots() -> Vec<PathBuf> {
-    let Some(data_dir) = paths::data_dir() else { return Vec::new() };
-    let Ok(target) = component_target() else { return Vec::new() };
+    let Some(data_dir) = paths::data_dir() else {
+        return Vec::new();
+    };
+    let Ok(target) = component_target() else {
+        return Vec::new();
+    };
     let components = data_dir.join("opencodex").join("components");
     let roots = vec![
         components.join("current").join(target),
@@ -1362,7 +1555,11 @@ fn managed_component_roots() -> Vec<PathBuf> {
 
 fn managed_component_invocation() -> Option<(String, Vec<String>)> {
     managed_component_roots().into_iter().find_map(|root| {
-        let node = root.join(if cfg!(target_os = "windows") { "runtime/node.exe" } else { "runtime/bin/node" });
+        let node = root.join(if cfg!(target_os = "windows") {
+            "runtime/node.exe"
+        } else {
+            "runtime/bin/node"
+        });
         let launcher = root.join("opencodex/node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
         let bun_ready = {
             #[cfg(target_os = "windows")]
@@ -1374,8 +1571,12 @@ fn managed_component_invocation() -> Option<(String, Vec<String>)> {
                 bundled_bun_exists(&root)
             }
         };
-        (node.is_file() && launcher.is_file() && bun_ready)
-            .then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
+        (node.is_file() && launcher.is_file() && bun_ready).then(|| {
+            (
+                node.display().to_string(),
+                vec![launcher.display().to_string()],
+            )
+        })
     })
 }
 
@@ -1383,9 +1584,11 @@ fn managed_component_invocation() -> Option<(String, Vec<String>)> {
 fn bundled_bun_exists(root: &Path) -> bool {
     // Some published archives retain the `.exe` suffix for Bun even when the
     // payload is a native Unix executable.
-    ["bun", "bun.exe"]
-        .iter()
-        .any(|name| root.join("opencodex/node_modules/bun/bin").join(name).is_file())
+    ["bun", "bun.exe"].iter().any(|name| {
+        root.join("opencodex/node_modules/bun/bin")
+            .join(name)
+            .is_file()
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -1444,12 +1647,17 @@ fn repair_windows_bun_runtime(root: &Path) -> Result<bool, AppError> {
                 .join("bin/bun.exe")
         })
         .find(|candidate| windows_pe_executable(candidate));
-    let Some(source) = source else { return Ok(false) };
+    let Some(source) = source else {
+        return Ok(false);
+    };
     fs::create_dir_all(&bun_dir)
         .map_err(|error| AppError::Engine(format!("创建 Bun 运行时目录失败：{error}")))?;
     fs::copy(&source, &destination)
         .map_err(|error| AppError::Engine(format!("修复 Windows Bun 运行时失败：{error}")))?;
-    log::warn!("repaired invalid Windows Bun runtime from {}", source.display());
+    log::warn!(
+        "repaired invalid Windows Bun runtime from {}",
+        source.display()
+    );
     Ok(windows_pe_executable(&destination))
 }
 
@@ -1464,17 +1672,26 @@ fn command_version(program: &Path, args: &[&str]) -> Option<String> {
         .stderr(Stdio::null())
         .output()
         .ok()?;
-    if !output.status.success() { return None; }
-    String::from_utf8(output.stdout).ok().map(|value| value.trim().trim_start_matches('v').to_string()).filter(|value| !value.is_empty())
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|value| value.trim().trim_start_matches('v').to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn executable_candidates(name: &str) -> Vec<PathBuf> {
     let mut candidates = vec![PathBuf::from(name)];
     let home = BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
     if cfg!(target_os = "windows") {
-        for root in [std::env::var_os("APPDATA"), std::env::var_os("NVM_HOME"), std::env::var_os("ProgramFiles")]
-            .into_iter()
-            .flatten()
+        for root in [
+            std::env::var_os("APPDATA"),
+            std::env::var_os("NVM_HOME"),
+            std::env::var_os("ProgramFiles"),
+        ]
+        .into_iter()
+        .flatten()
         {
             let root = PathBuf::from(root);
             candidates.push(root.join(name));
@@ -1490,7 +1707,10 @@ fn executable_candidates(name: &str) -> Vec<PathBuf> {
             }
             let nvm_versions = home.join(".nvm/versions/node");
             if let Ok(entries) = fs::read_dir(nvm_versions) {
-                let mut versions = entries.flatten().map(|entry| entry.path().join("bin").join(name)).collect::<Vec<_>>();
+                let mut versions = entries
+                    .flatten()
+                    .map(|entry| entry.path().join("bin").join(name))
+                    .collect::<Vec<_>>();
                 versions.sort_by(|left, right| right.cmp(left));
                 candidates.extend(versions);
             }
@@ -1500,21 +1720,40 @@ fn executable_candidates(name: &str) -> Vec<PathBuf> {
 }
 
 fn first_command(name: &str, args: &[&str]) -> Option<(PathBuf, String)> {
-    executable_candidates(name).into_iter().find_map(|candidate| {
-        command_version(&candidate, args).map(|version| (candidate, version))
-    })
+    executable_candidates(name)
+        .into_iter()
+        .find_map(|candidate| command_version(&candidate, args).map(|version| (candidate, version)))
 }
 
 fn node_version() -> Option<String> {
-    first_command(if cfg!(target_os = "windows") { "node.exe" } else { "node" }, &["--version"]).map(|(_, version)| version)
+    first_command(
+        if cfg!(target_os = "windows") {
+            "node.exe"
+        } else {
+            "node"
+        },
+        &["--version"],
+    )
+    .map(|(_, version)| version)
 }
 
 fn system_node_command() -> Option<(PathBuf, String)> {
-    first_command(if cfg!(target_os = "windows") { "node.exe" } else { "node" }, &["--version"])
+    first_command(
+        if cfg!(target_os = "windows") {
+            "node.exe"
+        } else {
+            "node"
+        },
+        &["--version"],
+    )
 }
 
 fn node_supported(version: &str) -> bool {
-    version.split('.').next().and_then(|value| value.parse::<u32>().ok()).is_some_and(|major| major >= 18)
+    version
+        .split('.')
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .is_some_and(|major| major >= 18)
 }
 
 fn npm_available() -> bool {
@@ -1522,7 +1761,15 @@ fn npm_available() -> bool {
 }
 
 fn system_npm_command() -> Option<PathBuf> {
-    first_command(if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" }, &["--version"]).map(|(path, _)| path)
+    first_command(
+        if cfg!(target_os = "windows") {
+            "npm.cmd"
+        } else {
+            "npm"
+        },
+        &["--version"],
+    )
+    .map(|(path, _)| path)
 }
 
 fn node_distribution_target_for(os: &str, arch: &str) -> Option<&'static str> {
@@ -1541,13 +1788,22 @@ fn managed_node_root() -> Result<PathBuf, AppError> {
     let target = node_distribution_target_for(std::env::consts::OS, std::env::consts::ARCH)
         .ok_or(AppError::UnsupportedPlatform)?;
     paths::data_dir()
-        .map(|dir| dir.join("opencodex").join("node").join(MANAGED_NODE_VERSION).join(target))
+        .map(|dir| {
+            dir.join("opencodex")
+                .join("node")
+                .join(MANAGED_NODE_VERSION)
+                .join(target)
+        })
         .ok_or_else(|| AppError::Internal("无法定位 OpenCodex Node 运行时目录".to_string()))
 }
 
 fn managed_node_executable() -> Option<PathBuf> {
     let root = managed_node_root().ok()?;
-    let path = root.join(if cfg!(target_os = "windows") { "node.exe" } else { "bin/node" });
+    let path = root.join(if cfg!(target_os = "windows") {
+        "node.exe"
+    } else {
+        "bin/node"
+    });
     path.is_file().then_some(path)
 }
 
@@ -1564,22 +1820,40 @@ fn managed_npm_cli() -> Option<PathBuf> {
 fn private_npm_invocation() -> Option<(String, Vec<String>)> {
     let runtime = managed_runtime_dir().ok()?;
     let launcher = runtime.join("node_modules/@bitkyc08/opencodex/bin/ocx.mjs");
-    if !launcher.is_file() { return None; }
+    if !launcher.is_file() {
+        return None;
+    }
     if let Some(node) = managed_node_executable() {
-        return Some((node.display().to_string(), vec![launcher.display().to_string()]));
+        return Some((
+            node.display().to_string(),
+            vec![launcher.display().to_string()],
+        ));
     }
     let (node, version) = system_node_command()?;
-    node_supported(&version).then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
+    node_supported(&version).then(|| {
+        (
+            node.display().to_string(),
+            vec![launcher.display().to_string()],
+        )
+    })
 }
 
 fn system_ocx_invocation() -> Option<(String, Vec<String>)> {
     let candidates: &[&str] = if cfg!(target_os = "windows") {
-        &["ocx.cmd", "opencodex.cmd", "ocx.exe", "opencodex.exe", "ocx", "opencodex"]
+        &[
+            "ocx.cmd",
+            "opencodex.cmd",
+            "ocx.exe",
+            "opencodex.exe",
+            "ocx",
+            "opencodex",
+        ]
     } else {
         &["ocx", "opencodex"]
     };
     candidates.iter().find_map(|candidate| {
-        first_command(candidate, &["--version"]).map(|(path, _)| (path.display().to_string(), Vec::new()))
+        first_command(candidate, &["--version"])
+            .map(|(path, _)| (path.display().to_string(), Vec::new()))
     })
 }
 
@@ -1594,15 +1868,19 @@ fn ocx_program() -> Option<String> {
 }
 
 fn component_sha256(path: &Path) -> Result<String, AppError> {
-    let bytes = fs::read(path).map_err(|error| AppError::Internal(format!("读取 OpenCodex 组件失败：{error}")))?;
+    let bytes = fs::read(path)
+        .map_err(|error| AppError::Internal(format!("读取 OpenCodex 组件失败：{error}")))?;
     let digest = Sha256::digest(bytes);
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn download_component(url: &str, path: &Path, expected_bytes: Option<u64>) -> Result<(), AppError> {
-    let parsed = Url::parse(url).map_err(|error| AppError::Engine(format!("OpenCodex 组件地址无效：{error}")))?;
+    let parsed = Url::parse(url)
+        .map_err(|error| AppError::Engine(format!("OpenCodex 组件地址无效：{error}")))?;
     if parsed.scheme() != "https" {
-        return Err(AppError::Engine("OpenCodex 组件仅允许通过 HTTPS 下载".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 组件仅允许通过 HTTPS 下载".to_string(),
+        ));
     }
     let response = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(20))
@@ -1613,13 +1891,22 @@ fn download_component(url: &str, path: &Path, expected_bytes: Option<u64>) -> Re
         .send()
         .map_err(|error| AppError::Engine(format!("下载 OpenCodex 组件失败：{error}")))?;
     if !response.status().is_success() {
-        return Err(AppError::Engine(format!("OpenCodex 组件下载失败：HTTP {}", response.status())));
+        return Err(AppError::Engine(format!(
+            "OpenCodex 组件下载失败：HTTP {}",
+            response.status()
+        )));
     }
     const MAX_COMPONENT_BYTES: u64 = 512 * 1024 * 1024;
-    if response.content_length().is_some_and(|size| size > MAX_COMPONENT_BYTES) {
-        return Err(AppError::Engine("OpenCodex 组件大小异常，已停止下载".to_string()));
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_COMPONENT_BYTES)
+    {
+        return Err(AppError::Engine(
+            "OpenCodex 组件大小异常，已停止下载".to_string(),
+        ));
     }
-    let mut output = fs::File::create(path).map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载文件失败：{error}")))?;
+    let mut output = fs::File::create(path)
+        .map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载文件失败：{error}")))?;
     let copied = std::io::copy(&mut response.take(MAX_COMPONENT_BYTES + 1), &mut output)
         .map_err(|error| AppError::Engine(format!("保存 OpenCodex 组件失败：{error}")))?;
     if copied > MAX_COMPONENT_BYTES || expected_bytes.is_some_and(|size| size != copied) {
@@ -1630,98 +1917,197 @@ fn download_component(url: &str, path: &Path, expected_bytes: Option<u64>) -> Re
 }
 
 fn extract_component(zip_path: &Path, destination: &Path) -> Result<(), AppError> {
-    let file = fs::File::open(zip_path).map_err(|error| AppError::Internal(format!("打开 OpenCodex 组件失败：{error}")))?;
-    let mut archive = ZipArchive::new(file).map_err(|error| AppError::Engine(format!("OpenCodex 组件压缩包无效：{error}")))?;
+    let file = fs::File::open(zip_path)
+        .map_err(|error| AppError::Internal(format!("打开 OpenCodex 组件失败：{error}")))?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|error| AppError::Engine(format!("OpenCodex 组件压缩包无效：{error}")))?;
     let temp = destination.with_extension(format!("tmp-{}", std::process::id()));
-    if temp.exists() { fs::remove_dir_all(&temp).ok(); }
-    fs::create_dir_all(&temp).map_err(|error| AppError::Internal(format!("创建 OpenCodex 组件目录失败：{error}")))?;
+    if temp.exists() {
+        fs::remove_dir_all(&temp).ok();
+    }
+    fs::create_dir_all(&temp)
+        .map_err(|error| AppError::Internal(format!("创建 OpenCodex 组件目录失败：{error}")))?;
     for index in 0..archive.len() {
-        let mut entry = archive.by_index(index).map_err(|error| AppError::Engine(format!("读取 OpenCodex 组件失败：{error}")))?;
-        let Some(relative) = entry.enclosed_name().map(|path| path.to_path_buf()) else { return Err(AppError::Engine("OpenCodex 组件包含不安全路径".to_string())); };
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|error| AppError::Engine(format!("读取 OpenCodex 组件失败：{error}")))?;
+        let Some(relative) = entry.enclosed_name().map(|path| path.to_path_buf()) else {
+            return Err(AppError::Engine("OpenCodex 组件包含不安全路径".to_string()));
+        };
         let target = temp.join(relative);
-        if entry.is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?; continue; }
-        if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?; }
-        let mut output = fs::File::create(&target).map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
-        std::io::copy(&mut entry, &mut output).map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
+        if entry.is_dir() {
+            fs::create_dir_all(&target)
+                .map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?;
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| AppError::Internal(format!("解压 OpenCodex 组件失败：{error}")))?;
+        }
+        let mut output = fs::File::create(&target)
+            .map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
+        std::io::copy(&mut entry, &mut output)
+            .map_err(|error| AppError::Internal(format!("写入 OpenCodex 组件失败：{error}")))?;
         #[cfg(unix)]
         if let Some(mode) = entry.unix_mode() {
-            fs::set_permissions(&target, fs::Permissions::from_mode(mode & 0o777))
-                .map_err(|error| AppError::Internal(format!("恢复 OpenCodex 组件权限失败：{error}")))?;
+            fs::set_permissions(&target, fs::Permissions::from_mode(mode & 0o777)).map_err(
+                |error| AppError::Internal(format!("恢复 OpenCodex 组件权限失败：{error}")),
+            )?;
         }
     }
-    if destination.exists() { fs::remove_dir_all(destination).map_err(|error| AppError::Internal(format!("替换 OpenCodex 组件失败：{error}")))?; }
-    fs::rename(temp, destination).map_err(|error| AppError::Internal(format!("启用 OpenCodex 组件失败：{error}")))?;
+    if destination.exists() {
+        fs::remove_dir_all(destination)
+            .map_err(|error| AppError::Internal(format!("替换 OpenCodex 组件失败：{error}")))?;
+    }
+    fs::rename(temp, destination)
+        .map_err(|error| AppError::Internal(format!("启用 OpenCodex 组件失败：{error}")))?;
     Ok(())
 }
 
 fn stripped_archive_path(path: &Path) -> Result<Option<PathBuf>, AppError> {
     let components = path.components().collect::<Vec<_>>();
-    if components.len() <= 1 { return Ok(None); }
-    if components.iter().any(|component| !matches!(component, Component::Normal(_))) {
-        return Err(AppError::Engine("Node 运行时压缩包包含不安全路径".to_string()));
+    if components.len() <= 1 {
+        return Ok(None);
     }
-    Ok(Some(components.iter().skip(1).fold(PathBuf::new(), |mut result, component| {
-        if let Component::Normal(value) = component { result.push(value); }
-        result
-    })))
+    if components
+        .iter()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(AppError::Engine(
+            "Node 运行时压缩包包含不安全路径".to_string(),
+        ));
+    }
+    Ok(Some(components.iter().skip(1).fold(
+        PathBuf::new(),
+        |mut result, component| {
+            if let Component::Normal(value) = component {
+                result.push(value);
+            }
+            result
+        },
+    )))
 }
 
 fn extract_node_archive(archive_path: &Path, destination: &Path) -> Result<(), AppError> {
     let temp = destination.with_extension(format!("tmp-{}", std::process::id()));
-    if temp.exists() { fs::remove_dir_all(&temp).ok(); }
-    fs::create_dir_all(&temp).map_err(|error| AppError::Internal(format!("创建 Node 运行时目录失败：{error}")))?;
+    if temp.exists() {
+        fs::remove_dir_all(&temp).ok();
+    }
+    fs::create_dir_all(&temp)
+        .map_err(|error| AppError::Internal(format!("创建 Node 运行时目录失败：{error}")))?;
     if archive_path.extension().and_then(|value| value.to_str()) == Some("zip") {
-        let file = fs::File::open(archive_path).map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
-        let mut archive = ZipArchive::new(file).map_err(|error| AppError::Engine(format!("Node 运行时压缩包无效：{error}")))?;
+        let file = fs::File::open(archive_path)
+            .map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
+        let mut archive = ZipArchive::new(file)
+            .map_err(|error| AppError::Engine(format!("Node 运行时压缩包无效：{error}")))?;
         for index in 0..archive.len() {
-            let mut entry = archive.by_index(index).map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
-            let enclosed = entry.enclosed_name().ok_or_else(|| AppError::Engine("Node 运行时包含不安全路径".to_string()))?;
-            let Some(relative) = stripped_archive_path(&enclosed)? else { continue };
+            let mut entry = archive
+                .by_index(index)
+                .map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
+            let enclosed = entry
+                .enclosed_name()
+                .ok_or_else(|| AppError::Engine("Node 运行时包含不安全路径".to_string()))?;
+            let Some(relative) = stripped_archive_path(&enclosed)? else {
+                continue;
+            };
             let target = temp.join(relative);
-            if entry.is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; continue; }
-            if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; }
-            let mut output = fs::File::create(&target).map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
-            std::io::copy(&mut entry, &mut output).map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
+            if entry.is_dir() {
+                fs::create_dir_all(&target).map_err(|error| {
+                    AppError::Internal(format!("解压 Node 运行时失败：{error}"))
+                })?;
+                continue;
+            }
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    AppError::Internal(format!("解压 Node 运行时失败：{error}"))
+                })?;
+            }
+            let mut output = fs::File::create(&target)
+                .map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
+            std::io::copy(&mut entry, &mut output)
+                .map_err(|error| AppError::Internal(format!("写入 Node 运行时失败：{error}")))?;
         }
     } else {
-        let file = fs::File::open(archive_path).map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
+        let file = fs::File::open(archive_path)
+            .map_err(|error| AppError::Internal(format!("打开 Node 运行时失败：{error}")))?;
         let decoder = flate2::read::GzDecoder::new(file);
         let mut archive = tar::Archive::new(decoder);
-        for entry in archive.entries().map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))? {
-            let mut entry = entry.map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
-            if !entry.header().entry_type().is_file() && !entry.header().entry_type().is_dir() { continue; }
-            let path = entry.path().map_err(|error| AppError::Engine(format!("读取 Node 运行时路径失败：{error}")))?;
-            let Some(relative) = stripped_archive_path(&path)? else { continue };
+        for entry in archive
+            .entries()
+            .map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?
+        {
+            let mut entry = entry
+                .map_err(|error| AppError::Engine(format!("读取 Node 运行时失败：{error}")))?;
+            if !entry.header().entry_type().is_file() && !entry.header().entry_type().is_dir() {
+                continue;
+            }
+            let path = entry
+                .path()
+                .map_err(|error| AppError::Engine(format!("读取 Node 运行时路径失败：{error}")))?;
+            let Some(relative) = stripped_archive_path(&path)? else {
+                continue;
+            };
             let target = temp.join(relative);
-            if entry.header().entry_type().is_dir() { fs::create_dir_all(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; continue; }
-            if let Some(parent) = target.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?; }
-            entry.unpack(&target).map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?;
+            if entry.header().entry_type().is_dir() {
+                fs::create_dir_all(&target).map_err(|error| {
+                    AppError::Internal(format!("解压 Node 运行时失败：{error}"))
+                })?;
+                continue;
+            }
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|error| {
+                    AppError::Internal(format!("解压 Node 运行时失败：{error}"))
+                })?;
+            }
+            entry
+                .unpack(&target)
+                .map_err(|error| AppError::Internal(format!("解压 Node 运行时失败：{error}")))?;
         }
     }
-    if destination.exists() { fs::remove_dir_all(destination).map_err(|error| AppError::Internal(format!("替换 Node 运行时失败：{error}")))?; }
-    if let Some(parent) = destination.parent() { fs::create_dir_all(parent).map_err(|error| AppError::Internal(format!("创建 Node 运行时父目录失败：{error}")))?; }
-    fs::rename(temp, destination).map_err(|error| AppError::Internal(format!("启用 Node 运行时失败：{error}")))?;
+    if destination.exists() {
+        fs::remove_dir_all(destination)
+            .map_err(|error| AppError::Internal(format!("替换 Node 运行时失败：{error}")))?;
+    }
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| AppError::Internal(format!("创建 Node 运行时父目录失败：{error}")))?;
+    }
+    fs::rename(temp, destination)
+        .map_err(|error| AppError::Internal(format!("启用 Node 运行时失败：{error}")))?;
     Ok(())
 }
 
 fn install_managed_node() -> Result<(), AppError> {
-    if managed_node_executable().is_some() && managed_npm_cli().is_some() { return Ok(()); }
-    let target = node_distribution_target_for(std::env::consts::OS, std::env::consts::ARCH).ok_or(AppError::UnsupportedPlatform)?;
-    let extension = if cfg!(target_os = "windows") { "zip" } else { "tar.gz" };
+    if managed_node_executable().is_some() && managed_npm_cli().is_some() {
+        return Ok(());
+    }
+    let target = node_distribution_target_for(std::env::consts::OS, std::env::consts::ARCH)
+        .ok_or(AppError::UnsupportedPlatform)?;
+    let extension = if cfg!(target_os = "windows") {
+        "zip"
+    } else {
+        "tar.gz"
+    };
     let filename = format!("node-v{MANAGED_NODE_VERSION}-{target}.{extension}");
     let base_url = format!("https://nodejs.org/dist/v{MANAGED_NODE_VERSION}");
-    let data_dir = paths::data_dir().ok_or_else(|| AppError::Internal("无法定位 OpenCodex 下载目录".to_string()))?;
+    let data_dir = paths::data_dir()
+        .ok_or_else(|| AppError::Internal("无法定位 OpenCodex 下载目录".to_string()))?;
     let downloads = data_dir.join("opencodex").join("downloads");
-    fs::create_dir_all(&downloads).map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载目录失败：{error}")))?;
+    fs::create_dir_all(&downloads)
+        .map_err(|error| AppError::Internal(format!("创建 OpenCodex 下载目录失败：{error}")))?;
     let checksums = downloads.join(format!("SHASUMS256-{MANAGED_NODE_VERSION}.txt"));
     download_component(&format!("{base_url}/SHASUMS256.txt"), &checksums, None)?;
-    let checksum_text = fs::read_to_string(&checksums).map_err(|error| AppError::Internal(format!("读取 Node 校验清单失败：{error}")))?;
-    let expected = checksum_text.lines().find_map(|line| {
-        let mut parts = line.split_whitespace();
-        let hash = parts.next()?;
-        let name = parts.next()?.trim_start_matches('*');
-        (name == filename).then(|| hash.to_string())
-    }).ok_or_else(|| AppError::Engine(format!("Node 官方校验清单没有 {filename}")))?;
+    let checksum_text = fs::read_to_string(&checksums)
+        .map_err(|error| AppError::Internal(format!("读取 Node 校验清单失败：{error}")))?;
+    let expected = checksum_text
+        .lines()
+        .find_map(|line| {
+            let mut parts = line.split_whitespace();
+            let hash = parts.next()?;
+            let name = parts.next()?.trim_start_matches('*');
+            (name == filename).then(|| hash.to_string())
+        })
+        .ok_or_else(|| AppError::Engine(format!("Node 官方校验清单没有 {filename}")))?;
     let archive = downloads.join(&filename);
     if !archive.is_file() || component_sha256(&archive).ok().as_deref() != Some(expected.as_str()) {
         let temp = archive.with_extension(format!("download-{}", std::process::id()));
@@ -1730,7 +2116,8 @@ fn install_managed_node() -> Result<(), AppError> {
             fs::remove_file(&temp).ok();
             return Err(AppError::Engine("Node 运行时 SHA-256 校验失败".to_string()));
         }
-        fs::rename(temp, &archive).map_err(|error| AppError::Internal(format!("保存 Node 运行时失败：{error}")))?;
+        fs::rename(temp, &archive)
+            .map_err(|error| AppError::Internal(format!("保存 Node 运行时失败：{error}")))?;
     }
     let destination = managed_node_root()?;
     extract_node_archive(&archive, &destination)?;
@@ -1741,26 +2128,59 @@ fn install_managed_node() -> Result<(), AppError> {
 }
 
 fn install_component_from_manifest() -> Result<(), AppError> {
-    let data_dir = paths::data_dir().ok_or_else(|| AppError::Internal("无法定位 OpenCodex 组件目录".to_string()))?;
+    let data_dir = paths::data_dir()
+        .ok_or_else(|| AppError::Internal("无法定位 OpenCodex 组件目录".to_string()))?;
     let component_target = component_target()?;
     let manifest_path = data_dir.join("opencodex").join("component-manifest.json");
-    if let Some(parent) = manifest_path.parent() { fs::create_dir_all(parent).ok(); }
-    let manifest_bytes = [COMPONENT_MANIFEST_URL, COMPONENT_MANIFEST_FALLBACK_URL].iter().find_map(|url| {
-        let temp = manifest_path.with_extension(format!("download-{}", std::process::id()));
-        if download_component(url, &temp, None).is_ok() { let bytes = fs::read(&temp).ok(); fs::remove_file(&temp).ok(); bytes } else { None }
-    }).ok_or_else(|| AppError::Engine("暂时无法获取 OpenCodex 组件清单".to_string()))?;
-    atomic_file::write_atomic(&manifest_path, &manifest_bytes).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件清单失败：{error}")))?;
-    let manifest: ComponentManifest = serde_json::from_slice(&manifest_bytes).map_err(|error| AppError::Engine(format!("OpenCodex 组件清单无效：{error}")))?;
-    let target = manifest.targets.get(component_target).ok_or_else(|| AppError::Engine(format!("组件服务尚未发布 {component_target} 的 OpenCodex 包")))?;
-    let archive = data_dir.join("opencodex").join(format!("component-{}-{}.zip", component_target, manifest.version));
-    if !archive.is_file() || component_sha256(&archive).ok().as_deref() != Some(target.sha256.as_str()) {
+    if let Some(parent) = manifest_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    let manifest_bytes = [COMPONENT_MANIFEST_URL, COMPONENT_MANIFEST_FALLBACK_URL]
+        .iter()
+        .find_map(|url| {
+            let temp = manifest_path.with_extension(format!("download-{}", std::process::id()));
+            if download_component(url, &temp, None).is_ok() {
+                let bytes = fs::read(&temp).ok();
+                fs::remove_file(&temp).ok();
+                bytes
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| AppError::Engine("暂时无法获取 OpenCodex 组件清单".to_string()))?;
+    atomic_file::write_atomic(&manifest_path, &manifest_bytes)
+        .map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件清单失败：{error}")))?;
+    let manifest: ComponentManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| AppError::Engine(format!("OpenCodex 组件清单无效：{error}")))?;
+    let target = manifest.targets.get(component_target).ok_or_else(|| {
+        AppError::Engine(format!(
+            "组件服务尚未发布 {component_target} 的 OpenCodex 包"
+        ))
+    })?;
+    let archive = data_dir.join("opencodex").join(format!(
+        "component-{}-{}.zip",
+        component_target, manifest.version
+    ));
+    if !archive.is_file()
+        || component_sha256(&archive).ok().as_deref() != Some(target.sha256.as_str())
+    {
         let temp = archive.with_extension(format!("download-{}", std::process::id()));
         download_component(&target.url, &temp, target.bytes)
             .or_else(|_| download_component(&target.github_url, &temp, target.bytes))?;
-        if component_sha256(&temp)? != target.sha256 { fs::remove_file(&temp).ok(); return Err(AppError::Engine("OpenCodex 组件 SHA-256 校验失败".to_string())); }
-        fs::rename(temp, &archive).map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件失败：{error}")))?;
+        if component_sha256(&temp)? != target.sha256 {
+            fs::remove_file(&temp).ok();
+            return Err(AppError::Engine(
+                "OpenCodex 组件 SHA-256 校验失败".to_string(),
+            ));
+        }
+        fs::rename(temp, &archive)
+            .map_err(|error| AppError::Internal(format!("保存 OpenCodex 组件失败：{error}")))?;
     }
-    let destination = data_dir.join("opencodex").join("components").join("current").join(component_target);
+    let destination = data_dir
+        .join("opencodex")
+        .join("components")
+        .join("current")
+        .join(component_target);
     extract_component(&archive, &destination)
 }
 
@@ -1788,7 +2208,10 @@ fn new_redemption_state() -> Result<RedemptionState, AppError> {
 
 fn redemption_path(paths: &IntegrationPaths, ticket: &str) -> PathBuf {
     let digest = Sha256::digest(ticket.as_bytes());
-    let hash = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
+    let hash = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     paths
         .state
         .parent()
@@ -1797,14 +2220,20 @@ fn redemption_path(paths: &IntegrationPaths, ticket: &str) -> PathBuf {
         .join(format!("{hash}.json"))
 }
 
-fn load_or_create_redemption(paths: &IntegrationPaths, ticket: &str) -> Result<(RedemptionState, PathBuf), AppError> {
+fn load_or_create_redemption(
+    paths: &IntegrationPaths,
+    ticket: &str,
+) -> Result<(RedemptionState, PathBuf), AppError> {
     let path = redemption_path(paths, ticket);
     if path.is_file() {
         let raw = fs::read(&path)
             .map_err(|error| AppError::Internal(format!("读取连接码状态失败：{error}")))?;
         let existing = serde_json::from_slice::<RedemptionState>(&raw)
             .map_err(|error| AppError::Engine(format!("连接码状态无效：{error}")))?;
-        if !existing.private_key.is_empty() && !existing.public_key.is_empty() && !existing.idempotency_key.is_empty() {
+        if !existing.private_key.is_empty()
+            && !existing.public_key.is_empty()
+            && !existing.idempotency_key.is_empty()
+        {
             return Ok((existing, path));
         }
     }
@@ -1878,7 +2307,8 @@ fn exchange_osir_oauth(
 }
 
 fn post_json(endpoint: &str, payload: &[u8], fallback_error: &str) -> Result<JsonValue, AppError> {
-    let parsed = Url::parse(endpoint).map_err(|error| AppError::Internal(format!("OSIRAPI 地址无效：{error}")))?;
+    let parsed = Url::parse(endpoint)
+        .map_err(|error| AppError::Internal(format!("OSIRAPI 地址无效：{error}")))?;
     if parsed.scheme() != "https" {
         return Err(AppError::Engine("OSIRAPI 请求仅允许通过 HTTPS".to_string()));
     }
@@ -1908,7 +2338,10 @@ fn post_json(endpoint: &str, payload: &[u8], fallback_error: &str) -> Result<Jso
     Ok(body)
 }
 
-fn decrypt_bundle(state: &RedemptionState, encrypted: EncryptedBundle) -> Result<CodexInstallPayload, AppError> {
+fn decrypt_bundle(
+    state: &RedemptionState,
+    encrypted: EncryptedBundle,
+) -> Result<CodexInstallPayload, AppError> {
     let private = RsaPrivateKey::from_pkcs8_pem(&state.private_key)
         .map_err(|error| AppError::Internal(format!("读取连接私钥失败：{error}")))?;
     let decode = |value: &str| {
@@ -1926,7 +2359,10 @@ fn decrypt_bundle(state: &RedemptionState, encrypted: EncryptedBundle) -> Result
     let cipher = Aes256Gcm::new_from_slice(&aes_key)
         .map_err(|_| AppError::Engine("OSIRAPI 加密配置密钥无效".to_string()))?;
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&iv), decode(&encrypted.ciphertext)?.as_ref())
+        .decrypt(
+            Nonce::from_slice(&iv),
+            decode(&encrypted.ciphertext)?.as_ref(),
+        )
         .map_err(|_| AppError::Engine("OSIRAPI 加密配置校验失败".to_string()))?;
     serde_json::from_slice::<CodexInstallPayload>(&plaintext)
         .map_err(|error| AppError::Engine(format!("OSIRAPI 解密后的配置无效：{error}")))
@@ -1957,7 +2393,9 @@ fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), A
         // same platform. Provider IDs are the routing identity; platform is
         // only display metadata and must not collapse valid entries.
         if platform.is_empty() || !provider_ids.insert(provider_id) {
-            return Err(AppError::Engine("OSIRAPI 返回了重复或无效的订阅平台路由".to_string()));
+            return Err(AppError::Engine(
+                "OSIRAPI 返回了重复或无效的订阅平台路由".to_string(),
+            ));
         }
         if provider.api_key.trim().is_empty() || provider.models.is_empty() {
             return Err(AppError::Engine(format!(
@@ -1966,7 +2404,10 @@ fn validate_codex_install_payload(payload: &CodexInstallPayload) -> Result<(), A
             )));
         }
         if provider.adapter.trim() != "openai-responses"
-            || !provider.models.iter().any(|model| model == &provider.recommended_model)
+            || !provider
+                .models
+                .iter()
+                .any(|model| model == &provider.recommended_model)
         {
             return Err(AppError::Engine(format!(
                 "OSIRAPI 的 {} 订阅路由格式无效",
@@ -2017,7 +2458,10 @@ fn validate_exchange_provider_summary(
             )
         })
         .collect::<BTreeMap<_, _>>();
-    if summary != encrypted || summary.len() != summaries.len() || encrypted.len() != payload.providers.len() {
+    if summary != encrypted
+        || summary.len() != summaries.len()
+        || encrypted.len() != payload.providers.len()
+    {
         return Err(AppError::Engine(
             "OSIRAPI 返回的供应商摘要与加密模型配置不一致，已停止写入本地配置".to_string(),
         ));
@@ -2061,8 +2505,16 @@ fn open_external_browser(url: &str) -> Result<(), AppError> {
 fn callback_http_response(stream: &mut std::net::TcpStream, success: bool, message: &str) {
     let accent = if success { "#36d399" } else { "#fb7185" };
     let icon = if success { "✓" } else { "!" };
-    let title = if success { "授权回调已收到" } else { "授权没有完成" };
-    let second_step = if success { "回调已收到" } else { "回调未完成" };
+    let title = if success {
+        "授权回调已收到"
+    } else {
+        "授权没有完成"
+    };
+    let second_step = if success {
+        "回调已收到"
+    } else {
+        "回调未完成"
+    };
     let second_icon = if success { "✓" } else { "!" };
     let body = format!(
         "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} · Codex Manager</title></head><body style=\"margin:0;min-height:100vh;background:#0b1020;color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box\"><main style=\"width:min(520px,100%);background:linear-gradient(145deg,#17213b,#10172c);border:1px solid rgba(148,163,184,.22);border-radius:28px;padding:34px;box-shadow:0 24px 80px rgba(0,0,0,.38);box-sizing:border-box\"><div style=\"display:flex;align-items:center;gap:10px;font-size:13px;letter-spacing:.16em;color:#a5b4fc;font-weight:700\"><span style=\"width:28px;height:28px;border-radius:9px;background:#6366f1;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:12px;letter-spacing:0\">CX</span> CODEX MANAGER</div><div style=\"width:72px;height:72px;border-radius:24px;background:{accent}22;color:{accent};display:flex;align-items:center;justify-content:center;font-size:42px;font-weight:700;margin:38px 0 22px\">{icon}</div><h1 style=\"font-size:30px;line-height:1.2;margin:0 0 12px;letter-spacing:-.03em\">{title}</h1><p style=\"font-size:16px;line-height:1.7;color:#cbd5e1;margin:0\">{message}</p><section style=\"display:grid;gap:10px;margin-top:28px\"><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:#36d399\">✓</b><span>浏览器登录 OSIRAPI</span><small style=\"margin-left:auto;color:#94a3b8\">已完成</small></div><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:{accent}\">{second_icon}</b><span>返回 Codex Manager</span><small style=\"margin-left:auto;color:#94a3b8\">{second_step}</small></div><div style=\"display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;background:rgba(255,255,255,.06)\"><b style=\"color:#fbbf24\">…</b><span>安装并同步本地模型</span><small style=\"margin-left:auto;color:#94a3b8\">请看管理器</small></div></section><p style=\"font-size:13px;line-height:1.6;color:#94a3b8;margin:24px 0 0\">{}</p></main><script>setTimeout(function(){{try{{window.close()}}catch(_){{}}}},1800)</script></body></html>",
@@ -2075,7 +2527,10 @@ fn callback_http_response(stream: &mut std::net::TcpStream, success: bool, messa
     let _ = stream.write_all(response.as_bytes());
 }
 
-fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Result<OAuthCallback, AppError> {
+fn wait_for_oauth_callback(
+    listener: TcpListener,
+    expected_state: &str,
+) -> Result<OAuthCallback, AppError> {
     listener
         .set_nonblocking(true)
         .map_err(|error| AppError::Internal(format!("设置 OAuth 回调监听失败：{error}")))?;
@@ -2087,12 +2542,14 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
                 // loop can enforce its deadline. Accepted sockets inherit
                 // that mode on some platforms, so make the request read
                 // blocking with a bounded timeout before consuming bytes.
-                stream
-                    .set_nonblocking(false)
-                    .map_err(|error| AppError::Engine(format!("设置 OAuth 回调连接失败：{error}")))?;
+                stream.set_nonblocking(false).map_err(|error| {
+                    AppError::Engine(format!("设置 OAuth 回调连接失败：{error}"))
+                })?;
                 stream
                     .set_read_timeout(Some(Duration::from_secs(8)))
-                    .map_err(|error| AppError::Engine(format!("设置 OAuth 回调读取超时失败：{error}")))?;
+                    .map_err(|error| {
+                        AppError::Engine(format!("设置 OAuth 回调读取超时失败：{error}"))
+                    })?;
                 let mut buffer = [0u8; 8192];
                 let size = stream
                     .read(&mut buffer)
@@ -2104,21 +2561,37 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
                     .and_then(|line| line.strip_prefix("GET "))
                     .and_then(|line| line.split_whitespace().next())
                 else {
-                    callback_http_response(&mut stream, false, "授权回调格式无效，请返回管理器重试。");
+                    callback_http_response(
+                        &mut stream,
+                        false,
+                        "授权回调格式无效，请返回管理器重试。",
+                    );
                     continue;
                 };
                 let Ok(url) = Url::parse(&format!("http://127.0.0.1{target}")) else {
-                    callback_http_response(&mut stream, false, "授权回调地址无效，请返回管理器重试。");
+                    callback_http_response(
+                        &mut stream,
+                        false,
+                        "授权回调地址无效，请返回管理器重试。",
+                    );
                     continue;
                 };
                 if url.path() != "/oauth/callback" {
-                    callback_http_response(&mut stream, false, "授权回调路径无效，请返回管理器重试。");
+                    callback_http_response(
+                        &mut stream,
+                        false,
+                        "授权回调路径无效，请返回管理器重试。",
+                    );
                     continue;
                 }
                 let params = url.query_pairs().into_owned().collect::<BTreeMap<_, _>>();
                 let state = params.get("state").cloned().unwrap_or_default();
                 if state != expected_state {
-                    callback_http_response(&mut stream, false, "授权状态不匹配，请返回管理器重试。");
+                    callback_http_response(
+                        &mut stream,
+                        false,
+                        "授权状态不匹配，请返回管理器重试。",
+                    );
                     continue;
                 }
                 let error = params.get("error").cloned();
@@ -2136,7 +2609,9 @@ fn wait_for_oauth_callback(listener: TcpListener, expected_state: &str) -> Resul
             }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 if std::time::Instant::now() >= deadline {
-                    return Err(AppError::Engine("OSIRAPI 浏览器授权超时，请重新连接".to_string()));
+                    return Err(AppError::Engine(
+                        "OSIRAPI 浏览器授权超时，请重新连接".to_string(),
+                    ));
                 }
                 thread::sleep(Duration::from_millis(50));
             }
@@ -2149,15 +2624,21 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
     if !state.enabled {
-        return Err(AppError::Engine("OpenCodex 多模型尚未启用，请先保存并同步配置".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 多模型尚未启用，请先保存并同步配置".to_string(),
+        ));
     }
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
-        return Err(AppError::Engine("只能锁定 Manager 管理的模型路由".to_string()));
+        return Err(AppError::Engine(
+            "只能锁定 Manager 管理的模型路由".to_string(),
+        ));
     }
     let mut config = load_config(&paths.opencodex_config)?;
-    let route = configured_routes_from_config(&config, std::slice::from_ref(&route_id)).into_iter().next()
+    let route = configured_routes_from_config(&config, std::slice::from_ref(&route_id))
+        .into_iter()
+        .next()
         .filter(|route| route.enabled && route.models.contains(&model))
         .ok_or_else(|| AppError::Engine("模型不存在或路由已停用，请刷新配置后重试".to_string()))?;
     let _ = route;
@@ -2168,26 +2649,59 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         .and_then(JsonValue::as_object_mut)
         .ok_or_else(|| AppError::Engine("模型路由不存在或已被删除".to_string()))?;
     provider.insert("defaultModel".to_string(), JsonValue::String(model.clone()));
-    config.insert("defaultProvider".to_string(), JsonValue::String(route_id.clone()));
+    config.insert(
+        "defaultProvider".to_string(),
+        JsonValue::String(route_id.clone()),
+    );
     let next = JsonValue::Object(config);
     validate_candidate(&paths.opencodex_config, &next)?;
-    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
-        paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
-        codex_takeover_backup_path(&paths), restart_required_path(&paths)];
-    let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
+    let snapshot_paths = [
+        paths.opencodex_config.clone(),
+        paths.codex_config.clone(),
+        paths.catalog.clone(),
+        paths.state.clone(),
+        paths.codex_config.with_file_name("models_cache.json"),
+        codex_takeover_backup_path(&paths),
+        restart_required_path(&paths),
+    ];
+    let snapshots = snapshot_paths
+        .iter()
+        .map(|path| read_optional_snapshot(path))
+        .collect::<Result<Vec<_>, _>>()?;
     let result = (|| -> Result<OpenCodexStatus, AppError> {
-    write_json(&paths.opencodex_config, &next)?;
-    let port = state.port.max(1);
-    let codex_provider_id = if state.codex_provider_id.is_empty() {
-        DEFAULT_PROVIDER_ID.to_string()
-    } else {
-        state.codex_provider_id.clone()
-    };
-    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &codex_provider_id, port, &format!("{route_id}/{model}"))?;
-    let next_state = ManagedState { enabled: true, port, codex_provider_id, managed_provider_ids: state.managed_provider_ids, locked_route: Some(route_id), route_health: state.route_health, connection: state.connection, signed_out: state.signed_out };
-    write_json(&paths.state, &serde_json::to_value(next_state).map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?)?;
-    if crate::app::codex_theme::codex_running() { mark_codex_restart_required_at(&paths)?; }
-    status_at(&paths)
+        write_json(&paths.opencodex_config, &next)?;
+        let port = state.port.max(1);
+        let codex_provider_id = if state.codex_provider_id.is_empty() {
+            DEFAULT_PROVIDER_ID.to_string()
+        } else {
+            state.codex_provider_id.clone()
+        };
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            &codex_provider_id,
+            port,
+            &format!("{route_id}/{model}"),
+        )?;
+        let next_state = ManagedState {
+            enabled: true,
+            port,
+            codex_provider_id,
+            managed_provider_ids: state.managed_provider_ids,
+            locked_route: Some(route_id),
+            route_health: state.route_health,
+            connection: state.connection,
+            signed_out: state.signed_out,
+        };
+        write_json(
+            &paths.state,
+            &serde_json::to_value(next_state)
+                .map_err(|error| AppError::Internal(format!("保存锁定路由失败：{error}")))?,
+        )?;
+        if crate::app::codex_theme::codex_running() {
+            mark_codex_restart_required_at(&paths)?;
+        }
+        status_at(&paths)
     })();
     if result.is_err() {
         for (path, bytes) in snapshot_paths.iter().zip(snapshots.iter()) {
@@ -2204,28 +2718,56 @@ fn config_without_model(
     route_id: &str,
     model: &str,
 ) -> Result<(JsonMap<String, JsonValue>, Vec<String>), AppError> {
-    let metadata = config.get("customModels").and_then(JsonValue::as_array).cloned().unwrap_or_default();
+    let metadata = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
     let route = route_from_config(route_id, &config, &metadata, None, &BTreeMap::new())
         .filter(|route| route.models.iter().any(|item| item == model))
         .ok_or_else(|| AppError::Engine("要移除的模型不存在".to_string()))?;
-    let remaining = route.models.into_iter().filter(|item| item != model).collect::<Vec<_>>();
-    if let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) {
-        models.retain(|entry| !(entry.get("provider").and_then(JsonValue::as_str) == Some(route_id)
-            && entry.get("modelId").and_then(JsonValue::as_str) == Some(model)));
+    let remaining = route
+        .models
+        .into_iter()
+        .filter(|item| item != model)
+        .collect::<Vec<_>>();
+    if let Some(models) = config
+        .get_mut("customModels")
+        .and_then(JsonValue::as_array_mut)
+    {
+        models.retain(|entry| {
+            !(entry.get("provider").and_then(JsonValue::as_str) == Some(route_id)
+                && entry.get("modelId").and_then(JsonValue::as_str) == Some(model))
+        });
     }
-    let providers = config.get_mut("providers").and_then(JsonValue::as_object_mut)
+    let providers = config
+        .get_mut("providers")
+        .and_then(JsonValue::as_object_mut)
         .ok_or_else(|| AppError::Engine("OpenCodex 路由配置不存在".to_string()))?;
     if remaining.is_empty() {
         providers.remove(route_id);
-    } else if let Some(provider) = providers.get_mut(route_id).and_then(JsonValue::as_object_mut) {
+    } else if let Some(provider) = providers
+        .get_mut(route_id)
+        .and_then(JsonValue::as_object_mut)
+    {
         provider.insert("models".to_string(), json!(remaining));
-        if !provider.get("defaultModel").and_then(JsonValue::as_str).is_some_and(|value| remaining.iter().any(|item| item == value)) {
+        if !provider
+            .get("defaultModel")
+            .and_then(JsonValue::as_str)
+            .is_some_and(|value| remaining.iter().any(|item| item == value))
+        {
             provider.insert("defaultModel".to_string(), json!(remaining[0]));
         }
     }
-    let ids = managed_ids.iter().filter(|id| providers.contains_key(*id)).cloned().collect::<Vec<_>>();
+    let ids = managed_ids
+        .iter()
+        .filter(|id| providers.contains_key(*id))
+        .cloned()
+        .collect::<Vec<_>>();
     if inferred_default_route(&config, &ids).is_none() {
-        return Err(AppError::Engine("至少保留一个可用模型，避免 Codex 选择器为空".to_string()));
+        return Err(AppError::Engine(
+            "至少保留一个可用模型，避免 Codex 选择器为空".to_string(),
+        ));
     }
     Ok((config, ids))
 }
@@ -2234,72 +2776,103 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
     if !state.enabled {
-        return Err(AppError::Engine("OpenCodex 多模型尚未启用，请先保存并同步配置".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 多模型尚未启用，请先保存并同步配置".to_string(),
+        ));
     }
     let route_id = checked_id(route_id, "路由 ID")?;
     let model = checked_text(model, "模型名称")?;
     if !state.managed_provider_ids.iter().any(|id| id == &route_id) {
-        return Err(AppError::Engine("只能管理 Manager 接管的模型路由".to_string()));
+        return Err(AppError::Engine(
+            "只能管理 Manager 接管的模型路由".to_string(),
+        ));
     }
     let (mut config, managed_provider_ids) = config_without_model(
-        load_config(&paths.opencodex_config)?, &state.managed_provider_ids, &route_id, &model,
+        load_config(&paths.opencodex_config)?,
+        &state.managed_provider_ids,
+        &route_id,
+        &model,
     )?;
     let default_route = inferred_default_route(&config, &managed_provider_ids)
         .ok_or_else(|| AppError::Engine("移除后没有可用的默认模型路由".to_string()))?;
-    config.insert("defaultProvider".to_string(), JsonValue::String(default_route.split('/').next().unwrap_or_default().to_string()));
+    config.insert(
+        "defaultProvider".to_string(),
+        JsonValue::String(
+            default_route
+                .split('/')
+                .next()
+                .unwrap_or_default()
+                .to_string(),
+        ),
+    );
     let next = JsonValue::Object(config);
     validate_candidate(&paths.opencodex_config, &next)?;
-    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
-        paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
-        codex_takeover_backup_path(&paths), restart_required_path(&paths)];
-    let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
+    let snapshot_paths = [
+        paths.opencodex_config.clone(),
+        paths.codex_config.clone(),
+        paths.catalog.clone(),
+        paths.state.clone(),
+        paths.codex_config.with_file_name("models_cache.json"),
+        codex_takeover_backup_path(&paths),
+        restart_required_path(&paths),
+    ];
+    let snapshots = snapshot_paths
+        .iter()
+        .map(|path| read_optional_snapshot(path))
+        .collect::<Result<Vec<_>, _>>()?;
     let result = (|| -> Result<OpenCodexStatus, AppError> {
-    write_json(&paths.opencodex_config, &next)?;
-    write_codex_proxy_config(
-        &paths.codex_config,
-        &paths.catalog,
-        &state.codex_provider_id,
-        state.port.max(1),
-        &default_route,
-    )?;
-    restart_service_and_wait_ready()?;
-    ocx_output(&["sync"])?;
-    let config = load_config(&paths.opencodex_config)?;
-    let models = config
-        .get("customModels")
-        .and_then(JsonValue::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let provider_ids = inferred_managed_provider_ids(&config, &models);
-    let routes = configured_routes_from_config(&config, &provider_ids);
-    if !routes.is_empty() {
-        normalize_synced_catalog(&paths.catalog, &routes)?;
-    }
-    sync_codex_model_cache()?;
-    let locked_route = state
-        .locked_route
-        .filter(|locked| managed_provider_ids.iter().any(|id| id == locked));
-    let route_health = state
-        .route_health
-        .into_iter()
-        .filter(|(key, _)| managed_provider_ids.iter().any(|id| key.starts_with(&format!("{id}/"))))
-        .collect();
-    write_json(
-        &paths.state,
-        &serde_json::to_value(ManagedState {
-            enabled: true,
-            port: state.port.max(1),
-            codex_provider_id: state.codex_provider_id,
-            managed_provider_ids,
-            locked_route,
-            route_health,
-            connection: state.connection,
-            signed_out: state.signed_out,
-        })
-        .map_err(|error| AppError::Internal(format!("保存模型移除状态失败：{error}")))?,
-    )?;
-    if crate::app::codex_theme::codex_running() { mark_codex_restart_required_at(&paths)?; }
-    status_at(&paths)
+        write_json(&paths.opencodex_config, &next)?;
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            &state.codex_provider_id,
+            state.port.max(1),
+            &default_route,
+        )?;
+        restart_service_and_wait_ready()?;
+        ocx_output(&["sync"])?;
+        let config = load_config(&paths.opencodex_config)?;
+        let models = config
+            .get("customModels")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let provider_ids = inferred_managed_provider_ids(&config, &models);
+        let routes = configured_routes_from_config(&config, &provider_ids);
+        if !routes.is_empty() {
+            normalize_synced_catalog(&paths.catalog, &routes)?;
+        }
+        sync_codex_model_cache()?;
+        let locked_route = state
+            .locked_route
+            .filter(|locked| managed_provider_ids.iter().any(|id| id == locked));
+        let route_health = state
+            .route_health
+            .into_iter()
+            .filter(|(key, _)| {
+                managed_provider_ids
+                    .iter()
+                    .any(|id| key.starts_with(&format!("{id}/")))
+            })
+            .collect();
+        write_json(
+            &paths.state,
+            &serde_json::to_value(ManagedState {
+                enabled: true,
+                port: state.port.max(1),
+                codex_provider_id: state.codex_provider_id,
+                managed_provider_ids,
+                locked_route,
+                route_health,
+                connection: state.connection,
+                signed_out: state.signed_out,
+            })
+            .map_err(|error| AppError::Internal(format!("保存模型移除状态失败：{error}")))?,
+        )?;
+        if crate::app::codex_theme::codex_running() {
+            mark_codex_restart_required_at(&paths)?;
+        }
+        status_at(&paths)
     })();
     if result.is_err() {
         for (path, bytes) in snapshot_paths.iter().zip(snapshots.iter()) {
@@ -2312,9 +2885,18 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
 
 fn is_transient_route_check_error(error: &AppError) -> bool {
     let message = error.to_string().to_ascii_lowercase();
-    ["status 429", "status 502", "status 503", "status 504", "(429)", "(502)", "(503)", "(504)"]
-        .iter()
-        .any(|marker| message.contains(marker))
+    [
+        "status 429",
+        "status 502",
+        "status 503",
+        "status 504",
+        "(429)",
+        "(502)",
+        "(503)",
+        "(504)",
+    ]
+    .iter()
+    .any(|marker| message.contains(marker))
         || [
             "bad gateway",
             "service unavailable",
@@ -2339,7 +2921,9 @@ where
     loop {
         match attempt() {
             Ok(output) => return Ok(output),
-            Err(error) if is_transient_route_check_error(&error) && retry_index < retry_delays.len() => {
+            Err(error)
+                if is_transient_route_check_error(&error) && retry_index < retry_delays.len() =>
+            {
                 thread::sleep(retry_delays[retry_index]);
                 retry_index += 1;
             }
@@ -2360,21 +2944,48 @@ fn check_route_with_timeout(
     let check = match route_check_with_retry(
         || {
             ocx_output_with_timeout(
-                &["access", "test", &route, "--protocol", "responses", "--json"],
+                &[
+                    "access",
+                    "test",
+                    &route,
+                    "--protocol",
+                    "responses",
+                    "--json",
+                ],
                 timeout,
             )
         },
         retry_delays,
     ) {
-        Ok(_) => OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: true, retryable: false, detail: "路由验证成功".to_string(), checked_at: timestamp_marker() },
+        Ok(_) => OpenCodexRouteCheck {
+            route_id: route_id.clone(),
+            model: model.clone(),
+            available: true,
+            retryable: false,
+            detail: "路由验证成功".to_string(),
+            checked_at: timestamp_marker(),
+        },
         Err(error) => {
             let retryable = is_transient_route_check_error(&error);
-            OpenCodexRouteCheck { route_id: route_id.clone(), model: model.clone(), available: false, retryable, detail: error.to_string(), checked_at: timestamp_marker() }
+            OpenCodexRouteCheck {
+                route_id: route_id.clone(),
+                model: model.clone(),
+                available: false,
+                retryable,
+                detail: error.to_string(),
+                checked_at: timestamp_marker(),
+            }
         }
     };
     if let Ok(paths) = integration_paths() {
         let mut state = effective_state(&paths).unwrap_or_else(|_| load_state(&paths.state));
-        let health = if check.available { "verified" } else if check.retryable { "degraded" } else { "offline" };
+        let health = if check.available {
+            "verified"
+        } else if check.retryable {
+            "degraded"
+        } else {
+            "offline"
+        };
         state.route_health.insert(route, health.to_string());
         if let Ok(value) = serde_json::to_value(state) {
             let _ = write_json(&paths.state, &value);
@@ -2395,11 +3006,17 @@ pub fn ensure_ready_for_codex() -> Result<(), AppError> {
         return Ok(());
     }
     let paths = integration_paths()?;
-    if current.service_state == "ready" && current.model_count > 0 && catalog_has_models(&paths.catalog) {
+    if current.service_state == "ready"
+        && current.model_count > 0
+        && catalog_has_models(&paths.catalog)
+    {
         return Ok(());
     }
     let recovered = start()?;
-    if recovered.service_state != "ready" || recovered.model_count == 0 || !catalog_has_models(&paths.catalog) {
+    if recovered.service_state != "ready"
+        || recovered.model_count == 0
+        || !catalog_has_models(&paths.catalog)
+    {
         return Err(AppError::Engine("OpenCodex 多模型已启用，但服务未 ready；为避免 Codex 启动后不可用，已阻止启动。请先修复或恢复备份。".to_string()));
     }
     Ok(())
@@ -2516,7 +3133,8 @@ where
     log::info!("OSIRAPI desktop OAuth started callback_port={port}");
     let mut authorization_url = Url::parse(OSIRAPI_DESKTOP_CONNECT_URL)
         .map_err(|error| AppError::Internal(format!("OSIRAPI 授权地址无效：{error}")))?;
-    authorization_url.query_pairs_mut()
+    authorization_url
+        .query_pairs_mut()
         .append_pair("state", &state)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("code_challenge", &code_challenge)
@@ -2535,7 +3153,9 @@ where
         return Err(AppError::Engine(format!("OSIRAPI 授权未完成：{error}")));
     }
     if callback.code.is_empty() || callback.state != state {
-        return Err(AppError::Engine("OSIRAPI 授权回调无效，请重新连接".to_string()));
+        return Err(AppError::Engine(
+            "OSIRAPI 授权回调无效，请重新连接".to_string(),
+        ));
     }
     progress(oauth_progress(
         "exchange",
@@ -2556,8 +3176,7 @@ where
     validate_exchange_provider_summary(&response.providers, &payload)?;
     if payload.account.is_none() {
         return Err(AppError::Engine(
-            "OSIRAPI 授权成功，但服务端未返回账户摘要；已停止写入本地配置，请重新连接"
-                .to_string(),
+            "OSIRAPI 授权成功，但服务端未返回账户摘要；已停止写入本地配置，请重新连接".to_string(),
         ));
     }
     log::info!(
@@ -2605,16 +3224,24 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
     if install_component_from_manifest().is_ok() && ocx_program().is_some() {
         return start();
     }
-    let (npm_program, npm_prefix, managed_node_bin) = if let Some(node) = managed_node_executable() {
-        let npm_cli = managed_npm_cli().ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
+    let (npm_program, npm_prefix, managed_node_bin) = if let Some(node) = managed_node_executable()
+    {
+        let npm_cli = managed_npm_cli()
+            .ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
         let bin = node.parent().map(Path::to_path_buf);
         (node, vec![npm_cli.to_string_lossy().to_string()], bin)
     } else if node_version().as_deref().is_some_and(node_supported) && npm_available() {
-        (system_npm_command().ok_or_else(|| AppError::Engine("未找到可用 npm".to_string()))?, Vec::new(), None)
+        (
+            system_npm_command().ok_or_else(|| AppError::Engine("未找到可用 npm".to_string()))?,
+            Vec::new(),
+            None,
+        )
     } else {
         install_managed_node()?;
-        let node = managed_node_executable().ok_or_else(|| AppError::Engine("Node 运行时安装后不可用".to_string()))?;
-        let npm_cli = managed_npm_cli().ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
+        let node = managed_node_executable()
+            .ok_or_else(|| AppError::Engine("Node 运行时安装后不可用".to_string()))?;
+        let npm_cli = managed_npm_cli()
+            .ok_or_else(|| AppError::Engine("Manager 私有 Node 缺少 npm".to_string()))?;
         let bin = node.parent().map(Path::to_path_buf);
         (node, vec![npm_cli.to_string_lossy().to_string()], bin)
     };
@@ -2624,14 +3251,22 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
     let prefix = runtime.to_string_lossy().to_string();
     let package = format!("@bitkyc08/opencodex@{DEFAULT_VERSION}");
     let mut args = npm_prefix;
-    args.extend(["install".to_string(), "--prefix".to_string(), prefix, "--no-save".to_string(), package]);
+    args.extend([
+        "install".to_string(),
+        "--prefix".to_string(),
+        prefix,
+        "--no-save".to_string(),
+        package,
+    ]);
     let mut command = Command::new(&npm_program);
     configure_background_command(&mut command);
     configure_opencodex_environment(&mut command);
     command.args(args);
     if let Some(bin) = managed_node_bin {
         let inherited = std::env::var_os("PATH").unwrap_or_default();
-        if let Ok(path) = std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&inherited))) {
+        if let Ok(path) =
+            std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&inherited)))
+        {
             command.env("PATH", path);
         }
     }
@@ -2650,7 +3285,9 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
         }));
     }
     if ocx_program().is_none() {
-        return Err(AppError::Engine("OpenCodex 安装后未找到可执行组件".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 安装后未找到可执行组件".to_string(),
+        ));
     }
     start()
 }
@@ -2661,9 +3298,13 @@ pub fn start() -> Result<OpenCodexStatus, AppError> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
         let current = status_at(&paths)?;
-        if current.service_state == "ready" { return Ok(current); }
+        if current.service_state == "ready" {
+            return Ok(current);
+        }
         if std::time::Instant::now() >= deadline {
-            return Err(AppError::Engine(current.error.unwrap_or_else(|| "OpenCodex 服务启动超时，请稍后重试".to_string())));
+            return Err(AppError::Engine(current.error.unwrap_or_else(|| {
+                "OpenCodex 服务启动超时，请稍后重试".to_string()
+            })));
         }
         thread::sleep(Duration::from_millis(300));
     }
@@ -2698,9 +3339,8 @@ fn read_child_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
 
 fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, AppError> {
     disable_opencodex_history_migration(&integration_paths()?)?;
-    let (program, prefix) = ocx_invocation().ok_or_else(|| {
-        AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string())
-    })?;
+    let (program, prefix) = ocx_invocation()
+        .ok_or_else(|| AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()))?;
     let mut command = Command::new(program);
     configure_background_command(&mut command);
     configure_opencodex_environment(&mut command);
@@ -2735,7 +3375,9 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
                 let stderr = stderr_reader
                     .and_then(|reader| reader.join().ok())
                     .transpose()
-                    .map_err(|error| AppError::Engine(format!("读取 OpenCodex 错误输出失败：{error}")))?
+                    .map_err(|error| {
+                        AppError::Engine(format!("读取 OpenCodex 错误输出失败：{error}"))
+                    })?
                     .unwrap_or_default();
                 if !status.success() {
                     let detail = String::from_utf8_lossy(&stderr).trim().to_string();
@@ -2761,7 +3403,9 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
             Err(error) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(AppError::Engine(format!("等待 OpenCodex 命令失败：{error}")));
+                return Err(AppError::Engine(format!(
+                    "等待 OpenCodex 命令失败：{error}"
+                )));
             }
         }
     }
@@ -2790,8 +3434,14 @@ fn service_state(installed: bool) -> (String, Option<String>) {
             Ok(value) if value.get("ok").and_then(JsonValue::as_bool) == Some(true) => {
                 ("ready".to_string(), None)
             }
-            Ok(_) => ("unhealthy".to_string(), Some("OpenCodex 健康检查未通过".to_string())),
-            Err(_) => ("unknown".to_string(), Some("OpenCodex 健康检查返回无法识别的数据".to_string())),
+            Ok(_) => (
+                "unhealthy".to_string(),
+                Some("OpenCodex 健康检查未通过".to_string()),
+            ),
+            Err(_) => (
+                "unknown".to_string(),
+                Some("OpenCodex 健康检查返回无法识别的数据".to_string()),
+            ),
         },
         Err(error) => ("stopped".to_string(), Some(error.to_string())),
     }
@@ -2823,7 +3473,12 @@ fn route_from_config(
     let mut models = catalog_models
         .iter()
         .filter(|model| model.get("provider").and_then(JsonValue::as_str) == Some(id))
-        .filter_map(|model| model.get("modelId").and_then(JsonValue::as_str).map(str::to_string))
+        .filter_map(|model| {
+            model
+                .get("modelId")
+                .and_then(JsonValue::as_str)
+                .map(str::to_string)
+        })
         .collect::<Vec<_>>();
     if models.is_empty() {
         models = provider
@@ -2849,7 +3504,11 @@ fn route_from_config(
                         .is_some_and(|slug| slug == format!("{id}/{model_id}"))
             });
             let supported = catalog_entry
-                .and_then(|entry| entry.get("supported_reasoning_levels").or_else(|| entry.get("reasoningEfforts")))
+                .and_then(|entry| {
+                    entry
+                        .get("supported_reasoning_levels")
+                        .or_else(|| entry.get("reasoningEfforts"))
+                })
                 .and_then(JsonValue::as_array)
                 .into_iter()
                 .flatten()
@@ -2939,9 +3598,17 @@ fn inferred_managed_provider_ids(
         .into_iter()
         .flat_map(|providers| providers.iter())
         .filter(|(id, provider)| {
-            let Some(provider) = provider.as_object() else { return false };
-            let has_endpoint = provider.get("baseUrl").and_then(JsonValue::as_str).is_some_and(|url| !url.trim().is_empty())
-                && provider.get("defaultModel").and_then(JsonValue::as_str).is_some_and(|model| !model.trim().is_empty());
+            let Some(provider) = provider.as_object() else {
+                return false;
+            };
+            let has_endpoint = provider
+                .get("baseUrl")
+                .and_then(JsonValue::as_str)
+                .is_some_and(|url| !url.trim().is_empty())
+                && provider
+                    .get("defaultModel")
+                    .and_then(JsonValue::as_str)
+                    .is_some_and(|model| !model.trim().is_empty());
             let has_provider_models = provider
                 .get("models")
                 .and_then(JsonValue::as_array)
@@ -2968,9 +3635,15 @@ fn inferred_default_route(
 ) -> Option<String> {
     let routes = configured_routes_from_config(config, managed_provider_ids);
     let preferred = config.get("defaultProvider").and_then(JsonValue::as_str);
-    let route = routes.iter().find(|route| route.enabled && Some(route.id.as_str()) == preferred)
+    let route = routes
+        .iter()
+        .find(|route| route.enabled && Some(route.id.as_str()) == preferred)
         .or_else(|| routes.iter().find(|route| route.enabled))?;
-    let model = if route.models.contains(&route.default_model) { &route.default_model } else { route.models.first()? };
+    let model = if route.models.contains(&route.default_model) {
+        &route.default_model
+    } else {
+        route.models.first()?
+    };
     Some(format!("{}/{}", route.id, model))
 }
 
@@ -3004,11 +3677,17 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
     adopted.locked_route = config
         .get("defaultProvider")
         .and_then(JsonValue::as_str)
-        .filter(|id| adopted.managed_provider_ids.iter().any(|managed| managed == *id))
+        .filter(|id| {
+            adopted
+                .managed_provider_ids
+                .iter()
+                .any(|managed| managed == *id)
+        })
         .map(str::to_string);
     let state_changed = adopted != state;
     if state_changed {
-        if let Some(default_route) = inferred_default_route(&config, &adopted.managed_provider_ids) {
+        if let Some(default_route) = inferred_default_route(&config, &adopted.managed_provider_ids)
+        {
             write_codex_proxy_config(
                 &paths.codex_config,
                 &paths.catalog,
@@ -3019,8 +3698,9 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
         }
         write_json(
             &paths.state,
-            &serde_json::to_value(&adopted)
-                .map_err(|error| AppError::Internal(format!("保存已有 OpenCodex 接管状态失败：{error}")))?,
+            &serde_json::to_value(&adopted).map_err(|error| {
+                AppError::Internal(format!("保存已有 OpenCodex 接管状态失败：{error}"))
+            })?,
         )?;
     }
     Ok(adopted)
@@ -3059,21 +3739,35 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         .collect::<BTreeSet<_>>();
     let routes = display_provider_ids
         .iter()
-        .filter_map(|id| route_from_config(id, &config, &model_metadata, state.locked_route.as_deref(), &state.route_health))
+        .filter_map(|id| {
+            route_from_config(
+                id,
+                &config,
+                &model_metadata,
+                state.locked_route.as_deref(),
+                &state.route_health,
+            )
+        })
         .collect::<Vec<_>>();
     let port = config
         .get("port")
         .and_then(JsonValue::as_u64)
         .and_then(|port| u16::try_from(port).ok())
         .filter(|port| *port > 0)
-        .unwrap_or(if state.port > 0 { state.port } else { DEFAULT_PORT });
+        .unwrap_or(if state.port > 0 {
+            state.port
+        } else {
+            DEFAULT_PORT
+        });
     let codex_provider_id = if state.codex_provider_id.is_empty() {
         DEFAULT_PROVIDER_ID.to_string()
     } else {
         state.codex_provider_id
     };
     let routes_present = !routes.is_empty();
-    let has_configured_credentials = routes.iter().any(|route| route.enabled && route.api_key_configured);
+    let has_configured_credentials = routes
+        .iter()
+        .any(|route| route.enabled && route.api_key_configured);
     let connection_status = if state.signed_out {
         "signedOut"
     } else if routes_present && (state.connection.is_some() || has_configured_credentials) {
@@ -3083,7 +3777,12 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
         // A slow local health probe must not turn a completed authorization
         // into a failed login; service_state remains available separately.
         "connected"
-    } else if state.enabled { "error" } else { "notConnected" }.to_string();
+    } else if state.enabled {
+        "error"
+    } else {
+        "notConnected"
+    }
+    .to_string();
     let platform = std::env::consts::OS.to_string();
     let architecture = std::env::consts::ARCH.to_string();
     let supported = component_target_for(&platform, &architecture).is_some();
@@ -3091,8 +3790,28 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let private = private_npm_invocation().is_some();
     let system = system_ocx_invocation().is_some();
     let system_node = node_version();
-    let runtime_state = if managed { "managed" } else if private { "privateNpm" } else if system { "system" } else if system_node.as_deref().is_some_and(node_supported) { "node" } else if supported { "missing" } else { "unsupported" };
-    let install_strategy = if managed || system { "reuse" } else if supported { "managedComponent" } else if system_node.as_deref().is_some_and(node_supported) && npm_available() { "privateNpm" } else { "unavailable" };
+    let runtime_state = if managed {
+        "managed"
+    } else if private {
+        "privateNpm"
+    } else if system {
+        "system"
+    } else if system_node.as_deref().is_some_and(node_supported) {
+        "node"
+    } else if supported {
+        "missing"
+    } else {
+        "unsupported"
+    };
+    let install_strategy = if managed || system {
+        "reuse"
+    } else if supported {
+        "managedComponent"
+    } else if system_node.as_deref().is_some_and(node_supported) && npm_available() {
+        "privateNpm"
+    } else {
+        "unavailable"
+    };
     let codex_running = crate::app::codex_theme::codex_running();
     let recorded_version = fs::read_to_string(manager_runtime_version_path(paths)).ok();
     let marker_requires_restart = restart_required_path(paths).is_file()
@@ -3127,7 +3846,16 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
             install_strategy: install_strategy.to_string(),
             node_version: system_node,
             npm_available: npm_available(),
-            detail: if managed { "已发现 Manager 自带运行时" } else if system { "已发现系统 OpenCodex" } else if supported { "可下载当前平台的自带运行时" } else { "当前系统或 CPU 暂无可用安装包" }.to_string(),
+            detail: if managed {
+                "已发现 Manager 自带运行时"
+            } else if system {
+                "已发现系统 OpenCodex"
+            } else if supported {
+                "可下载当前平台的自带运行时"
+            } else {
+                "当前系统或 CPU 暂无可用安装包"
+            }
+            .to_string(),
         },
         requires_codex_restart: configuration_requires_restart(
             codex_running,
@@ -3140,7 +3868,6 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn status() -> Result<OpenCodexStatus, AppError> {
-    reconcile_after_manager_update()?;
     let paths = integration_paths()?;
     // Status is read frequently by the UI. Keep it observational: catalog
     // repair and cache synchronization belong to explicit save/sync flows,
@@ -3148,14 +3875,20 @@ pub fn status() -> Result<OpenCodexStatus, AppError> {
     status_at(&paths)
 }
 
-fn validate_input(input: &OpenCodexConfigInput) -> Result<(String, String, Vec<OpenCodexRouteInput>), AppError> {
+fn validate_input(
+    input: &OpenCodexConfigInput,
+) -> Result<(String, String, Vec<OpenCodexRouteInput>), AppError> {
     if input.port == 0 {
-        return Err(AppError::Engine("本机端口必须在 1 到 65535 之间".to_string()));
+        return Err(AppError::Engine(
+            "本机端口必须在 1 到 65535 之间".to_string(),
+        ));
     }
     let provider_id = checked_id(&input.codex_provider_id, "Codex Provider ID")?;
     let default_route = checked_text(&input.default_route, "默认模型路由")?;
     if input.routes.is_empty() || input.routes.len() > MAX_ROUTE_COUNT {
-        return Err(AppError::Engine(format!("需要配置 1 到 {MAX_ROUTE_COUNT} 个模型路由")));
+        return Err(AppError::Engine(format!(
+            "需要配置 1 到 {MAX_ROUTE_COUNT} 个模型路由"
+        )));
     }
     let mut ids = BTreeSet::new();
     let mut routes = Vec::with_capacity(input.routes.len());
@@ -3166,19 +3899,25 @@ fn validate_input(input: &OpenCodexConfigInput) -> Result<(String, String, Vec<O
         }
         let label = checked_text(&route.label, "路由名称")?;
         if route.adapter.trim() != "openai-responses" {
-            return Err(AppError::Engine("首版仅支持 OpenAI Responses 路由".to_string()));
+            return Err(AppError::Engine(
+                "首版仅支持 OpenAI Responses 路由".to_string(),
+            ));
         }
         let base_url = checked_url(&route.base_url)?;
         let default_model = checked_text(&route.default_model, "默认模型")?;
         if route.models.is_empty() || route.models.len() > MAX_MODELS_PER_ROUTE {
-            return Err(AppError::Engine(format!("每条路由需要配置 1 到 {MAX_MODELS_PER_ROUTE} 个模型")));
+            return Err(AppError::Engine(format!(
+                "每条路由需要配置 1 到 {MAX_MODELS_PER_ROUTE} 个模型"
+            )));
         }
         let mut models = BTreeSet::new();
         for model in &route.models {
             models.insert(checked_text(model, "模型名称")?);
         }
         if !models.contains(&default_model) {
-            return Err(AppError::Engine("默认模型必须包含在当前路由模型列表中".to_string()));
+            return Err(AppError::Engine(
+                "默认模型必须包含在当前路由模型列表中".to_string(),
+            ));
         }
         if let Some(key) = &route.api_key {
             let key = key.trim();
@@ -3200,8 +3939,12 @@ fn validate_input(input: &OpenCodexConfigInput) -> Result<(String, String, Vec<O
     if !routes.iter().any(|route| route.enabled) {
         return Err(AppError::Engine("至少需要启用一条模型路由".to_string()));
     }
-    if !routes.iter().any(|route| route.enabled && format!("{}/{}", route.id, route.default_model) == default_route) {
-        return Err(AppError::Engine("默认模型路由必须指向某个已配置的默认模型".to_string()));
+    if !routes.iter().any(|route| {
+        route.enabled && format!("{}/{}", route.id, route.default_model) == default_route
+    }) {
+        return Err(AppError::Engine(
+            "默认模型路由必须指向某个已配置的默认模型".to_string(),
+        ));
     }
     Ok((provider_id, default_route, routes))
 }
@@ -3212,7 +3955,11 @@ fn build_opencodex_config(
     prior_managed: &[String],
     port: u16,
 ) -> Result<JsonValue, AppError> {
-    let existing_providers = config.get("providers").and_then(JsonValue::as_object).cloned().unwrap_or_default();
+    let existing_providers = config
+        .get("providers")
+        .and_then(JsonValue::as_object)
+        .cloned()
+        .unwrap_or_default();
     let existing_model_metadata = config
         .get("customModels")
         .and_then(JsonValue::as_array)
@@ -3234,20 +3981,51 @@ fn build_opencodex_config(
             providers.remove(id);
         }
         for route in routes {
-            let existing = existing_providers.get(&route.id).and_then(JsonValue::as_object);
-            let same_endpoint = existing.and_then(|item| item.get("baseUrl")).and_then(JsonValue::as_str) == Some(route.base_url.as_str());
-            if existing.is_some() && !same_endpoint && route.api_key.as_deref().is_none_or(|key| key.trim().is_empty()) {
-                return Err(AppError::Engine("更换供应商地址时必须填写新的 API Key".to_string()));
+            let existing = existing_providers
+                .get(&route.id)
+                .and_then(JsonValue::as_object);
+            let same_endpoint = existing
+                .and_then(|item| item.get("baseUrl"))
+                .and_then(JsonValue::as_str)
+                == Some(route.base_url.as_str());
+            if existing.is_some()
+                && !same_endpoint
+                && route
+                    .api_key
+                    .as_deref()
+                    .is_none_or(|key| key.trim().is_empty())
+            {
+                return Err(AppError::Engine(
+                    "更换供应商地址时必须填写新的 API Key".to_string(),
+                ));
             }
-            let mut provider = if same_endpoint { existing.cloned().unwrap_or_default() } else { JsonMap::new() };
-            provider.insert("adapter".to_string(), JsonValue::String(route.adapter.clone()));
-            provider.insert("baseUrl".to_string(), JsonValue::String(route.base_url.clone()));
+            let mut provider = if same_endpoint {
+                existing.cloned().unwrap_or_default()
+            } else {
+                JsonMap::new()
+            };
+            provider.insert(
+                "adapter".to_string(),
+                JsonValue::String(route.adapter.clone()),
+            );
+            provider.insert(
+                "baseUrl".to_string(),
+                JsonValue::String(route.base_url.clone()),
+            );
             provider.insert("label".to_string(), JsonValue::String(route.label.clone()));
-            provider.insert("defaultModel".to_string(), JsonValue::String(route.default_model.clone()));
+            provider.insert(
+                "defaultModel".to_string(),
+                JsonValue::String(route.default_model.clone()),
+            );
             // OpenCodex 2.22 defaults an untyped provider to its native auth
             // path. Declare the OSIR route as an API-key provider explicitly;
             // otherwise a valid gateway key is reported as expired/invalid.
-            if route.api_key.as_deref().is_some_and(|key| !key.trim().is_empty()) || !provider.contains_key("authMode") {
+            if route
+                .api_key
+                .as_deref()
+                .is_some_and(|key| !key.trim().is_empty())
+                || !provider.contains_key("authMode")
+            {
                 provider.insert("authMode".to_string(), JsonValue::String("key".to_string()));
             }
             // Keep the provider's authoritative model list explicit. OpenCodex
@@ -3261,7 +4039,6 @@ fn build_opencodex_config(
                 .as_deref()
                 .map(str::trim)
                 .filter(|key| !key.is_empty())
-
             {
                 provider.insert("apiKey".to_string(), JsonValue::String(api_key.to_string()));
             }
@@ -3296,11 +4073,21 @@ fn build_opencodex_config(
                     "inputModalities": ["text", "image"],
                     "reasoningEfforts": [],
                 });
-                if let Some(metadata) = existing_model_metadata.get(&format!("{}/{}", route.id, model)).and_then(JsonValue::as_object) {
+                if let Some(metadata) = existing_model_metadata
+                    .get(&format!("{}/{}", route.id, model))
+                    .and_then(JsonValue::as_object)
+                {
                     entry = JsonValue::Object(metadata.clone());
-                    entry["displayName"] = json!(model_display_name_for_route(&route.id, &route.base_url, &route.label, model));
+                    entry["displayName"] = json!(model_display_name_for_route(
+                        &route.id,
+                        &route.base_url,
+                        &route.label,
+                        model
+                    ));
                 } else {
-                    entry.as_object_mut().map(|object| object.remove("reasoningEfforts"));
+                    entry
+                        .as_object_mut()
+                        .map(|object| object.remove("reasoningEfforts"));
                 }
                 models.push(entry);
             }
@@ -3311,7 +4098,10 @@ fn build_opencodex_config(
         .find(|route| route.enabled)
         .map(|route| route.id.clone())
         .ok_or_else(|| AppError::Engine("没有可用模型路由".to_string()))?;
-    config.insert("defaultProvider".to_string(), JsonValue::String(first_enabled));
+    config.insert(
+        "defaultProvider".to_string(),
+        JsonValue::String(first_enabled),
+    );
     config.insert("port".to_string(), JsonValue::from(port));
     config.insert("codexShimAutoRestore".to_string(), JsonValue::Bool(false));
     config.insert("syncResumeHistory".to_string(), JsonValue::Bool(false));
@@ -3327,7 +4117,9 @@ fn write_codex_proxy_config(
     default_route: &str,
 ) -> Result<(), AppError> {
     if path.is_symlink() {
-        return Err(AppError::Engine("config.toml 是符号链接，拒绝改写".to_string()));
+        return Err(AppError::Engine(
+            "config.toml 是符号链接，拒绝改写".to_string(),
+        ));
     }
     let raw = if path.exists() {
         fs::read_to_string(path)
@@ -3346,8 +4138,14 @@ fn write_codex_proxy_config(
     } else {
         provider_id.trim()
     };
-    codex_sessions::remember_provider_switch(path,
-        document.get("model_provider").and_then(Item::as_str).unwrap_or("openai"), provider_id)?;
+    codex_sessions::remember_provider_switch(
+        path,
+        document
+            .get("model_provider")
+            .and_then(Item::as_str)
+            .unwrap_or("openai"),
+        provider_id,
+    )?;
     document["model_provider"] = value(provider_id);
     document["model"] = value(default_route);
     if catalog.is_file() {
@@ -3394,7 +4192,12 @@ fn catalog_model_slugs(path: &Path) -> Option<BTreeSet<String>> {
         .map(|models| {
             models
                 .into_iter()
-                .filter_map(|model| model.get("slug").and_then(JsonValue::as_str).map(str::to_string))
+                .filter_map(|model| {
+                    model
+                        .get("slug")
+                        .and_then(JsonValue::as_str)
+                        .map(str::to_string)
+                })
                 .collect()
         })
 }
@@ -3406,7 +4209,12 @@ fn catalog_contains_enabled_routes(path: &Path, routes: &[OpenCodexRouteInput]) 
     routes
         .iter()
         .filter(|route| route.enabled)
-        .flat_map(|route| route.models.iter().map(move |model| format!("{}/{}", route.id, model)))
+        .flat_map(|route| {
+            route
+                .models
+                .iter()
+                .map(move |model| format!("{}/{}", route.id, model))
+        })
         .all(|slug| actual.contains(&slug))
 }
 
@@ -3423,7 +4231,10 @@ fn configured_routes_from_config(
         .iter()
         .filter_map(|id| {
             let route = route_from_config(id, config, &models, None, &BTreeMap::new())?;
-            if route.models.is_empty() || route.default_model.is_empty() || route.base_url.is_empty() {
+            if route.models.is_empty()
+                || route.default_model.is_empty()
+                || route.base_url.is_empty()
+            {
                 return None;
             }
             Some(OpenCodexRouteInput {
@@ -3444,10 +4255,7 @@ fn configured_routes_from_config(
 /// actually exposed. Never inject configured-but-unroutable models into the
 /// Codex catalog: doing so creates a selectable model that falls through to the
 /// default provider at request time.
-fn normalize_synced_catalog(
-    path: &Path,
-    routes: &[OpenCodexRouteInput],
-) -> Result<bool, AppError> {
+fn normalize_synced_catalog(path: &Path, routes: &[OpenCodexRouteInput]) -> Result<bool, AppError> {
     let raw = fs::read(path)
         .map_err(|error| AppError::Internal(format!("读取 OpenCodex 模型目录失败：{error}")))?;
     let mut catalog = serde_json::from_slice::<JsonValue>(&raw)
@@ -3493,7 +4301,9 @@ fn normalize_synced_catalog(
                 || entry
                     .get("description")
                     .and_then(JsonValue::as_str)
-                    .is_some_and(|description| description.starts_with("历史会话兼容别名 · OpenCodex ->")));
+                    .is_some_and(|description| {
+                        description.starts_with("历史会话兼容别名 · OpenCodex ->")
+                    }));
         if is_legacy_alias {
             return false;
         }
@@ -3502,7 +4312,9 @@ fn normalize_synced_catalog(
                 .get(provider)
                 .is_none_or(|allowed| allowed.contains(model));
         }
-        !managed_models.values().any(|allowed| allowed.contains(slug))
+        !managed_models
+            .values()
+            .any(|allowed| allowed.contains(slug))
     });
     let mut changed = before_prune != models.len();
 
@@ -3518,16 +4330,24 @@ fn normalize_synced_catalog(
             continue;
         };
         if let Some((provider, model_id)) = slug.split_once('/') {
-            if routes
-                .iter()
-                .any(|route| route.id == provider && route.models.iter().any(|model| model == model_id))
-            {
+            if routes.iter().any(|route| {
+                route.id == provider && route.models.iter().any(|model| model == model_id)
+            }) {
                 if let Some(object) = model.as_object_mut() {
                     let route = routes.iter().find(|route| route.id == provider);
                     let expected = route
-                        .map(|route| model_display_name_for_route(&route.id, &route.base_url, &route.label, model_id))
+                        .map(|route| {
+                            model_display_name_for_route(
+                                &route.id,
+                                &route.base_url,
+                                &route.label,
+                                model_id,
+                            )
+                        })
                         .unwrap_or_else(|| model_display_name(model_id));
-                    if object.get("display_name").and_then(JsonValue::as_str) != Some(expected.as_str()) {
+                    if object.get("display_name").and_then(JsonValue::as_str)
+                        != Some(expected.as_str())
+                    {
                         object.insert("display_name".to_string(), JsonValue::String(expected));
                         changed = true;
                     }
@@ -3557,15 +4377,28 @@ fn normalize_synced_catalog(
         .iter()
         .map(|model| {
             (
-                model.get("slug").and_then(JsonValue::as_str).unwrap_or_default().to_string(),
-                model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false),
+                model
+                    .get("slug")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                model
+                    .get("hidden")
+                    .and_then(JsonValue::as_bool)
+                    .unwrap_or(false),
             )
         })
         .collect::<Vec<_>>();
     models.sort_by(|left, right| {
         let key = |model: &JsonValue| {
-            let slug = model.get("slug").and_then(JsonValue::as_str).unwrap_or_default();
-            let hidden = model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false);
+            let slug = model
+                .get("slug")
+                .and_then(JsonValue::as_str)
+                .unwrap_or_default();
+            let hidden = model
+                .get("hidden")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false);
             let group = match slug.split('/').next().unwrap_or_default() {
                 "osirapi-openai" => 0,
                 "osirapi-claude" => 1,
@@ -3581,8 +4414,15 @@ fn normalize_synced_catalog(
         .iter()
         .map(|model| {
             (
-                model.get("slug").and_then(JsonValue::as_str).unwrap_or_default().to_string(),
-                model.get("hidden").and_then(JsonValue::as_bool).unwrap_or(false),
+                model
+                    .get("slug")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                model
+                    .get("hidden")
+                    .and_then(JsonValue::as_bool)
+                    .unwrap_or(false),
             )
         })
         .collect::<Vec<_>>();
@@ -3590,8 +4430,9 @@ fn normalize_synced_catalog(
         changed = true;
     }
     if changed {
-        let bytes = serde_json::to_vec_pretty(&catalog)
-            .map_err(|error| AppError::Internal(format!("序列化 OpenCodex 模型目录失败：{error}")))?;
+        let bytes = serde_json::to_vec_pretty(&catalog).map_err(|error| {
+            AppError::Internal(format!("序列化 OpenCodex 模型目录失败：{error}"))
+        })?;
         atomic_file::write_atomic(path, &bytes)
             .map_err(|error| AppError::Internal(format!("保存 OpenCodex 模型目录失败：{error}")))?;
     }
@@ -3608,19 +4449,28 @@ fn normalize_saved_model_capabilities(paths: &IntegrationPaths) -> Result<bool, 
         return Ok(false);
     }
     let mut config = load_config(&paths.opencodex_config)?;
-    let Some(models) = config.get_mut("customModels").and_then(JsonValue::as_array_mut) else {
+    let Some(models) = config
+        .get_mut("customModels")
+        .and_then(JsonValue::as_array_mut)
+    else {
         return Ok(false);
     };
     let mut changed = false;
     for entry in models {
-        let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else { continue };
-        let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else { continue };
+        let Some(provider) = entry.get("provider").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        let Some(model_id) = entry.get("modelId").and_then(JsonValue::as_str) else {
+            continue;
+        };
         let Some(catalog_entry) = catalog_models.iter().find(|candidate| {
             candidate
                 .get("slug")
                 .and_then(JsonValue::as_str)
                 .is_some_and(|slug| slug == format!("{provider}/{model_id}"))
-        }) else { continue };
+        }) else {
+            continue;
+        };
         let supported = catalog_entry
             .get("supported_reasoning_levels")
             .and_then(JsonValue::as_array)
@@ -3629,7 +4479,9 @@ fn normalize_saved_model_capabilities(paths: &IntegrationPaths) -> Result<bool, 
             .filter_map(|level| level.get("effort").and_then(JsonValue::as_str))
             .map(str::to_ascii_lowercase)
             .collect::<Vec<_>>();
-        let Some(object) = entry.as_object_mut() else { continue };
+        let Some(object) = entry.as_object_mut() else {
+            continue;
+        };
         if !supported.is_empty() {
             if object.get("reasoningEfforts") != Some(&json!(supported)) {
                 object.insert("reasoningEfforts".to_string(), json!(supported.clone()));
@@ -3641,16 +4493,28 @@ fn normalize_saved_model_capabilities(paths: &IntegrationPaths) -> Result<bool, 
                 .map(str::to_ascii_lowercase)
                 .filter(|effort| supported.iter().any(|item| item == effort));
             match default {
-                Some(default) if object.get("defaultReasoningEffort").and_then(JsonValue::as_str) != Some(default.as_str()) => {
-                    object.insert("defaultReasoningEffort".to_string(), JsonValue::String(default));
+                Some(default)
+                    if object
+                        .get("defaultReasoningEffort")
+                        .and_then(JsonValue::as_str)
+                        != Some(default.as_str()) =>
+                {
+                    object.insert(
+                        "defaultReasoningEffort".to_string(),
+                        JsonValue::String(default),
+                    );
                     changed = true;
                 }
                 None if object.remove("defaultReasoningEffort").is_some() => changed = true,
                 _ => {}
             }
         } else {
-            if object.remove("reasoningEfforts").is_some() { changed = true; }
-            if object.remove("defaultReasoningEffort").is_some() { changed = true; }
+            if object.remove("reasoningEfforts").is_some() {
+                changed = true;
+            }
+            if object.remove("defaultReasoningEffort").is_some() {
+                changed = true;
+            }
         }
     }
     if changed {
@@ -3710,7 +4574,11 @@ fn validate_candidate(path: &Path, candidate: &JsonValue) -> Result<(), AppError
         .map_err(|error| AppError::Internal(format!("生成 OpenCodex 候选配置失败：{error}")))?;
     fs::write(&candidate_path, bytes)
         .map_err(|error| AppError::Internal(format!("写入 OpenCodex 候选配置失败：{error}")))?;
-    let result = ocx_output(&["config", "validate", candidate_path.to_string_lossy().as_ref()]);
+    let result = ocx_output(&[
+        "config",
+        "validate",
+        candidate_path.to_string_lossy().as_ref(),
+    ]);
     let _ = fs::remove_file(&candidate_path);
     result.map(|_| ())
 }
@@ -3719,7 +4587,10 @@ fn read_optional_snapshot(path: &Path) -> Result<Option<Vec<u8>>, AppError> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(AppError::Internal(format!("无法备份配置 {}：{error}", path.display()))),
+        Err(error) => Err(AppError::Internal(format!(
+            "无法备份配置 {}：{error}",
+            path.display()
+        ))),
     }
 }
 
@@ -3751,10 +4622,14 @@ fn restore_save_snapshot(
 
 pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     if !input.enabled {
-        return Err(AppError::Engine("停用多模型请使用恢复按钮，避免丢失当前配置".to_string()));
+        return Err(AppError::Engine(
+            "停用多模型请使用恢复按钮，避免丢失当前配置".to_string(),
+        ));
     }
     if ocx_program().is_none() {
-        return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
+        return Err(AppError::Engine(
+            "未检测到 OpenCodex；请先安装多模型组件".to_string(),
+        ));
     }
     let paths = integration_paths()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
@@ -3764,86 +4639,129 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         .split_once('/')
         .map(|(route, _)| route);
     let requested_default_route = requested_route_id
-        .and_then(|route_id| routes.iter().find(|route| route.id == route_id && route.enabled))
+        .and_then(|route_id| {
+            routes
+                .iter()
+                .find(|route| route.id == route_id && route.enabled)
+        })
         .or_else(|| routes.iter().find(|route| route.enabled))
         .map(|route| format!("{}/{}", route.id, route.default_model))
         .ok_or_else(|| AppError::Engine("没有可用默认模型路由".to_string()))?;
     let prior = load_state(&paths.state);
     let default_provider = config_provider(&default_codex_config_bytes(&paths)?)?;
     let config = load_config(&paths.opencodex_config)?;
-    let existing_models = config.get("customModels").and_then(JsonValue::as_array).cloned().unwrap_or_default();
+    let existing_models = config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
     let existing_ids = inferred_managed_provider_ids(&config, &existing_models);
     let saved_default = inferred_default_route(&config, &existing_ids);
     let mut candidate = build_opencodex_config(config, &routes, &[], input.port)?;
     let candidate_config = candidate.as_object_mut().unwrap();
-    let models = candidate_config.get("customModels").and_then(JsonValue::as_array).cloned().unwrap_or_default();
+    let models = candidate_config
+        .get("customModels")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
     let all_ids = inferred_managed_provider_ids(candidate_config, &models);
     routes = configured_routes_from_config(candidate_config, &all_ids);
-    let default_route = saved_default.filter(|slug| routes.iter().any(|route| route.enabled && *slug == format!("{}/{}", route.id, route.default_model)))
+    let default_route = saved_default
+        .filter(|slug| {
+            routes.iter().any(|route| {
+                route.enabled && *slug == format!("{}/{}", route.id, route.default_model)
+            })
+        })
         .unwrap_or(requested_default_route);
-    candidate_config.insert("defaultProvider".to_string(), json!(default_route.split_once('/').unwrap().0));
+    candidate_config.insert(
+        "defaultProvider".to_string(),
+        json!(default_route.split_once('/').unwrap().0),
+    );
     validate_candidate(&paths.opencodex_config, &candidate)?;
-    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
-        paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
-        codex_takeover_backup_path(&paths), restart_required_path(&paths)];
-    let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
+    let snapshot_paths = [
+        paths.opencodex_config.clone(),
+        paths.codex_config.clone(),
+        paths.catalog.clone(),
+        paths.state.clone(),
+        paths.codex_config.with_file_name("models_cache.json"),
+        codex_takeover_backup_path(&paths),
+        restart_required_path(&paths),
+    ];
+    let snapshots = snapshot_paths
+        .iter()
+        .map(|path| read_optional_snapshot(path))
+        .collect::<Result<Vec<_>, _>>()?;
     let result = (|| -> Result<OpenCodexStatus, AppError> {
-    preserve_codex_config_before_takeover(&paths, &prior)?;
-    write_json(&paths.opencodex_config, &candidate)?;
-    let state = ManagedState {
-        enabled: false,
-        port: input.port,
-        codex_provider_id: provider_id.clone(),
-        managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
-        locked_route: prior.locked_route.clone().filter(|id| routes.iter().any(|route| route.enabled && route.id == *id)),
-        route_health: BTreeMap::new(),
-        connection: prior.connection.clone(),
-        signed_out: prior.signed_out,
-    };
-    let state_json = serde_json::to_value(state)
-        .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
-    write_json(&paths.state, &state_json)?;
-    let _ = refresh_configured_provider_models(&paths);
-    restart_service_and_wait_ready()?;
-    ocx_output(&["sync"])?;
-    normalize_synced_catalog(&paths.catalog, &routes)?;
-    if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
-        return Err(AppError::Engine("OpenCodex 运行时未加载全部供应商模型；已恢复原配置".to_string()));
-    }
-    // Codex observes config.toml, not the generated catalog file. The first
-    // config write above can therefore race ahead of `ocx sync` and make the
-    // picker cache only the default model. Rewrite the same binding after the
-    // complete catalog exists so a running Codex reloads every synced model.
-    write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
-    sync_codex_model_cache()?;
-    normalize_saved_model_capabilities(&paths)?;
-    if codex_was_running {
-        mark_codex_restart_required_at(&paths)?;
-    }
-    let enabled_state = ManagedState {
-        enabled: true,
-        port: input.port,
-        codex_provider_id: provider_id.clone(),
-        managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
-        locked_route: prior.locked_route.clone().filter(|id| routes.iter().any(|route| route.enabled && route.id == *id)),
-        route_health: BTreeMap::new(),
-        connection: prior.connection,
-        signed_out: prior.signed_out,
-    };
-    write_json(
-        &paths.state,
-        &serde_json::to_value(enabled_state)
-        .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
-    )?;
-    codex_sessions::migrate(
-        codex_sessions::SessionTarget::OpenCodex {
-            provider: &provider_id,
-            default_provider: &default_provider,
-            default_route: &default_route,
-        },
-        &session_routes(&routes),
-    )?;
-    status_at(&paths)
+        preserve_codex_config_before_takeover(&paths, &prior)?;
+        write_json(&paths.opencodex_config, &candidate)?;
+        let state = ManagedState {
+            enabled: false,
+            port: input.port,
+            codex_provider_id: provider_id.clone(),
+            managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
+            locked_route: prior
+                .locked_route
+                .clone()
+                .filter(|id| routes.iter().any(|route| route.enabled && route.id == *id)),
+            route_health: BTreeMap::new(),
+            connection: prior.connection.clone(),
+            signed_out: prior.signed_out,
+        };
+        let state_json = serde_json::to_value(state)
+            .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
+        write_json(&paths.state, &state_json)?;
+        let _ = refresh_configured_provider_models(&paths);
+        restart_service_and_wait_ready()?;
+        ocx_output(&["sync"])?;
+        normalize_synced_catalog(&paths.catalog, &routes)?;
+        if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
+            return Err(AppError::Engine(
+                "OpenCodex 运行时未加载全部供应商模型；已恢复原配置".to_string(),
+            ));
+        }
+        // Codex observes config.toml, not the generated catalog file. The first
+        // config write above can therefore race ahead of `ocx sync` and make the
+        // picker cache only the default model. Rewrite the same binding after the
+        // complete catalog exists so a running Codex reloads every synced model.
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            &provider_id,
+            input.port,
+            &default_route,
+        )?;
+        sync_codex_model_cache()?;
+        normalize_saved_model_capabilities(&paths)?;
+        if codex_was_running {
+            mark_codex_restart_required_at(&paths)?;
+        }
+        let enabled_state = ManagedState {
+            enabled: true,
+            port: input.port,
+            codex_provider_id: provider_id.clone(),
+            managed_provider_ids: routes.iter().map(|route| route.id.clone()).collect(),
+            locked_route: prior
+                .locked_route
+                .clone()
+                .filter(|id| routes.iter().any(|route| route.enabled && route.id == *id)),
+            route_health: BTreeMap::new(),
+            connection: prior.connection,
+            signed_out: prior.signed_out,
+        };
+        write_json(
+            &paths.state,
+            &serde_json::to_value(enabled_state)
+                .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
+        )?;
+        codex_sessions::migrate(
+            codex_sessions::SessionTarget::OpenCodex {
+                provider: &provider_id,
+                default_provider: &default_provider,
+                default_route: &default_route,
+            },
+            &session_routes(&routes),
+        )?;
+        status_at(&paths)
     })();
     if result.is_err() {
         for (path, bytes) in snapshot_paths.iter().zip(snapshots.iter()) {
@@ -3864,7 +4782,9 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
     restart_service_and_wait_ready()?;
     ocx_output(&["sync"])?;
     if !catalog_has_models(&paths.catalog) {
-        return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
+        return Err(AppError::Engine(
+            "OpenCodex 同步完成但没有生成可用模型目录".to_string(),
+        ));
     }
     refresh_codex_catalog_binding(&paths)?;
     if codex_was_running {
@@ -3884,18 +4804,32 @@ fn prepare_activation_catalog(
     synchronize: impl FnOnce() -> Result<(), AppError>,
 ) -> Result<(), AppError> {
     let cache = paths.codex_config.with_file_name("models_cache.json");
-    let snapshots = [&paths.codex_config, &paths.catalog, &cache]
-        .map(|path| (path, fs::read(path).ok()));
+    let snapshots =
+        [&paths.codex_config, &paths.catalog, &cache].map(|path| (path, fs::read(path).ok()));
     let result = (|| {
         // OpenCodex treats an external provider as a successful sync no-op.
         // Transfer ownership before invoking it, then bind the completed file.
-        write_codex_proxy_config(&paths.codex_config, &paths.catalog, provider_id, port, default_route)?;
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            provider_id,
+            port,
+            default_route,
+        )?;
         synchronize()?;
         normalize_synced_catalog(&paths.catalog, routes)?;
         if !catalog_contains_enabled_routes(&paths.catalog, routes) {
-            return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
+            return Err(AppError::Engine(
+                "OpenCodex 模型目录不完整，未启用多模型接管".to_string(),
+            ));
         }
-        write_codex_proxy_config(&paths.codex_config, &paths.catalog, provider_id, port, default_route)
+        write_codex_proxy_config(
+            &paths.codex_config,
+            &paths.catalog,
+            provider_id,
+            port,
+            default_route,
+        )
     })();
     if result.is_err() {
         for (path, bytes) in snapshots {
@@ -3908,7 +4842,9 @@ fn prepare_activation_catalog(
 pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     let _switch_lock = config_switch_lock()?;
     if ocx_program().is_none() {
-        return Err(AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string()));
+        return Err(AppError::Engine(
+            "未检测到 OpenCodex；请先安装多模型组件".to_string(),
+        ));
     }
     let paths = integration_paths()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
@@ -3939,7 +4875,9 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
         let routes = configured_routes_from_config(&config, &managed_provider_ids);
         if routes.is_empty() {
-            return Err(AppError::Engine("尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string()));
+            return Err(AppError::Engine(
+                "尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string(),
+            ));
         }
         let default_route = inferred_default_route(&config, &managed_provider_ids)
             .ok_or_else(|| AppError::Engine("OpenCodex 没有可用的默认模型路由".to_string()))?;
@@ -3953,7 +4891,11 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
             .and_then(JsonValue::as_u64)
             .and_then(|port| u16::try_from(port).ok())
             .filter(|port| *port > 0)
-            .unwrap_or(if prior.port > 0 { prior.port } else { DEFAULT_PORT });
+            .unwrap_or(if prior.port > 0 {
+                prior.port
+            } else {
+                DEFAULT_PORT
+            });
         let routes_for_sessions = session_routes(&routes);
         preserve_codex_config_before_takeover(&paths, &prior)?;
         prepare_activation_catalog(&paths, &provider_id, port, &default_route, &routes, || {
@@ -3992,14 +4934,19 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     match result {
         Ok(status) => Ok(status),
         Err(error) => {
-            let _ = restore_optional_file(&paths.opencodex_config, previous_opencodex_config.as_deref());
+            let _ = restore_optional_file(
+                &paths.opencodex_config,
+                previous_opencodex_config.as_deref(),
+            );
             let _ = restore_optional_file(&paths.catalog, previous_catalog.as_deref());
             let _ = restore_optional_file(&cache_path, previous_cache.as_deref());
             let _ = restore_optional_file(&paths.codex_config, previous_config.as_deref());
             let _ = restore_optional_file(&paths.state, previous_state.as_deref());
             let _ = restore_optional_file(&takeover_backup, previous_backup.as_deref());
             let _ = restore_optional_file(&restart_marker, previous_restart_marker.as_deref());
-            Err(AppError::Engine(format!("启用 OpenCodex 失败，已恢复原配置：{error}")))
+            Err(AppError::Engine(format!(
+                "启用 OpenCodex 失败，已恢复原配置：{error}"
+            )))
         }
     }
 }
@@ -4020,7 +4967,9 @@ pub fn restore() -> Result<OpenCodexStatus, AppError> {
     })
     .collect::<Result<Vec<_>, _>>()?;
     if restored.is_empty() && !takeover_backup.is_file() {
-        return Err(AppError::Engine("没有可恢复的 OpenCodex 配置备份".to_string()));
+        return Err(AppError::Engine(
+            "没有可恢复的 OpenCodex 配置备份".to_string(),
+        ));
     }
     if takeover_backup.is_file() {
         let raw = fs::read(&takeover_backup)
@@ -4054,15 +5003,15 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_opencodex_config, catalog_contains_enabled_routes, normalize_synced_catalog,
-        model_display_name, sync_cache_args,
-        component_target_for, configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
-        extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids, pkce_challenge,
-        is_transient_route_check_error, manager_runtime_needs_reconcile, route_check_with_retry, route_from_config,
-        sanitize_saved_osir_config,
-        should_reconcile_codex_ownership, validate_input, wait_for_oauth_callback,
-        node_distribution_target_for, node_supported, stripped_archive_path, CodexInstallPayload,
-        validate_codex_install_payload, validate_exchange_provider_summary, write_codex_proxy_config,
+        build_opencodex_config, catalog_contains_enabled_routes, component_target_for,
+        configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
+        extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids,
+        is_transient_route_check_error, manager_runtime_needs_reconcile, model_display_name,
+        node_distribution_target_for, node_supported, normalize_synced_catalog, pkce_challenge,
+        route_check_with_retry, route_from_config, sanitize_saved_osir_config,
+        should_reconcile_codex_ownership, stripped_archive_path, sync_cache_args,
+        validate_codex_install_payload, validate_exchange_provider_summary, validate_input,
+        wait_for_oauth_callback, write_codex_proxy_config, CodexInstallPayload,
         CodexInstallProvider, CodexInstallProviderSummary, EncryptedBundle, OpenCodexConfigInput,
         OpenCodexRouteInput, RedemptionState,
     };
@@ -4116,33 +5065,63 @@ mod tests {
         let root = std::env::temp_dir().join(format!("opencodex-activation-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let paths = IntegrationPaths {
-            codex_config: root.join("config.toml"), catalog: root.join("catalog.json"),
-            opencodex_config: root.join("ocx.json"), state: root.join("state.json"),
+            codex_config: root.join("config.toml"),
+            catalog: root.join("catalog.json"),
+            opencodex_config: root.join("ocx.json"),
+            state: root.join("state.json"),
         };
         let original = b"model_provider = \"osir\"\nmodel = \"gpt-5.6-sol\"\n";
         std::fs::write(&paths.codex_config, original).unwrap();
         let cache = root.join("models_cache.json");
         std::fs::write(&cache, b"original cache").unwrap();
         let routes = input().routes;
-        let result = prepare_activation_catalog(&paths, "opencodex", 10100, "osir-gpt/gpt-5.6-sol", &routes, || {
-            let document = std::fs::read_to_string(&paths.codex_config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
-            assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
-            assert!(document.get("model_catalog_json").is_none());
-            std::fs::write(&paths.catalog, br#"{"models":[]}"#).unwrap();
-            std::fs::write(&cache, b"partial cache").unwrap();
-            Ok(())
-        });
+        let result = prepare_activation_catalog(
+            &paths,
+            "opencodex",
+            10100,
+            "osir-gpt/gpt-5.6-sol",
+            &routes,
+            || {
+                let document = std::fs::read_to_string(&paths.codex_config)
+                    .unwrap()
+                    .parse::<toml_edit::DocumentMut>()
+                    .unwrap();
+                assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
+                assert!(document.get("model_catalog_json").is_none());
+                std::fs::write(&paths.catalog, br#"{"models":[]}"#).unwrap();
+                std::fs::write(&cache, b"partial cache").unwrap();
+                Ok(())
+            },
+        );
         assert!(result.is_err());
         assert_eq!(std::fs::read(&paths.codex_config).unwrap(), original);
         assert_eq!(std::fs::read(&cache).unwrap(), b"original cache");
         assert!(!paths.catalog.exists());
-        prepare_activation_catalog(&paths, "opencodex", 10100, "osir-gpt/gpt-5.6-sol", &routes, || {
-            std::fs::write(&paths.catalog, br#"{"models":[{"slug":"osir-gpt/gpt-5.6-sol"}]}"#).unwrap();
-            Ok(())
-        }).unwrap();
-        let document = std::fs::read_to_string(&paths.codex_config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+        prepare_activation_catalog(
+            &paths,
+            "opencodex",
+            10100,
+            "osir-gpt/gpt-5.6-sol",
+            &routes,
+            || {
+                std::fs::write(
+                    &paths.catalog,
+                    br#"{"models":[{"slug":"osir-gpt/gpt-5.6-sol"}]}"#,
+                )
+                .unwrap();
+                Ok(())
+            },
+        )
+        .unwrap();
+        let document = std::fs::read_to_string(&paths.codex_config)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
-        assert_eq!(document["model_catalog_json"].as_str(), paths.catalog.to_str());
+        assert_eq!(
+            document["model_catalog_json"].as_str(),
+            paths.catalog.to_str()
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -4166,7 +5145,9 @@ mod tests {
                 let current = attempts.get() + 1;
                 attempts.set(current);
                 if current < 3 {
-                    Err(AppError::Engine("unexpected status 502 Bad Gateway".to_string()))
+                    Err(AppError::Engine(
+                        "unexpected status 502 Bad Gateway".to_string(),
+                    ))
                 } else {
                     Ok(b"ok".to_vec())
                 }
@@ -4197,7 +5178,9 @@ mod tests {
         let result = route_check_with_retry(
             || {
                 attempts.set(attempts.get() + 1);
-                Err(AppError::Engine("unexpected status 401 Unauthorized".to_string()))
+                Err(AppError::Engine(
+                    "unexpected status 401 Unauthorized".to_string(),
+                ))
             },
             &[Duration::ZERO, Duration::ZERO, Duration::ZERO],
         );
@@ -4226,11 +5209,7 @@ mod tests {
             Some("old")
         ));
         assert!(configuration_requires_restart(
-            true,
-            false,
-            true,
-            None,
-            None
+            true, false, true, None, None
         ));
         assert!(!configuration_requires_restart(
             true,
@@ -4304,7 +5283,10 @@ mod tests {
             json!(["gemini-3.7-flash"])
         );
         assert_eq!(config["customModels"].as_array().unwrap().len(), 1);
-        assert_eq!(config["customModels"][0]["displayName"], json!("Gemini 3.7 Flash · osir"));
+        assert_eq!(
+            config["customModels"][0]["displayName"],
+            json!("Gemini 3.7 Flash · osir")
+        );
     }
 
     #[test]
@@ -4344,10 +5326,7 @@ mod tests {
 
     #[test]
     fn prunes_stale_managed_catalog_models_after_subscription_refresh() {
-        let root = std::env::temp_dir().join(format!(
-            "opencodex-catalog-prune-{}",
-            Uuid::new_v4()
-        ));
+        let root = std::env::temp_dir().join(format!("opencodex-catalog-prune-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
@@ -4400,11 +5379,23 @@ mod tests {
 
     #[test]
     fn maps_supported_platforms_without_cross_platform_fallbacks() {
-        assert_eq!(component_target_for("macos", "aarch64"), Some("darwin-arm64"));
-        assert_eq!(component_target_for("windows", "x86_64"), Some("windows-x64"));
-        assert_eq!(component_target_for("linux", "aarch64"), Some("linux-arm64"));
+        assert_eq!(
+            component_target_for("macos", "aarch64"),
+            Some("darwin-arm64")
+        );
+        assert_eq!(
+            component_target_for("windows", "x86_64"),
+            Some("windows-x64")
+        );
+        assert_eq!(
+            component_target_for("linux", "aarch64"),
+            Some("linux-arm64")
+        );
         assert_eq!(component_target_for("freebsd", "x86_64"), None);
-        assert_eq!(node_distribution_target_for("linux", "x86_64"), Some("linux-x64"));
+        assert_eq!(
+            node_distribution_target_for("linux", "x86_64"),
+            Some("linux-x64")
+        );
     }
 
     #[test]
@@ -4518,26 +5509,26 @@ mod tests {
     #[test]
     fn preserves_unmanaged_providers_and_replaces_managed_models() {
         let (_, _, routes) = validate_input(&input()).unwrap();
-        let config = JsonMap::from_iter([(
-            "providers".to_string(),
-            json!({"keep":{"adapter":"openai-responses"},"old":{"adapter":"openai-responses"}}),
-        ), (
-            "customModels".to_string(),
-            json!([
-                {"provider":"keep","modelId":"keep-model"},
-                {"provider":"old","modelId":"old-model"}
-            ]),
-        )]);
+        let config = JsonMap::from_iter([
+            (
+                "providers".to_string(),
+                json!({"keep":{"adapter":"openai-responses"},"old":{"adapter":"openai-responses"}}),
+            ),
+            (
+                "customModels".to_string(),
+                json!([
+                    {"provider":"keep","modelId":"keep-model"},
+                    {"provider":"old","modelId":"old-model"}
+                ]),
+            ),
+        ]);
         let next = build_opencodex_config(config, &routes, &["old".to_string()], 10100).unwrap();
         let providers = next["providers"].as_object().unwrap();
         assert!(providers.contains_key("keep"));
         assert!(providers.contains_key("osir-gpt"));
         assert_eq!(providers["osir-gpt"]["authMode"], json!("key"));
         assert!(providers["osir-gpt"].get("apiKeyTransport").is_none());
-        assert_eq!(
-            providers["osir-gpt"]["models"],
-            json!(["gpt-5.6-sol"])
-        );
+        assert_eq!(providers["osir-gpt"]["models"], json!(["gpt-5.6-sol"]));
         assert!(!providers.contains_key("old"));
         let models = next["customModels"].as_array().unwrap();
         assert!(models.iter().any(|model| model["provider"] == "keep"));
@@ -4555,8 +5546,9 @@ mod tests {
         let mut value = input();
         value.routes[0].api_key = None;
         let (_, _, routes) = validate_input(&value).unwrap();
-        let config = JsonMap::from_iter([
-            ("providers".to_string(), json!({
+        let config = JsonMap::from_iter([(
+            "providers".to_string(),
+            json!({
                 "osir-gpt": {
                     "adapter": "openai-responses",
                     "baseUrl": "https://api.osirclaw.com/v1",
@@ -4564,10 +5556,14 @@ mod tests {
                     "apiKey": "existing-secret",
                     "models": ["gpt-5.6-sol"]
                 }
-            })),
-        ]);
-        let value = build_opencodex_config(config, &routes, &["osir-gpt".to_string()], 10100).unwrap();
-        assert_eq!(value["providers"]["osir-gpt"]["apiKey"], json!("existing-secret"));
+            }),
+        )]);
+        let value =
+            build_opencodex_config(config, &routes, &["osir-gpt".to_string()], 10100).unwrap();
+        assert_eq!(
+            value["providers"]["osir-gpt"]["apiKey"],
+            json!("existing-secret")
+        );
     }
 
     #[test]
@@ -4578,21 +5574,36 @@ mod tests {
             "extension": {"keep": true}
         });
         let (_, _, routes) = validate_input(&input()).unwrap();
-        let merged = build_opencodex_config(original.as_object().unwrap().clone(), &routes, &[], 10100).unwrap();
+        let merged =
+            build_opencodex_config(original.as_object().unwrap().clone(), &routes, &[], 10100)
+                .unwrap();
         assert_eq!(merged["providers"]["oauth"], original["providers"]["oauth"]);
         assert_eq!(merged["customModels"][0], original["customModels"][0]);
         assert_eq!(merged["extension"], original["extension"]);
         assert_eq!(merged["syncResumeHistory"], json!(false));
-        let ids = inferred_managed_provider_ids(merged.as_object().unwrap(), merged["customModels"].as_array().unwrap());
-        assert_eq!(configured_routes_from_config(merged.as_object().unwrap(), &ids).len(), 2);
+        let ids = inferred_managed_provider_ids(
+            merged.as_object().unwrap(),
+            merged["customModels"].as_array().unwrap(),
+        );
+        assert_eq!(
+            configured_routes_from_config(merged.as_object().unwrap(), &ids).len(),
+            2
+        );
     }
 
     #[test]
     fn rejects_reusing_private_credentials_for_a_different_endpoint() {
         let mut value = input();
         value.routes[0].api_key = None;
-        let old = json!({"providers":{"osir-gpt":{"baseUrl":"https://old.test/v1","apiKey":"private"}}});
-        assert!(build_opencodex_config(old.as_object().unwrap().clone(), &value.routes, &[], 10100).is_err());
+        let old =
+            json!({"providers":{"osir-gpt":{"baseUrl":"https://old.test/v1","apiKey":"private"}}});
+        assert!(build_opencodex_config(
+            old.as_object().unwrap().clone(),
+            &value.routes,
+            &[],
+            10100
+        )
+        .is_err());
     }
 
     #[test]
@@ -4601,7 +5612,9 @@ mod tests {
         value.routes[0].api_key = None;
         let old = json!({"providers":{"osir-gpt":{"baseUrl":"https://api.osirclaw.com/v1","apiKey":"private","apiKeyTransport":"header","disabled":true}},
             "customModels":[{"id":"stable","provider":"osir-gpt","modelId":"gpt-5.6-sol","contextWindow":1000000,"inputModalities":["text"],"reasoningEfforts":["high"]}]});
-        let merged = build_opencodex_config(old.as_object().unwrap().clone(), &value.routes, &[], 10100).unwrap();
+        let merged =
+            build_opencodex_config(old.as_object().unwrap().clone(), &value.routes, &[], 10100)
+                .unwrap();
         assert_eq!(merged["customModels"].as_array().unwrap().len(), 1);
         assert_eq!(merged["customModels"][0]["id"], "stable");
         assert_eq!(merged["customModels"][0]["contextWindow"], 1000000);
@@ -4615,20 +5628,43 @@ mod tests {
             "disabled":{"disabled":true,"baseUrl":"https://a.test","defaultModel":"a","models":["a"]},
             "ready":{"baseUrl":"https://b.test","defaultModel":"b","models":["b"]}
         }});
-        assert_eq!(inferred_default_route(config.as_object().unwrap(), &["disabled".into(),"ready".into()]), Some("ready/b".into()));
+        assert_eq!(
+            inferred_default_route(
+                config.as_object().unwrap(),
+                &["disabled".into(), "ready".into()]
+            ),
+            Some("ready/b".into())
+        );
     }
 
     #[test]
     fn failed_first_save_removes_new_files_and_preserves_original_config() {
-        use super::{IntegrationPaths, ManagedState, restore_save_snapshot};
+        use super::{restore_save_snapshot, IntegrationPaths, ManagedState};
         let root = std::env::temp_dir().join(format!("opencodex-rollback-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
-        let paths = IntegrationPaths { codex_config:root.join("config.toml"), opencodex_config:root.join("ocx.json"), catalog:root.join("catalog.json"), state:root.join("state.json") };
-        for path in [&paths.opencodex_config, &paths.catalog, &paths.codex_config] { std::fs::write(path,b"partial").unwrap(); }
-        restore_save_snapshot(&paths,None,Some(b"model = \"old\""),None,&ManagedState::default()).unwrap();
+        let paths = IntegrationPaths {
+            codex_config: root.join("config.toml"),
+            opencodex_config: root.join("ocx.json"),
+            catalog: root.join("catalog.json"),
+            state: root.join("state.json"),
+        };
+        for path in [&paths.opencodex_config, &paths.catalog, &paths.codex_config] {
+            std::fs::write(path, b"partial").unwrap();
+        }
+        restore_save_snapshot(
+            &paths,
+            None,
+            Some(b"model = \"old\""),
+            None,
+            &ManagedState::default(),
+        )
+        .unwrap();
         assert!(!paths.opencodex_config.exists());
         assert!(!paths.catalog.exists());
-        assert_eq!(std::fs::read(&paths.codex_config).unwrap(), b"model = \"old\"");
+        assert_eq!(
+            std::fs::read(&paths.codex_config).unwrap(),
+            b"model = \"old\""
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -4670,7 +5706,8 @@ mod tests {
             serde_json::to_vec(&json!({"models":[
                 {"slug":"osirapi-openai/gpt-5.6"},
                 {"slug":"osirapi-openai/gpt-5.6-sol"}
-            ]})).unwrap(),
+            ]}))
+            .unwrap(),
         )
         .unwrap();
         assert!(catalog_contains_enabled_routes(&catalog, &routes));
@@ -4679,7 +5716,8 @@ mod tests {
 
     #[test]
     fn does_not_publish_gemini_models_missing_from_the_runtime_catalog() {
-        let root = std::env::temp_dir().join(format!("opencodex-catalog-fallback-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("opencodex-catalog-fallback-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
@@ -4703,15 +5741,20 @@ mod tests {
         normalize_synced_catalog(&catalog, &routes).unwrap();
         assert!(!catalog_contains_enabled_routes(&catalog, &routes));
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
-        let slugs = value["models"].as_array().unwrap().iter()
-            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        let slugs = value["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|model| model["slug"].as_str())
+            .collect::<BTreeSet<_>>();
         assert!(!slugs.contains("osirapi-gemini/gemini-3.7-flash"));
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn removes_bare_openai_aliases_from_the_picker_catalog() {
-        let root = std::env::temp_dir().join(format!("opencodex-catalog-legacy-alias-{}", Uuid::new_v4()));
+        let root =
+            std::env::temp_dir().join(format!("opencodex-catalog-legacy-alias-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
@@ -4730,15 +5773,21 @@ mod tests {
                     "visibility":"hide",
                     "hidden":true
                 }
-            ]})).unwrap(),
-        ).unwrap();
+            ]}))
+            .unwrap(),
+        )
+        .unwrap();
         let mut route = input().routes[0].clone();
         route.id = "osirapi-openai".to_string();
         route.models = vec!["gpt-5.5".to_string()];
         normalize_synced_catalog(&catalog, &[route]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
-        let slugs = value["models"].as_array().unwrap().iter()
-            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        let slugs = value["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|model| model["slug"].as_str())
+            .collect::<BTreeSet<_>>();
         assert!(slugs.contains("osirapi-openai/gpt-5.5"));
         assert!(!slugs.contains("gpt-5.5"));
         std::fs::remove_dir_all(root).unwrap();
@@ -4746,7 +5795,10 @@ mod tests {
 
     #[test]
     fn does_not_append_a_legacy_alias_for_an_unexposed_openai_model() {
-        let root = std::env::temp_dir().join(format!("opencodex-catalog-no-fake-alias-{}", Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!(
+            "opencodex-catalog-no-fake-alias-{}",
+            Uuid::new_v4()
+        ));
         std::fs::create_dir_all(&root).unwrap();
         let catalog = root.join("catalog.json");
         std::fs::write(
@@ -4759,8 +5811,12 @@ mod tests {
         route.models = vec!["gpt-5.5".to_string()];
         normalize_synced_catalog(&catalog, &[route]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
-        let slugs = value["models"].as_array().unwrap().iter()
-            .filter_map(|model| model["slug"].as_str()).collect::<BTreeSet<_>>();
+        let slugs = value["models"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|model| model["slug"].as_str())
+            .collect::<BTreeSet<_>>();
         assert!(!slugs.contains("gpt-5.5"));
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -4777,18 +5833,48 @@ mod tests {
                 {"slug":"osirapi-grok/grok-4.6"},
                 {"slug":"osirapi-openai/gpt-5.5"},
                 {"slug":"osirapi-claude/claude-opus-5"}
-            ]})).unwrap(),
-        ).unwrap();
+            ]}))
+            .unwrap(),
+        )
+        .unwrap();
         let mut gpt = input().routes[0].clone();
         gpt.id = "osirapi-openai".to_string();
         gpt.models = vec!["gpt-5.5".to_string()];
-        let claude = OpenCodexRouteInput { id: "osirapi-claude".into(), label: "Claude".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["claude-opus-5".into()], default_model: "claude-opus-5".into(), enabled: true };
-        let grok = OpenCodexRouteInput { id: "osirapi-grok".into(), label: "Grok".into(), adapter: "openai-responses".into(), base_url: "http://localhost".into(), api_key: None, models: vec!["grok-4.6".into()], default_model: "grok-4.6".into(), enabled: true };
+        let claude = OpenCodexRouteInput {
+            id: "osirapi-claude".into(),
+            label: "Claude".into(),
+            adapter: "openai-responses".into(),
+            base_url: "http://localhost".into(),
+            api_key: None,
+            models: vec!["claude-opus-5".into()],
+            default_model: "claude-opus-5".into(),
+            enabled: true,
+        };
+        let grok = OpenCodexRouteInput {
+            id: "osirapi-grok".into(),
+            label: "Grok".into(),
+            adapter: "openai-responses".into(),
+            base_url: "http://localhost".into(),
+            api_key: None,
+            models: vec!["grok-4.6".into()],
+            default_model: "grok-4.6".into(),
+            enabled: true,
+        };
         normalize_synced_catalog(&catalog, &[gpt, claude, grok]).unwrap();
         let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
         let models = value["models"].as_array().unwrap();
-        let slugs = models.iter().filter_map(|m| m["slug"].as_str()).collect::<Vec<_>>();
-        assert_eq!(slugs[..3], ["osirapi-openai/gpt-5.5", "osirapi-claude/claude-opus-5", "osirapi-grok/grok-4.6"]);
+        let slugs = models
+            .iter()
+            .filter_map(|m| m["slug"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            slugs[..3],
+            [
+                "osirapi-openai/gpt-5.5",
+                "osirapi-claude/claude-opus-5",
+                "osirapi-grok/grok-4.6"
+            ]
+        );
         assert!(!slugs.contains(&"gpt-5.5"));
         let routed = models
             .iter()
@@ -4816,10 +5902,14 @@ mod tests {
             "supported_reasoning_levels": [{"effort": "high"}],
             "default_reasoning_effort": "medium"
         })];
-        let route = route_from_config("osirapi-openai", &config, &catalog, None, &BTreeMap::new()).unwrap();
+        let route =
+            route_from_config("osirapi-openai", &config, &catalog, None, &BTreeMap::new()).unwrap();
         assert_eq!(route.provider_name, "osir");
         assert_eq!(route.model_capabilities[0].display_name, "GPT-5.5 · osir");
-        assert_eq!(route.model_capabilities[0].supported_reasoning_efforts, vec!["high"]);
+        assert_eq!(
+            route.model_capabilities[0].supported_reasoning_efforts,
+            vec!["high"]
+        );
         assert_eq!(route.model_capabilities[0].default_reasoning_effort, None);
     }
 
@@ -4829,13 +5919,30 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let config = root.join("config.toml");
         let catalog = root.join("catalog.json");
-        std::fs::write(&config, "model_provider = \"openai\"\nopenai_base_url = \"http://127.0.0.1:10100/v1\"\n").unwrap();
-        write_codex_proxy_config(&config, &catalog, "opencodex", 10100, "osirapi-openai/gpt-5.6-sol").unwrap();
-        let document = std::fs::read_to_string(&config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+        std::fs::write(
+            &config,
+            "model_provider = \"openai\"\nopenai_base_url = \"http://127.0.0.1:10100/v1\"\n",
+        )
+        .unwrap();
+        write_codex_proxy_config(
+            &config,
+            &catalog,
+            "opencodex",
+            10100,
+            "osirapi-openai/gpt-5.6-sol",
+        )
+        .unwrap();
+        let document = std::fs::read_to_string(&config)
+            .unwrap()
+            .parse::<toml_edit::DocumentMut>()
+            .unwrap();
         assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
         assert!(document.get("openai_base_url").is_none());
         let provider = document["model_providers"]["opencodex"].as_table().unwrap();
-        assert_eq!(provider["base_url"].as_str(), Some("http://127.0.0.1:10100/v1"));
+        assert_eq!(
+            provider["base_url"].as_str(),
+            Some("http://127.0.0.1:10100/v1")
+        );
         assert_eq!(provider["wire_api"].as_str(), Some("responses"));
         assert_eq!(provider["requires_openai_auth"].as_bool(), Some(false));
         std::fs::remove_dir_all(root).unwrap();
@@ -4870,7 +5977,8 @@ mod tests {
         )]);
         let ids = inferred_managed_provider_ids(&config, &[]);
         assert_eq!(ids, vec!["oauth-claude"]);
-        let route = route_from_config("oauth-claude", &config, &[], None, &BTreeMap::new()).unwrap();
+        let route =
+            route_from_config("oauth-claude", &config, &[], None, &BTreeMap::new()).unwrap();
         assert_eq!(route.models, vec!["claude-haiku", "claude-sonnet"]);
         assert!(route.api_key_configured);
         assert_eq!(route.availability, "configured");
@@ -4901,10 +6009,7 @@ mod tests {
     #[test]
     fn infers_existing_manager_routes_from_custom_models_when_state_is_missing() {
         let config = JsonMap::from_iter([
-            (
-                "defaultProvider".to_string(),
-                json!("osirapi-openai"),
-            ),
+            ("defaultProvider".to_string(), json!("osirapi-openai")),
             (
                 "providers".to_string(),
                 json!({
@@ -4938,7 +6043,10 @@ mod tests {
     #[test]
     fn extracts_only_a_well_formed_osir_connection_ticket() {
         let ticket = format!("ocx_{}", "a".repeat(48));
-        assert_eq!(extract_osir_ticket(&format!("请导入：{ticket}")).unwrap(), ticket);
+        assert_eq!(
+            extract_osir_ticket(&format!("请导入：{ticket}")).unwrap(),
+            ticket
+        );
         assert!(extract_osir_ticket("ocx_not-a-ticket").is_err());
     }
 
@@ -4947,7 +6055,10 @@ mod tests {
         let private = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
         let state = RedemptionState {
             private_key: private.to_pkcs8_pem(LineEnding::LF).unwrap().to_string(),
-            public_key: private.to_public_key().to_public_key_pem(LineEnding::LF).unwrap(),
+            public_key: private
+                .to_public_key()
+                .to_public_key_pem(LineEnding::LF)
+                .unwrap(),
             idempotency_key: "test".to_string(),
         };
         let plaintext = serde_json::to_vec(&json!({
@@ -4976,20 +6087,27 @@ mod tests {
                     "monthly_remaining_usd": 91.5
                 }]
             }
-        })).unwrap();
+        }))
+        .unwrap();
         let aes_key = [7_u8; 32];
         let iv = [9_u8; 12];
         let cipher = Aes256Gcm::new_from_slice(&aes_key).unwrap();
-        let ciphertext = cipher.encrypt(Nonce::from_slice(&iv), plaintext.as_ref()).unwrap();
+        let ciphertext = cipher
+            .encrypt(Nonce::from_slice(&iv), plaintext.as_ref())
+            .unwrap();
         let wrapped = private
             .to_public_key()
             .encrypt(&mut OsRng, Oaep::new::<RsaSha256>(), &aes_key)
             .unwrap();
-        let result: CodexInstallPayload = decrypt_bundle(&state, EncryptedBundle {
-            wrapped_key: base64::engine::general_purpose::STANDARD.encode(wrapped),
-            iv: base64::engine::general_purpose::STANDARD.encode(iv),
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(ciphertext),
-        }).unwrap();
+        let result: CodexInstallPayload = decrypt_bundle(
+            &state,
+            EncryptedBundle {
+                wrapped_key: base64::engine::general_purpose::STANDARD.encode(wrapped),
+                iv: base64::engine::general_purpose::STANDARD.encode(iv),
+                ciphertext: base64::engine::general_purpose::STANDARD.encode(ciphertext),
+            },
+        )
+        .unwrap();
         assert_eq!(result.providers[0].provider, "osirapi-openai");
         assert_eq!(result.providers[0].models, vec!["gpt-5.6-sol"]);
         let account = result.account.expect("account summary");

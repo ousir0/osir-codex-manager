@@ -1263,6 +1263,10 @@ export const managerApi = {
     return invoke<void>("mac_launch_codex");
   },
   // Restart the installed Codex when the home status probe says it is live.
+  codexResumeRepairProgress(): Promise<{ phase: string; scanned: number; total: number; repaired: number }> {
+    if (!hasTauriRuntime()) return Promise.resolve({ phase: "waiting", scanned: 0, total: 0, repaired: 0 });
+    return invoke("codex_resume_repair_progress");
+  },
   macRestart(): Promise<void> {
     if (!hasTauriRuntime()) {
       return Promise.resolve();

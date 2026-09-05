@@ -661,10 +661,18 @@ pub struct CatalogPreviewStyle {
     pub focus_visible: bool,
 }
 
-fn default_preview_opacity() -> f64 { 1.0 }
-fn default_preview_radius() -> f64 { 12.0 }
-fn default_preview_border_alpha() -> f64 { 0.14 }
-fn default_preview_shadow() -> String { "soft".to_string() }
+fn default_preview_opacity() -> f64 {
+    1.0
+}
+fn default_preview_radius() -> f64 {
+    12.0
+}
+fn default_preview_border_alpha() -> f64 {
+    0.14
+}
+fn default_preview_shadow() -> String {
+    "soft".to_string()
+}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct CatalogIndex {
@@ -1089,10 +1097,7 @@ impl ThemeService {
                     .map_err(|_| AppError::Internal("模型选择器修复守护未运行".to_string()))?;
             } else {
                 let (tx, rx) = watch::channel(true);
-                tauri::async_runtime::spawn(run_model_picker_layout_daemon(
-                    THEME_CDP_PORT,
-                    rx,
-                ));
+                tauri::async_runtime::spawn(run_model_picker_layout_daemon(THEME_CDP_PORT, rx));
                 inner.model_picker_layout_tx = Some(tx);
             }
         }
@@ -1379,7 +1384,9 @@ impl ThemeService {
                 Err(error) => {
                     log::warn!("热应用失败，降级为停机写 config.toml: {error}");
                     if let Some(native) = native.as_ref() {
-                        return self.file_apply_flow(settings, &dir, &theme_id, native).await;
+                        return self
+                            .file_apply_flow(settings, &dir, &theme_id, native)
+                            .await;
                     }
                     return Err(error);
                 }
@@ -1388,9 +1395,13 @@ impl ThemeService {
         self.restart_debuggable_and_inject(
             settings,
             theme_ref,
-            if native.is_some() { NativeSync::HotThenFile } else { NativeSync::CssOnly },
+            if native.is_some() {
+                NativeSync::HotThenFile
+            } else {
+                NativeSync::CssOnly
+            },
         )
-            .await
+        .await
     }
 
     /// Launch or reconnect Codex with the renderer-only model picker repair.
@@ -1770,37 +1781,37 @@ fn launch_codex_with_cdp(
     port: u16,
     disable_self_updates: bool,
 ) -> Result<(), AppError> {
-    crate::app::opencodex::reconcile_after_manager_update()?;
-    if disable_self_updates {
-        crate::app::codex_self_update::sync_setting(true)?;
-    }
-    log::info!(
-        "launching Codex with CDP port={port} path={}",
-        installed.display()
-    );
-    let mut command = std::process::Command::new("/usr/bin/open");
-    crate::app::codex_self_update::apply_to_command(&mut command, disable_self_updates);
-    command
-        .arg("-n")
-        .arg("-a")
-        .arg(installed)
-        .arg("--args")
-        .arg("--remote-debugging-address=127.0.0.1")
-        .arg(format!("--remote-debugging-port={port}"))
-        .arg("--lang=zh-CN")
-        .arg(format!(
-            "--proxy-pac-url={}",
-            codex_win_engine::osir_i18n_proxy_pac_url()
-        ))
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
+    crate::app::opencodex::with_codex_launch(|| {
+        if disable_self_updates {
+            crate::app::codex_self_update::sync_setting(true)?;
+        }
+        log::info!(
+            "launching Codex with CDP port={port} path={}",
+            installed.display()
+        );
+        let mut command = std::process::Command::new("/usr/bin/open");
+        crate::app::codex_self_update::apply_to_command(&mut command, disable_self_updates);
+        command
+            .arg("-n")
+            .arg("-a")
+            .arg(installed)
+            .arg("--args")
+            .arg("--remote-debugging-address=127.0.0.1")
+            .arg(format!("--remote-debugging-port={port}"))
+            .arg("--lang=zh-CN")
+            .arg(format!(
+                "--proxy-pac-url={}",
+                codex_win_engine::osir_i18n_proxy_pac_url()
+            ))
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
+    })
 }
 
 #[cfg(target_os = "macos")]
 fn launch_codex_plain() -> Result<(), AppError> {
-    crate::app::opencodex::reconcile_after_manager_update()?;
-    crate::app::mac_update::launch_codex()
+    crate::app::opencodex::with_codex_launch(|| crate::app::mac_update::launch_codex())
 }
 
 #[cfg(target_os = "windows")]
@@ -1845,37 +1856,39 @@ fn launch_codex_with_cdp(
     port: u16,
     disable_self_updates: bool,
 ) -> Result<(), AppError> {
-    crate::app::opencodex::reconcile_after_manager_update()?;
-    if disable_self_updates {
-        crate::app::codex_self_update::sync_setting(true)?;
-    }
-    let detected = installed_windows_codex()?;
-    if !codex_win_engine::same_windows_path(Path::new(&detected.path), installed) {
-        return Err(AppError::Engine(format!(
-            "Codex 安装位置在重启前发生变化：{} -> {}",
-            installed.display(),
-            detected.path
-        )));
-    }
-    log::info!(
-        "launching Windows Codex with CDP port={port} path={}",
-        installed.display()
-    );
-    codex_win_engine::launch_codex_with_options(
-        &detected,
-        codex_win_engine::LaunchOptions {
-            disable_codex_self_updates: disable_self_updates,
-            remote_debugging_port: Some(port),
-            proxy_pac_url: Some(codex_win_engine::osir_i18n_proxy_pac_url()),
-        },
-    )
-    .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
+    crate::app::opencodex::with_codex_launch(|| {
+        if disable_self_updates {
+            crate::app::codex_self_update::sync_setting(true)?;
+        }
+        let detected = installed_windows_codex()?;
+        if !codex_win_engine::same_windows_path(Path::new(&detected.path), installed) {
+            return Err(AppError::Engine(format!(
+                "Codex 安装位置在重启前发生变化：{} -> {}",
+                installed.display(),
+                detected.path
+            )));
+        }
+        log::info!(
+            "launching Windows Codex with CDP port={port} path={}",
+            installed.display()
+        );
+        codex_win_engine::launch_codex_with_options(
+            &detected,
+            codex_win_engine::LaunchOptions {
+                disable_codex_self_updates: disable_self_updates,
+                remote_debugging_port: Some(port),
+                proxy_pac_url: Some(codex_win_engine::osir_i18n_proxy_pac_url()),
+            },
+        )
+        .map_err(|e| AppError::Engine(format!("以调试模式打开 Codex 失败: {e}")))
+    })
 }
 
 #[cfg(target_os = "windows")]
 fn launch_codex_plain() -> Result<(), AppError> {
-    crate::app::opencodex::reconcile_after_manager_update()?;
-    crate::app::win_update::launch_codex(&windows_domain_settings())
+    crate::app::opencodex::with_codex_launch(|| {
+        crate::app::win_update::launch_codex(&windows_domain_settings())
+    })
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]

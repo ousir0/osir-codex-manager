@@ -1334,10 +1334,7 @@ pub async fn mac_restart_codex(state: State<'_, ManagerState>) -> Result<(), Com
         }
     }
     if open_codex_enabled && state.operations.snapshot().is_none() {
-        state
-            .codex_theme
-            .disable_model_picker_layout_fix()
-            .await;
+        state.codex_theme.disable_model_picker_layout_fix().await;
         state
             .codex_theme
             .restart_with_model_picker_layout_fix(&settings)
@@ -2330,6 +2327,11 @@ fn ensure_config_may_write(state: &ManagerState) -> Result<(), CommandError> {
 }
 
 #[tauri::command]
+pub fn codex_resume_repair_progress() -> crate::app::codex_sessions::ResumeRepairProgress {
+    crate::app::codex_sessions::resume_repair_progress()
+}
+
+#[tauri::command]
 pub fn codex_config_get() -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     crate::app::codex_config::report(crate::app::codex_theme::codex_running()).map_err(Into::into)
 }
@@ -2390,8 +2392,8 @@ pub fn codex_config_save_basic(
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
     let codex_running = crate::app::codex_theme::codex_running();
-    let report = crate::app::codex_config::save_basic(input, codex_running)
-        .map_err(CommandError::from)?;
+    let report =
+        crate::app::codex_config::save_basic(input, codex_running).map_err(CommandError::from)?;
     if codex_running {
         crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
     }
@@ -2419,8 +2421,8 @@ pub fn codex_config_delete_api_key(
 ) -> Result<crate::app::codex_config::CodexConfigReport, CommandError> {
     ensure_config_may_write(&state)?;
     let codex_running = crate::app::codex_theme::codex_running();
-    let report = crate::app::codex_config::delete_api_key(codex_running)
-        .map_err(CommandError::from)?;
+    let report =
+        crate::app::codex_config::delete_api_key(codex_running).map_err(CommandError::from)?;
     if codex_running {
         crate::app::opencodex::mark_codex_restart_required().map_err(CommandError::from)?;
     }
@@ -2523,10 +2525,12 @@ pub async fn opencodex_select_route(
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::select_route(&route_id, &model))
-        .await
-        .map_err(|error| AppError::Internal(format!("join: {error}")))?
-        .map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::app::opencodex::select_route(&route_id, &model)
+    })
+    .await
+    .map_err(|error| AppError::Internal(format!("join: {error}")))?
+    .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2536,10 +2540,12 @@ pub async fn opencodex_remove_model(
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexStatus, CommandError> {
     ensure_config_may_write(&state)?;
-    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::remove_model(&route_id, &model))
-        .await
-        .map_err(|error| AppError::Internal(format!("join: {error}")))?
-        .map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::app::opencodex::remove_model(&route_id, &model)
+    })
+    .await
+    .map_err(|error| AppError::Internal(format!("join: {error}")))?
+    .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2547,10 +2553,12 @@ pub async fn opencodex_check_route(
     route_id: String,
     model: String,
 ) -> Result<crate::app::opencodex::OpenCodexRouteCheck, CommandError> {
-    tauri::async_runtime::spawn_blocking(move || crate::app::opencodex::check_route(&route_id, &model))
-        .await
-        .map_err(|error| AppError::Internal(format!("join: {error}")))?
-        .map_err(Into::into)
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::app::opencodex::check_route(&route_id, &model)
+    })
+    .await
+    .map_err(|error| AppError::Internal(format!("join: {error}")))?
+    .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -2585,8 +2593,8 @@ pub async fn opencodex_connect_osir_oauth(
             }
         })
     })
-        .await
-        .map_err(|error| AppError::Internal(format!("join: {error}")))?;
+    .await
+    .map_err(|error| AppError::Internal(format!("join: {error}")))?;
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
