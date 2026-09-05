@@ -2093,7 +2093,7 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         return Err(AppError::Engine("只能锁定 Manager 管理的模型路由".to_string()));
     }
     let mut config = load_config(&paths.opencodex_config)?;
-    let route = configured_routes_from_config(&config, &[route_id.clone()]).into_iter().next()
+    let route = configured_routes_from_config(&config, std::slice::from_ref(&route_id)).into_iter().next()
         .filter(|route| route.enabled && route.models.contains(&model))
         .ok_or_else(|| AppError::Engine("模型不存在或路由已停用，请刷新配置后重试".to_string()))?;
     let _ = route;
@@ -2107,7 +2107,7 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     config.insert("defaultProvider".to_string(), JsonValue::String(route_id.clone()));
     let next = JsonValue::Object(config);
     validate_candidate(&paths.opencodex_config, &next)?;
-    let snapshot_paths = vec![paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
+    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
         paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
         codex_takeover_backup_path(&paths), restart_required_path(&paths)];
     let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
@@ -2185,7 +2185,7 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     config.insert("defaultProvider".to_string(), JsonValue::String(default_route.split('/').next().unwrap_or_default().to_string()));
     let next = JsonValue::Object(config);
     validate_candidate(&paths.opencodex_config, &next)?;
-    let snapshot_paths = vec![paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
+    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
         paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
         codex_takeover_backup_path(&paths), restart_required_path(&paths)];
     let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
@@ -2199,9 +2199,7 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
         &default_route,
     )?;
     restart_service_and_wait_ready()?;
-    if let Err(error) = ocx_output(&["sync"]) {
-        return Err(error);
-    }
+    ocx_output(&["sync"])?;
     let config = load_config(&paths.opencodex_config)?;
     let models = config
         .get("customModels")
@@ -3717,7 +3715,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         .unwrap_or(requested_default_route);
     candidate_config.insert("defaultProvider".to_string(), json!(default_route.split_once('/').unwrap().0));
     validate_candidate(&paths.opencodex_config, &candidate)?;
-    let snapshot_paths = vec![paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
+    let snapshot_paths = [paths.opencodex_config.clone(), paths.codex_config.clone(), paths.catalog.clone(),
         paths.state.clone(), paths.codex_config.with_file_name("models_cache.json"),
         codex_takeover_backup_path(&paths), restart_required_path(&paths)];
     let snapshots = snapshot_paths.iter().map(|path| read_optional_snapshot(path)).collect::<Result<Vec<_>, _>>()?;
@@ -3738,15 +3736,9 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
     write_json(&paths.state, &state_json)?;
     let _ = refresh_configured_provider_models(&paths);
-    if let Err(error) = restart_service_and_wait_ready() {
-        return Err(error);
-    }
-    if let Err(error) = ocx_output(&["sync"]) {
-        return Err(error);
-    }
-    if let Err(error) = normalize_synced_catalog(&paths.catalog, &routes) {
-        return Err(error);
-    }
+    restart_service_and_wait_ready()?;
+    ocx_output(&["sync"])?;
+    normalize_synced_catalog(&paths.catalog, &routes)?;
     if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
         return Err(AppError::Engine("OpenCodex 运行时未加载全部供应商模型；已恢复原配置".to_string()));
     }
@@ -3755,12 +3747,8 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     // picker cache only the default model. Rewrite the same binding after the
     // complete catalog exists so a running Codex reloads every synced model.
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
-    if let Err(error) = sync_codex_model_cache() {
-        return Err(error);
-    }
-    if let Err(error) = normalize_saved_model_capabilities(&paths) {
-        return Err(error);
-    }
+    sync_codex_model_cache()?;
+    normalize_saved_model_capabilities(&paths)?;
     if codex_was_running {
         mark_codex_restart_required_at(&paths)?;
     }
@@ -3779,16 +3767,14 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         &serde_json::to_value(enabled_state)
         .map_err(|error| AppError::Internal(format!("保存多模型启用状态失败：{error}")))?,
     )?;
-    if let Err(error) = codex_sessions::migrate(
+    codex_sessions::migrate(
         codex_sessions::SessionTarget::OpenCodex {
             provider: &provider_id,
             default_provider: &default_provider,
             default_route: &default_route,
         },
         &session_routes(&routes),
-    ) {
-        return Err(error);
-    }
+    )?;
     status_at(&paths)
     })();
     if result.is_err() {

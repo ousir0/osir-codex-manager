@@ -51,13 +51,13 @@ export async function collectGitFacts(cwd = REPO_ROOT, run = execFileAsync) {
 
 export async function collectReleaseJson(tag, run = execFileAsync, repo = "ousir0/osir-codex-manager") {
   try {
-    const result = await run("gh", ["api", `repos/${repo}/releases/tags/${tag}`], { encoding: "utf8" });
+    const result = await run("gh", ["api", `repos/${repo}/releases/tags/${tag}`], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
     return JSON.parse(result.stdout);
   } catch (error) {
     // GitHub's tag lookup excludes draft releases. During the draft-first
     // publication window, list releases instead so the acceptance report can
     // validate the exact assets before the immutable release is published.
-    const result = await run("gh", ["api", `repos/${repo}/releases`, "--paginate", "--slurp"], { encoding: "utf8" });
+    const result = await run("gh", ["api", `repos/${repo}/releases`, "--paginate", "--slurp"], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
     const pages = JSON.parse(result.stdout);
     const releases = Array.isArray(pages) ? pages.flat() : [];
     const release = releases.find((item) => item.tag_name === tag);
@@ -68,7 +68,7 @@ export async function collectReleaseJson(tag, run = execFileAsync, repo = "ousir
 
 export async function collectReleaseCommitSha(tag, run = execFileAsync, repo = "ousir0/osir-codex-manager") {
   try {
-    const result = await run("gh", ["api", `repos/${repo}/commits/${tag}`], { encoding: "utf8" });
+    const result = await run("gh", ["api", `repos/${repo}/commits/${tag}`], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
     return JSON.parse(result.stdout).sha || "";
   } catch {
     return "";
@@ -77,7 +77,7 @@ export async function collectReleaseCommitSha(tag, run = execFileAsync, repo = "
 
 export async function collectCiFacts({ sha, tag }, run = execFileAsync, repo = "ousir0/osir-codex-manager") {
   try {
-    const result = await run("gh", ["run", "list", "--repo", repo, "--limit", "30", "--json", "name,status,conclusion,headSha,event,url,createdAt"], { encoding: "utf8" });
+    const result = await run("gh", ["run", "list", "--repo", repo, "--limit", "30", "--json", "name,status,conclusion,headSha,event,url,createdAt"], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
     const runs = JSON.parse(result.stdout);
     const matching = runs.filter((item) => item.headSha === sha);
     const completed = matching.filter((item) => item.status === "completed");
