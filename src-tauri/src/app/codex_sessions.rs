@@ -1,8 +1,8 @@
 //! Keeps Codex's thread index usable when Manager changes model providers.
 //!
-//! Conversation bodies remain in their existing JSONL files. Only the
-//! provider/model fields in Codex's SQLite index are updated, transactionally,
-//! after a consistent backup has been created.
+//! Index changes alone are not durable: Codex replays session_meta on resume.
+//! While Codex is closed, repair that metadata and its cached byte offsets too.
+//! Message/tool lines remain byte-for-byte unchanged.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -13,6 +13,9 @@ use rusqlite::{params, Connection, OpenFlags};
 
 use crate::app::paths;
 use crate::errors::AppError;
+
+#[path = "codex_session_metadata.rs"]
+mod metadata;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionRoute {
@@ -42,7 +45,12 @@ struct ThreadUpdate {
 
 fn state_database_path() -> Result<PathBuf, AppError> {
     paths::codex_home_dir()
-        .map(|home| home.join("state_5.sqlite"))
+        .map(|home| {
+            let configured = fs::read_to_string(home.join("config.toml")).ok()
+                .and_then(|raw| raw.parse::<toml_edit::DocumentMut>().ok())
+                .and_then(|doc| doc.get("sqlite_home").and_then(toml_edit::Item::as_str).map(PathBuf::from));
+            configured.filter(|path| path.is_absolute()).unwrap_or(home).join("state_5.sqlite")
+        })
         .ok_or_else(|| AppError::Internal("无法定位 Codex 会话数据库".to_string()))
 }
 
@@ -50,6 +58,50 @@ fn session_backup_path() -> Result<PathBuf, AppError> {
     paths::data_dir()
         .map(|root| root.join("opencodex").join("codex-session-index.before-switch.sqlite"))
         .ok_or_else(|| AppError::Internal("无法定位 Codex Manager 数据目录".to_string()))
+}
+
+/// Records only providers explicitly switched through Manager. This gives
+/// offline repair a bounded ownership list instead of claiming every provider.
+pub fn remember_provider_switch(config: &Path, previous: &str, next: &str) -> Result<(), AppError> {
+    if previous == next { return Ok(()); }
+    let path = config.with_extension("manager-session-providers.json");
+    let mut providers = provider_switch_sources(config)?;
+    if providers.iter().any(|provider| provider == previous) { return Ok(()); }
+    providers.push(previous.to_string());
+    crate::app::atomic_file::write_atomic(&path, &serde_json::to_vec(&providers).map_err(|error| AppError::Internal(error.to_string()))?)
+        .map_err(|error| AppError::Internal(format!("保存会话供应商迁移记录失败：{error}")))
+}
+
+pub fn provider_switch_sources(config: &Path) -> Result<Vec<String>, AppError> {
+    let path = config.with_extension("manager-session-providers.json");
+    if !path.exists() { return Ok(Vec::new()); }
+    if path.is_symlink() { return Err(AppError::Engine("会话供应商迁移记录是符号链接".into())); }
+    serde_json::from_slice(&fs::read(path).map_err(|error| AppError::Internal(error.to_string()))?)
+        .map_err(|error| AppError::Engine(format!("会话供应商迁移记录无效：{error}")))
+}
+
+/// Session files are shared by Desktop and CLI. Installation detection alone
+/// can miss a different bundle or a running standalone app-server.
+pub(crate) fn runtime_is_running() -> bool {
+    if crate::app::codex_theme::codex_running() { return true; }
+    #[cfg(unix)]
+    {
+        // pgrep's distinct exit codes let an unavailable process check fail
+        // closed rather than interpreting an error as permission to rewrite.
+        std::process::Command::new("/usr/bin/pgrep").args(["-x", "codex"])
+            .output().map(|output| output.status.code() != Some(1)).unwrap_or(true)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("tasklist.exe")
+            .args(["/FI", "IMAGENAME eq codex.exe", "/FO", "CSV", "/NH"])
+            .creation_flags(0x08000000).output()
+            .map(|output| !output.status.success() || String::from_utf8_lossy(&output.stdout).to_ascii_lowercase().contains("codex.exe"))
+            .unwrap_or(true)
+    }
+    #[cfg(not(any(unix, windows)))]
+    { true }
 }
 
 fn known_models(routes: &[SessionRoute]) -> (BTreeMap<String, String>, BTreeMap<String, Vec<String>>) {
@@ -86,12 +138,13 @@ fn planned_update(
     match target {
         SessionTarget::Default { provider: target_provider, opencodex_provider } => {
             let routed_model = full_to_bare.get(current_model);
-            if provider != opencodex_provider && routed_model.is_none() {
+            if provider != target_provider && provider != opencodex_provider && provider != "openai" { return None; }
+            if provider != opencodex_provider && provider != "openai" && routed_model.is_none() {
                 return None;
             }
             let next_model = routed_model.cloned().or_else(|| {
                 if provider == opencodex_provider {
-                    current_model.rsplit_once('/').map(|(_, bare)| bare.to_string())
+                    current_model.rsplit_once('/').map(|(_, bare)| bare.to_string()).or_else(|| model.clone())
                 } else {
                     model.clone()
                 }
@@ -102,6 +155,7 @@ fn planned_update(
             Some(ThreadUpdate { id, provider: target_provider.to_string(), model: next_model })
         }
         SessionTarget::OpenCodex { provider: target_provider, default_provider, default_route } => {
+            if provider != target_provider && provider != default_provider && provider != "openai" { return None; }
             if full_to_bare.contains_key(current_model) {
                 if provider == target_provider {
                     return None;
@@ -124,7 +178,7 @@ fn planned_update(
                     model: Some(route.to_string()),
                 });
             }
-            if provider != default_provider {
+            if provider != default_provider && provider != "openai" {
                 return None;
             }
             let route = if current_model.is_empty() {
@@ -257,6 +311,16 @@ pub fn migrate(target: SessionTarget<'_>, routes: &[SessionRoute]) -> Result<usi
     migrate_at(&state_database_path()?, &session_backup_path()?, target, routes)
 }
 
+/// Call only after Codex has stopped; a running writer retains its file handle.
+pub fn repair_resume_metadata(target: SessionTarget<'_>, routes: &[SessionRoute]) -> Result<usize, AppError> {
+    if runtime_is_running() {
+        return Err(AppError::Engine("Codex 已启动，旧会话修复将在关闭后继续".into()));
+    }
+    let database = state_database_path()?;
+    let root = session_backup_path()?.with_file_name("session-resume-repairs");
+    metadata::repair_with_guard(&database, &root, target, routes, || !runtime_is_running())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{migrate_at, SessionRoute, SessionTarget};
@@ -279,6 +343,29 @@ mod tests {
             SessionRoute { id: "osirapi-openai".into(), models: vec!["gpt-5.6-sol".into()] },
             SessionRoute { id: "osirapi-claude".into(), models: vec!["claude-opus-5".into()] },
         ]
+    }
+
+    #[test]
+    fn default_provider_switch_repairs_native_threads_and_preserves_bare_models() {
+        let (database, backup) = setup();
+        let connection = Connection::open(&database).unwrap();
+        connection.execute("INSERT INTO threads VALUES ('a','openai','gpt-5.4')", []).unwrap();
+        connection.execute("INSERT INTO threads VALUES ('b','opencodex','gpt-5.4')", []).unwrap();
+        assert_eq!(migrate_at(&database, &backup, SessionTarget::Default { provider: "osir", opencodex_provider: "opencodex" }, &routes()).unwrap(), 2);
+        let count:i64=connection.query_row("SELECT count(*) FROM threads WHERE model_provider='osir' AND model='gpt-5.4'", [], |row| row.get(0)).unwrap();
+        assert_eq!(count,2);
+        drop(connection);std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn provider_ownership_records_only_explicit_switches_once() {
+        let (database, _) = setup();
+        let config=database.with_file_name("config.toml");
+        super::remember_provider_switch(&config,"custom-a","custom-b").unwrap();
+        super::remember_provider_switch(&config,"custom-a","custom-b").unwrap();
+        super::remember_provider_switch(&config,"custom-b","custom-b").unwrap();
+        assert_eq!(super::provider_switch_sources(&config).unwrap(),vec!["custom-a"]);
+        std::fs::remove_dir_all(database.parent().unwrap()).unwrap();
     }
 
     #[test]
@@ -314,7 +401,7 @@ mod tests {
         connection.execute("INSERT INTO threads VALUES ('c','other','osirapi-claude/claude-opus-5')", []).unwrap();
         drop(connection);
 
-        assert_eq!(migrate_at(&database, &backup, SessionTarget::OpenCodex { provider: "opencodex", default_provider: "osir", default_route: "osirapi-openai/gpt-5.6-sol" }, &routes()).unwrap(), 3);
+        assert_eq!(migrate_at(&database, &backup, SessionTarget::OpenCodex { provider: "opencodex", default_provider: "osir", default_route: "osirapi-openai/gpt-5.6-sol" }, &routes()).unwrap(), 2);
         let connection = Connection::open(&database).unwrap();
         let values = connection.prepare("SELECT id, model_provider, model FROM threads ORDER BY id").unwrap()
             .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))).unwrap()
@@ -322,7 +409,7 @@ mod tests {
         assert_eq!(values, vec![
             ("a".into(), "opencodex".into(), "osirapi-openai/gpt-5.6-sol".into()),
             ("b".into(), "opencodex".into(), "osirapi-openai/gpt-5.6-sol".into()),
-            ("c".into(), "opencodex".into(), "osirapi-claude/claude-opus-5".into()),
+            ("c".into(), "other".into(), "osirapi-claude/claude-opus-5".into()),
         ]);
         drop(connection);
         std::fs::remove_dir_all(database.parent().unwrap()).unwrap();

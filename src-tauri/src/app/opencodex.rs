@@ -431,7 +431,16 @@ pub(crate) fn clear_manager_update_pending() {
 }
 
 pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
-    reconcile_when_codex_idle(crate::app::codex_theme::codex_running(), || {
+    let running = codex_sessions::runtime_is_running();
+    if running {
+        let paths = integration_paths()?;
+        let recorded = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
+        if manager_runtime_needs_reconcile(env!("CARGO_PKG_VERSION"), recorded.as_deref(), manager_update_reconcile_path(&paths).is_file())
+            && !restart_required_path(&paths).exists() {
+            mark_codex_restart_required_at(&paths)?;
+        }
+    }
+    reconcile_when_codex_idle(running, || {
         reconcile_after_manager_update_when_idle()
     })
 }
@@ -451,23 +460,24 @@ fn reconcile_when_codex_idle(
 fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
     let lock = MANAGER_UPDATE_RECONCILE_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().unwrap_or_else(|poison| poison.into_inner());
-    if crate::app::codex_theme::codex_running() {
+    if codex_sessions::runtime_is_running() {
         return Ok(());
     }
     let paths = integration_paths()?;
     let marker = manager_update_reconcile_path(&paths);
     let recorded_version = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
+    disable_opencodex_history_migration(&paths)?;
     if !manager_runtime_needs_reconcile(
         env!("CARGO_PKG_VERSION"),
         recorded_version.as_deref(),
         marker.is_file(),
     ) {
-        return Ok(());
+        return repair_current_session_routes(&paths);
     }
-
     // There may be no OpenCodex installation yet. The marker is harmless in
     // that case and should not make first-run status fail forever.
     if ocx_program().is_none() {
+        repair_current_session_routes(&paths)?;
         record_current_manager_runtime(&paths)?;
         let _ = fs::remove_file(marker);
         return Ok(());
@@ -483,6 +493,7 @@ fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
         write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
     }
     if !state.enabled {
+        repair_current_session_routes(&paths)?;
         record_current_manager_runtime(&paths)?;
         let _ = fs::remove_file(marker);
         return Ok(());
@@ -503,6 +514,7 @@ fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
             "Manager 更新后 OpenCodex 未加载全部供应商模型，请点击同步重试".to_string(),
         ));
     }
+    repair_current_session_routes(&paths)?;
     clear_codex_restart_required()?;
     record_current_manager_runtime(&paths)?;
     if marker.exists() {
@@ -888,6 +900,58 @@ fn session_routes(routes: &[OpenCodexRouteInput]) -> Vec<codex_sessions::Session
         .iter()
         .map(|route| codex_sessions::SessionRoute { id: route.id.clone(), models: route.models.clone() })
         .collect()
+}
+
+fn disable_opencodex_history_migration(paths: &IntegrationPaths) -> Result<(), AppError> {
+    if !paths.opencodex_config.is_file() { return Ok(()); }
+    let mut config = load_config(&paths.opencodex_config)?;
+    if config.get("syncResumeHistory") != Some(&JsonValue::Bool(false)) {
+        config.insert("syncResumeHistory".into(), JsonValue::Bool(false));
+        write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
+    }
+    Ok(())
+}
+
+/// Runs at safe launch/update boundaries, including already-current runtimes.
+fn repair_current_session_routes(paths: &IntegrationPaths) -> Result<(), AppError> {
+    if !paths.codex_config.is_file() { return Ok(()); }
+    if codex_sessions::runtime_is_running() { return Err(AppError::Engine("Codex 已启动，旧会话修复将在关闭后继续".into())); }
+    let _switch_lock = config_switch_lock()?;
+    let raw = fs::read(&paths.codex_config).map_err(|error| AppError::Internal(error.to_string()))?;
+    let provider = config_provider(&raw)?;
+    let config = load_config(&paths.opencodex_config)?;
+    let models = config.get("customModels").and_then(JsonValue::as_array).cloned().unwrap_or_default();
+    let ids = inferred_managed_provider_ids(&config, &models);
+    let routes = session_routes(&configured_routes_from_config(&config, &ids));
+    let state = load_state(&paths.state);
+    let default_provider = config_provider(&default_codex_config_bytes(paths)?)?;
+    let default_route = inferred_default_route(&config, &ids).unwrap_or_default();
+    let target = if codex_proxy_provider_is_loopback(&paths.codex_config) {
+        if provider != DEFAULT_PROVIDER_ID && provider != state.codex_provider_id { return Ok(()); }
+        if default_route.is_empty() { return Ok(()); }
+        codex_sessions::SessionTarget::OpenCodex { provider: &provider, default_provider: &default_provider, default_route: &default_route }
+    } else {
+        codex_sessions::SessionTarget::Default { provider: &provider, opencodex_provider: DEFAULT_PROVIDER_ID }
+    };
+    let sources = codex_sessions::provider_switch_sources(&paths.codex_config)?;
+    let revision: String = Sha256::digest(format!("{}:{target:?}:{routes:?}:{sources:?}", env!("CARGO_PKG_VERSION")))
+        .iter().map(|byte| format!("{byte:02x}")).collect();
+    let marker = paths.state.with_extension("session-routing-revision");
+    if fs::read_to_string(&marker).ok().as_deref() == Some(&revision) { return Ok(()); }
+    codex_sessions::repair_resume_metadata(target, &routes)?;
+    codex_sessions::migrate(target, &routes)?;
+    for source in sources.iter().filter(|source| **source != provider) {
+        let target = match target {
+            codex_sessions::SessionTarget::OpenCodex { provider, default_route, .. } =>
+                codex_sessions::SessionTarget::OpenCodex { provider, default_route, default_provider: source },
+            codex_sessions::SessionTarget::Default { provider, .. } =>
+                codex_sessions::SessionTarget::Default { provider, opencodex_provider: source },
+        };
+        codex_sessions::repair_resume_metadata(target, &routes)?;
+        codex_sessions::migrate(target, &routes)?;
+    }
+    if codex_sessions::runtime_is_running() { return Err(AppError::Engine("Codex 已启动，旧会话修复将在关闭后继续".into())); }
+    atomic_file::write_atomic(&marker, revision.as_bytes()).map_err(|error| AppError::Internal(error.to_string()))
 }
 
 pub fn repair_default_session_index() -> Result<usize, AppError> {
@@ -2633,6 +2697,7 @@ fn read_child_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
 }
 
 fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, AppError> {
+    disable_opencodex_history_migration(&integration_paths()?)?;
     let (program, prefix) = ocx_invocation().ok_or_else(|| {
         AppError::Engine("未检测到 OpenCodex；请先安装多模型组件".to_string())
     })?;
@@ -3249,6 +3314,7 @@ fn build_opencodex_config(
     config.insert("defaultProvider".to_string(), JsonValue::String(first_enabled));
     config.insert("port".to_string(), JsonValue::from(port));
     config.insert("codexShimAutoRestore".to_string(), JsonValue::Bool(false));
+    config.insert("syncResumeHistory".to_string(), JsonValue::Bool(false));
     config.insert("emptyCompletionRetry".to_string(), JsonValue::Bool(false));
     Ok(JsonValue::Object(config))
 }
@@ -3280,6 +3346,8 @@ fn write_codex_proxy_config(
     } else {
         provider_id.trim()
     };
+    codex_sessions::remember_provider_switch(path,
+        document.get("model_provider").and_then(Item::as_str).unwrap_or("openai"), provider_id)?;
     document["model_provider"] = value(provider_id);
     document["model"] = value(default_route);
     if catalog.is_file() {
@@ -4514,6 +4582,7 @@ mod tests {
         assert_eq!(merged["providers"]["oauth"], original["providers"]["oauth"]);
         assert_eq!(merged["customModels"][0], original["customModels"][0]);
         assert_eq!(merged["extension"], original["extension"]);
+        assert_eq!(merged["syncResumeHistory"], json!(false));
         let ids = inferred_managed_provider_ids(merged.as_object().unwrap(), merged["customModels"].as_array().unwrap());
         assert_eq!(configured_routes_from_config(merged.as_object().unwrap(), &ids).len(), 2);
     }

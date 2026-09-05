@@ -547,11 +547,11 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
     };
     let active_mode = if parse_error.is_some() {
         "unavailable".to_string()
-    } else if provider == "opencodex"
-        || crate::app::opencodex::status()
-        .map(|status| status.enabled)
-        .unwrap_or(false)
-    {
+    } else if provider == "opencodex" || (
+        url::Url::parse(&base_url).ok().is_some_and(|url|
+            matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1")))
+        && parsed_catalog_is_opencodex(&raw)
+    ) {
         "opencodex".to_string()
     } else {
         "default".to_string()
@@ -584,6 +584,11 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
         image_generation_base_url: image_base_url,
         active_mode,
     })
+}
+
+fn parsed_catalog_is_opencodex(raw: &str) -> bool {
+    raw.parse::<DocumentMut>().ok().and_then(|document| document.get("model_catalog_json")
+        .and_then(Item::as_str).map(|path| path.ends_with("opencodex-catalog.json"))).unwrap_or(false)
 }
 
 pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
@@ -1222,7 +1227,7 @@ pub fn fetch_image_models() -> Result<Vec<String>, AppError> {
 /// Atomically write a validated config. Running Codex is allowed; the UI
 /// surfaces that the new values take effect after the next restart.
 fn write_verified(path: &Path, raw: &str) -> Result<(), AppError> {
-    parse_document(raw)?;
+    let next = parse_document(raw)?;
     if path.is_symlink() {
         return Err(AppError::Engine(
             "config.toml 是符号链接，为避免改写错误目标，管理器拒绝保存".to_string(),
@@ -1233,6 +1238,11 @@ fn write_verified(path: &Path, raw: &str) -> Result<(), AppError> {
             .map_err(|error| AppError::Internal(format!("读取 config.toml 失败：{error}")))?;
         if current == raw.as_bytes() {
             return Ok(());
+        }
+        if let Ok(previous) = std::str::from_utf8(&current).unwrap_or_default().parse::<DocumentMut>() {
+            crate::app::codex_sessions::remember_provider_switch(path,
+                previous.get("model_provider").and_then(Item::as_str).unwrap_or("openai"),
+                next.get("model_provider").and_then(Item::as_str).unwrap_or("openai"))?;
         }
     }
     atomic_file::write_atomic(path, raw.as_bytes())

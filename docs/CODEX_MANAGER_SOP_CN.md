@@ -57,12 +57,15 @@
 
 ### 3.3 会话连续性
 
-- 切换时只事务性更新 `state_5.sqlite` 的 `threads.model_provider` 和 `threads.model`。
-- 不移动、不删除、不重写 JSONL 会话正文。
+- 切换时事务性更新 `state_5.sqlite` 的供应商和模型字段；Codex 关闭后，还必须同步 JSONL 的 `session_meta.model_provider` 和 `thread_settings_applied` 中的供应商/模型快照，否则第二次恢复会回退旧供应商。
+- 不移动、不删除会话，不修改消息和工具内容。仅替换匹配任务 ID 的供应商元数据，缓存字节偏移同步迁移，序号和历史条目保留。
+- 元数据修复前备份，写入可重放日志；检测到任何 Codex 后端进程或磁盘空间不足时暂停，保留恢复材料。
+- Manager 接管时固定 `syncResumeHistory=false`，避免 OpenCodex 再次将供应商改回 `openai`。
 - OpenCodex 路由模型（如 `provider/model`）切回默认配置时转换为裸模型；默认配置切回 OpenCodex 时恢复到已保存路由。
 - 不修改无法确认归属的第三方 Provider 或未知模型。
 - 迁移前生成 `codex-session-index.before-switch.sqlite` 一致性备份。
 - 旧版本用户打开配置管理时允许自动修复遗留索引；若 Codex 正在运行，必须标记“需要重启”。
+- 运行中更新不得重写会话文件；通过 Manager 的“重启 Codex”入口，在退出完成后、重新启动前完成元数据迁移。
 
 ### 3.4 切换后的用户提示
 
