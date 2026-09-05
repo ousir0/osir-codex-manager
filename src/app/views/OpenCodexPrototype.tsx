@@ -31,7 +31,7 @@ const ROUTES = [
   { id: "osir-grok", label: "Grok", provider: "osir", model: "grok-4.6", count: 5, accent: "lime", initials: "X" },
 ] as const;
 
-export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (status: OpenCodexStatus) => void } = {}) {
+export function OpenCodexPrototype({ onStatusChange, externalStatus }: { onStatusChange?: (status: OpenCodexStatus) => void; externalStatus?: OpenCodexStatus | null } = {}) {
   const [notice, setNotice] = useState("正在检测 OpenCodex 和本机配置…");
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>(null);
   const [oauthSuccess, setOauthSuccess] = useState<OpenCodexStatus | null>(null);
@@ -54,18 +54,37 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
   });
   const refreshInFlight = useRef<Promise<OpenCodexStatus | null> | null>(null);
   const lastRefreshAt = useRef(0);
+  const statusRevision = useRef(0);
+  const actionInFlight = useRef(false);
+  const actionError = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (externalStatus) {
+      statusRevision.current += 1;
+      setStatus(externalStatus);
+    }
+  }, [externalStatus]);
 
   const refreshStatus = async (force = false) => {
+    if (actionInFlight.current) return null;
     if (!force && Date.now() - lastRefreshAt.current < 1000) return null;
     if (refreshInFlight.current) return refreshInFlight.current;
     lastRefreshAt.current = Date.now();
+    const revision = statusRevision.current;
     const request = (async () => {
       try {
         const next = await managerApi.openCodexStatus();
+        if (revision !== statusRevision.current) return null;
         setStatus(next);
-        setNotice(next.installed ? "已检测到 OpenCodex；可以继续连接供应商或管理模型。" : "尚未安装 OpenCodex；点击主按钮即可开始安装。");
+        if (next.enabled && next.serviceState === "ready") actionError.current = null;
+        setNotice(actionError.current || next.error || (next.enabled
+          ? "OpenCodex 多模型已启用；可以管理连接或模型。"
+          : next.installed
+            ? (next.routes.length ? "已检测到 OpenCodex 路由；点击主按钮启用多模型接管。" : "已检测到 OpenCodex；可以继续连接供应商或管理模型。")
+            : "尚未安装 OpenCodex；点击主按钮即可开始安装。"));
         return next;
       } catch (cause) {
+        if (revision !== statusRevision.current) return null;
         setNotice(errorMessage(cause));
         return null;
       }
@@ -118,6 +137,10 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
   }, [onStatusChange, status]);
 
   const run = async (kind: string, action: () => Promise<OpenCodexStatus>, success: string) => {
+    if (actionInFlight.current) return null;
+    actionInFlight.current = true;
+    statusRevision.current += 1;
+    actionError.current = null;
     setBusy(kind);
     try {
       const next = await action();
@@ -125,9 +148,12 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
       setNotice(success);
       return next;
     } catch (cause) {
-      setNotice(errorMessage(cause));
+      actionError.current = errorMessage(cause);
+      try { setStatus(await managerApi.openCodexStatus()); } catch { /* Keep the last confirmed state. */ }
+      setNotice(actionError.current);
       return null;
     } finally {
+      actionInFlight.current = false;
       setBusy(null);
     }
   };
@@ -168,6 +194,10 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
   const connect = () => {
     setOauthError(null);
     if (status?.enabled) {
+      if (status.serviceState !== "ready") {
+        void run("start", () => managerApi.openCodexStart(), "OpenCodex 多模型已启用，服务已就绪。");
+        return;
+      }
       setConnectionMode("osir");
       setNotice("OpenCodex 多模型已启用；可以管理连接或重新检测模型。");
       return;
@@ -190,6 +220,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
         setConnectionMode("osir");
         return next;
       }, "OpenCodex 已启动；请继续配置供应商。");
+      return;
     }
     setConnectionMode("osir");
     setNotice("连接方式已打开；请在浏览器中完成 OSIRAPI 登录授权。");
@@ -365,7 +396,7 @@ export function OpenCodexPrototype({ onStatusChange }: { onStatusChange?: (statu
           <h1>把所有模型，装进 Codex 选择器。</h1>
           <p>用一个简单的连接流程，把 GPT、Claude、Grok 和其他供应商的模型放进 Codex 的原生选择器。</p>
           <div className="multi-model-hero-actions">
-            {connectionStatus === "connected" && status?.enabled ? <div className="multi-model-connection-state connected"><span className="multi-model-state-dot" />OSIRAPI 已连接 <small>{account?.displayName || account?.email || "订阅账户"}</small></div> : <button className="btn primary multi-model-primary" type="button" disabled={Boolean(busy)} onClick={connect}><Icon name={busy === "install" || busy === "start" || busy === "activate" ? "loader" : connectionStatus === "error" ? "refresh" : "globe"} />{!installed ? "安装多模型组件" : status?.routes.length && !status.enabled ? "启动并启用 OpenCodex 多模型" : connectionStatus === "error" ? "重新连接" : connectionStatus === "signedOut" ? "重新登录 OSIRAPI" : "连接 OSIRAPI"}</button>}
+            {status?.enabled && serviceReady && !busy ? <div className="multi-model-connection-state connected" role="status"><span className="multi-model-state-dot" />OpenCodex 多模型已启用 <small>{account?.displayName || account?.email || "服务已就绪"}</small></div> : <button className="btn primary multi-model-primary" type="button" disabled={!status || Boolean(busy)} onClick={connect}><Icon name={busy ? "loader" : "globe"} />{busy === "activate" ? "正在启用多模型…" : busy === "install" ? "正在安装组件…" : busy === "start" ? "正在启动服务…" : !status ? "正在检测…" : !installed ? "安装多模型组件" : status.enabled ? "恢复 OpenCodex 服务" : status.routes.length ? (serviceReady ? "启用已保存的多模型配置" : "启动并启用 OpenCodex 多模型") : connectionStatus === "error" ? "重新连接" : connectionStatus === "signedOut" ? "重新登录 OSIRAPI" : "连接 OSIRAPI"}</button>}
             <button className="btn ghost" type="button" disabled={Boolean(busy)} onClick={() => void openManualConnection()}><Icon name={busy === "install" || busy === "start" ? "loader" : "plus"} />手动添加供应商</button>
           </div>
         </div>

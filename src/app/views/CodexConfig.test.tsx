@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import type { CodexConfigReport } from "../../shared/types";
 import { I18nProvider } from "../i18n";
 import { ThemeProvider } from "../theme";
 import { CodexConfig } from "./CodexConfig";
+import { OpenCodexPrototype } from "./OpenCodexPrototype";
 
 const eventListeners = vi.hoisted(() => new Map<string, (event: { payload: unknown }) => void>());
 
@@ -206,6 +207,46 @@ describe("Codex configuration workbench", () => {
     await user.click(screen.getByRole("button", { name: /手动添加供应商/ }));
     await waitFor(() => expect(api.openCodexInstall).toHaveBeenCalledOnce());
     expect(await screen.findByRole("heading", { name: "手动添加供应商" })).toBeInTheDocument();
+  });
+
+  it("shows enabled state after activating saved routes without an OSIR account", async () => {
+    const stopped = await api.openCodexStatus();
+    const saved = { ...stopped, installed: true, serviceState: "ready" as const, routes: [{ id: "custom", label: "Custom", adapter: "openai-responses", baseUrl: "https://example.test/v1", defaultModel: "gpt-6-astra", models: ["gpt-6-astra"], enabled: true, apiKeyConfigured: true, availability: "configured" as const, locked: false }] };
+    api.openCodexStatus.mockResolvedValue(saved);
+    api.openCodexActivateSaved.mockResolvedValue({ ...saved, enabled: true, connectionStatus: "connected" });
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await user.click(await screen.findByRole("button", { name: "启用已保存的多模型配置" }));
+    expect(await screen.findByText("OpenCodex 多模型已启用", { exact: false, selector: '[role="status"]' })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /启用已保存|启动并启用/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps activation failure visible when focus refresh only confirms a running service", async () => {
+    const missing = await api.openCodexStatus();
+    const saved = { ...missing, installed: true, serviceState: "ready" as const, routes: [{ id: "custom", label: "Custom", adapter: "openai-responses", baseUrl: "https://example.test/v1", defaultModel: "gpt-6-astra", models: ["gpt-6-astra"], enabled: true, apiKeyConfigured: true, availability: "configured" as const, locked: false }] };
+    api.openCodexStatus.mockResolvedValue(saved);
+    api.openCodexActivateSaved.mockRejectedValue(new Error("模型目录不完整，未启用多模型接管"));
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await user.click(await screen.findByRole("button", { name: "启用已保存的多模型配置" }));
+    expect(await screen.findByText("模型目录不完整，未启用多模型接管")).toBeInTheDocument();
+    const calls = api.openCodexStatus.mock.calls.length;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2000);
+    fireEvent.focus(window);
+    await waitFor(() => expect(api.openCodexStatus.mock.calls.length).toBeGreaterThan(calls));
+    clock.mockRestore();
+    expect(screen.getByText("模型目录不完整，未启用多模型接管")).toBeInTheDocument();
+  });
+
+  it("does not let a stale status read overwrite parent activation", async () => {
+    const inactive = await api.openCodexStatus();
+    let finishRead!: (value: typeof inactive) => void;
+    api.openCodexStatus.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    const view = render(<OpenCodexPrototype externalStatus={inactive} />);
+    view.rerender(<OpenCodexPrototype externalStatus={{ ...inactive, installed: true, enabled: true, serviceState: "ready", connectionStatus: "signedOut" }} />);
+    await act(async () => finishRead(inactive));
+    expect(screen.getByText("OpenCodex 多模型已启用", { exact: false, selector: '[role="status"]' })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "安装多模型组件" })).not.toBeInTheDocument();
   });
 
   it("shows the detected platform and automatic install strategy", async () => {

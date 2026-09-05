@@ -410,9 +410,8 @@ fn record_current_manager_runtime(paths: &IntegrationPaths) -> Result<(), AppErr
     .map_err(|error| AppError::Internal(format!("记录 Manager 运行版本失败：{error}")))
 }
 
-/// Persist the intent to reload OpenCodex after a Manager self-update. The
-/// daemon may outlive the Manager process, so the new Manager must explicitly
-/// reload it before exposing the saved provider routes as usable.
+/// Persist the intent to reload OpenCodex after a Manager self-update. Apply
+/// this only after Codex exits: the daemon may carry an active conversation.
 pub(crate) fn mark_manager_update_pending() -> Result<(), AppError> {
     let paths = integration_paths()?;
     atomic_file::write_atomic(
@@ -432,8 +431,29 @@ pub(crate) fn clear_manager_update_pending() {
 }
 
 pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
+    reconcile_when_codex_idle(crate::app::codex_theme::codex_running(), || {
+        reconcile_after_manager_update_when_idle()
+    })
+}
+
+fn reconcile_when_codex_idle(
+    codex_running: bool,
+    reconcile: impl FnOnce() -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    if codex_running {
+        // Do not touch config, cache, the daemon, or completion markers while
+        // Codex may be streaming. Keep the pending work available for retry.
+        return Ok(());
+    }
+    reconcile()
+}
+
+fn reconcile_after_manager_update_when_idle() -> Result<(), AppError> {
     let lock = MANAGER_UPDATE_RECONCILE_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().unwrap_or_else(|poison| poison.into_inner());
+    if crate::app::codex_theme::codex_running() {
+        return Ok(());
+    }
     let paths = integration_paths()?;
     let marker = manager_update_reconcile_path(&paths);
     let recorded_version = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
@@ -475,7 +495,7 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
             "Manager 更新后 OpenCodex 没有生成可用模型目录".to_string(),
         ));
     }
-    refresh_codex_catalog_binding(&paths, true)?;
+    refresh_codex_catalog_binding(&paths)?;
     let config = load_config(&paths.opencodex_config)?;
     let routes = configured_routes_from_config(&config, &state.managed_provider_ids);
     if !routes.is_empty() && !catalog_contains_enabled_routes(&paths.catalog, &routes) {
@@ -485,8 +505,10 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
     }
     clear_codex_restart_required()?;
     record_current_manager_runtime(&paths)?;
-    fs::remove_file(marker)
-        .map_err(|error| AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}")))?;
+    if marker.exists() {
+        fs::remove_file(marker)
+            .map_err(|error| AppError::Internal(format!("清除 OpenCodex 更新重载状态失败：{error}")))?;
+    }
     Ok(())
 }
 
@@ -2182,7 +2204,7 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
     if !routes.is_empty() {
         normalize_synced_catalog(&paths.catalog, &routes)?;
     }
-    sync_codex_model_cache(false)?;
+    sync_codex_model_cache()?;
     let locked_route = state
         .locked_route
         .filter(|locked| managed_provider_ids.iter().any(|id| id == locked));
@@ -2555,9 +2577,10 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
 
 pub fn start() -> Result<OpenCodexStatus, AppError> {
     ocx_output(&["service"])?;
+    let paths = integration_paths()?;
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
-        let current = status()?;
+        let current = status_at(&paths)?;
         if current.service_state == "ready" { return Ok(current); }
         if std::time::Instant::now() >= deadline {
             return Err(AppError::Engine(current.error.unwrap_or_else(|| "OpenCodex 服务启动超时，请稍后重试".to_string())));
@@ -2663,16 +2686,12 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
     }
 }
 
-fn sync_cache_args(restart_codex: bool) -> &'static [&'static str] {
-    if restart_codex {
-        &["sync-cache", "--restart-codex"]
-    } else {
-        &["sync-cache"]
-    }
+fn sync_cache_args() -> &'static [&'static str] {
+    &["sync-cache"]
 }
 
-fn sync_codex_model_cache(restart_codex: bool) -> Result<(), AppError> {
-    ocx_output(sync_cache_args(restart_codex)).map(|_| ())
+fn sync_codex_model_cache() -> Result<(), AppError> {
+    ocx_output(sync_cache_args()).map(|_| ())
 }
 
 fn version() -> Option<String> {
@@ -2999,7 +3018,13 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let runtime_state = if managed { "managed" } else if private { "privateNpm" } else if system { "system" } else if system_node.as_deref().is_some_and(node_supported) { "node" } else if supported { "missing" } else { "unsupported" };
     let install_strategy = if managed || system { "reuse" } else if supported { "managedComponent" } else if system_node.as_deref().is_some_and(node_supported) && npm_available() { "privateNpm" } else { "unavailable" };
     let codex_running = crate::app::codex_theme::codex_running();
-    let marker_requires_restart = restart_required_path(paths).is_file();
+    let recorded_version = fs::read_to_string(manager_runtime_version_path(paths)).ok();
+    let marker_requires_restart = restart_required_path(paths).is_file()
+        || manager_runtime_needs_reconcile(
+            env!("CARGO_PKG_VERSION"),
+            recorded_version.as_deref(),
+            manager_update_reconcile_path(paths).is_file(),
+        );
     let current_revision = codex_configuration_revision(paths);
     let applied_revision = fs::read_to_string(restart_applied_path(paths)).ok();
     Ok(OpenCodexStatus {
@@ -3250,7 +3275,11 @@ fn write_codex_proxy_config(
     };
     document["model_provider"] = value(provider_id);
     document["model"] = value(default_route);
-    document["model_catalog_json"] = value(catalog.display().to_string());
+    if catalog.is_file() {
+        document["model_catalog_json"] = value(catalog.display().to_string());
+    } else {
+        document.remove("model_catalog_json");
+    }
     document.remove("openai_base_url");
     if !document.contains_key("model_providers") {
         document["model_providers"] = toml_edit::table();
@@ -3555,10 +3584,7 @@ fn normalize_saved_model_capabilities(paths: &IntegrationPaths) -> Result<bool, 
     Ok(changed)
 }
 
-fn refresh_codex_catalog_binding(
-    paths: &IntegrationPaths,
-    restart_codex: bool,
-) -> Result<(), AppError> {
+fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppError> {
     let state = effective_state(paths)?;
     if !state.enabled {
         return Ok(());
@@ -3600,7 +3626,7 @@ fn refresh_codex_catalog_binding(
     // OpenCodex refreshes its catalog before Manager normalizes routed entries.
     // Refresh the Codex-owned cache after that final write, or removed rows
     // (for example a retired Gemini model) can survive in the picker.
-    sync_codex_model_cache(restart_codex)
+    sync_codex_model_cache()
 }
 
 fn validate_candidate(path: &Path, candidate: &JsonValue) -> Result<(), AppError> {
@@ -3654,7 +3680,7 @@ fn rollback_reloaded_save(
     // the restored snapshot as well so disk and runtime cannot diverge.
     let _ = restart_service_and_wait_ready();
     if state.enabled {
-        let _ = sync_codex_model_cache(false);
+        let _ = sync_codex_model_cache();
     }
 }
 
@@ -3747,7 +3773,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     // picker cache only the default model. Rewrite the same binding after the
     // complete catalog exists so a running Codex reloads every synced model.
     write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, input.port, &default_route)?;
-    if let Err(error) = sync_codex_model_cache(false) {
+    if let Err(error) = sync_codex_model_cache() {
         rollback_reloaded_save(
             &paths,
             previous_config.as_deref(),
@@ -3817,7 +3843,7 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
     }
-    refresh_codex_catalog_binding(&paths, false)?;
+    refresh_codex_catalog_binding(&paths)?;
     if codex_was_running {
         mark_codex_restart_required_at(&paths)?;
     }
@@ -3826,6 +3852,36 @@ pub fn sync() -> Result<OpenCodexStatus, AppError> {
 
 /// Activate the last saved OpenCodex routes without asking the user to enter
 /// them again. This is the explicit mode switch from the default config.
+fn prepare_activation_catalog(
+    paths: &IntegrationPaths,
+    provider_id: &str,
+    port: u16,
+    default_route: &str,
+    routes: &[OpenCodexRouteInput],
+    synchronize: impl FnOnce() -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    let cache = paths.codex_config.with_file_name("models_cache.json");
+    let snapshots = [&paths.codex_config, &paths.catalog, &cache]
+        .map(|path| (path, fs::read(path).ok()));
+    let result = (|| {
+        // OpenCodex treats an external provider as a successful sync no-op.
+        // Transfer ownership before invoking it, then bind the completed file.
+        write_codex_proxy_config(&paths.codex_config, &paths.catalog, provider_id, port, default_route)?;
+        synchronize()?;
+        normalize_synced_catalog(&paths.catalog, routes)?;
+        if !catalog_contains_enabled_routes(&paths.catalog, routes) {
+            return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
+        }
+        write_codex_proxy_config(&paths.codex_config, &paths.catalog, provider_id, port, default_route)
+    })();
+    if result.is_err() {
+        for (path, bytes) in snapshots {
+            restore_optional_file(path, bytes.as_deref())?;
+        }
+    }
+    result
+}
+
 pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     let _switch_lock = config_switch_lock()?;
     if ocx_program().is_none() {
@@ -3833,32 +3889,11 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     }
     let paths = integration_paths()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
-    let _ = refresh_configured_provider_models(&paths);
     let prior = load_state(&paths.state);
-    let config = load_config(&paths.opencodex_config)?;
-    let models = config
-        .get("customModels")
-        .and_then(JsonValue::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
-    let routes = configured_routes_from_config(&config, &managed_provider_ids);
-    if routes.is_empty() {
-        return Err(AppError::Engine("尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string()));
-    }
-    let default_route = inferred_default_route(&config, &managed_provider_ids)
-        .ok_or_else(|| AppError::Engine("OpenCodex 没有可用的默认模型路由".to_string()))?;
-    let provider_id = if prior.codex_provider_id.is_empty() {
-        DEFAULT_PROVIDER_ID.to_string()
-    } else {
-        prior.codex_provider_id.clone()
-    };
-    let port = config
-        .get("port")
-        .and_then(JsonValue::as_u64)
-        .and_then(|port| u16::try_from(port).ok())
-        .filter(|port| *port > 0)
-        .unwrap_or(if prior.port > 0 { prior.port } else { DEFAULT_PORT });
+    let previous_opencodex_config = fs::read(&paths.opencodex_config).ok();
+    let previous_catalog = fs::read(&paths.catalog).ok();
+    let cache_path = paths.codex_config.with_file_name("models_cache.json");
+    let previous_cache = fs::read(&cache_path).ok();
     let takeover_backup = codex_takeover_backup_path(&paths);
     let restart_marker = restart_required_path(&paths);
     let previous_config = fs::read(&paths.codex_config).ok();
@@ -3870,22 +3905,39 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         .map(config_provider)
         .transpose()?
         .unwrap_or_else(|| "openai".to_string());
-    let routes_for_sessions = session_routes(&routes);
-
     let result: Result<OpenCodexStatus, AppError> = (|| {
-        preserve_codex_config_before_takeover(&paths, &prior)?;
-        if service_state(true).0 == "ready" {
-            restart_service_and_wait_ready()?;
+        refresh_configured_provider_models(&paths)?;
+        let config = load_config(&paths.opencodex_config)?;
+        let models = config
+            .get("customModels")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let managed_provider_ids = inferred_managed_provider_ids(&config, &models);
+        let routes = configured_routes_from_config(&config, &managed_provider_ids);
+        if routes.is_empty() {
+            return Err(AppError::Engine("尚未保存 OpenCodex 模型路由，请先完成一次多模型配置".to_string()));
+        }
+        let default_route = inferred_default_route(&config, &managed_provider_ids)
+            .ok_or_else(|| AppError::Engine("OpenCodex 没有可用的默认模型路由".to_string()))?;
+        let provider_id = if prior.codex_provider_id.is_empty() {
+            DEFAULT_PROVIDER_ID.to_string()
         } else {
-            start()?;
-        }
-        ocx_output(&["sync"])?;
-        normalize_synced_catalog(&paths.catalog, &routes)?;
-        if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
-            return Err(AppError::Engine("OpenCodex 模型目录不完整，未启用多模型接管".to_string()));
-        }
-        write_codex_proxy_config(&paths.codex_config, &paths.catalog, &provider_id, port, &default_route)?;
-        sync_codex_model_cache(false)?;
+            prior.codex_provider_id.clone()
+        };
+        let port = config
+            .get("port")
+            .and_then(JsonValue::as_u64)
+            .and_then(|port| u16::try_from(port).ok())
+            .filter(|port| *port > 0)
+            .unwrap_or(if prior.port > 0 { prior.port } else { DEFAULT_PORT });
+        let routes_for_sessions = session_routes(&routes);
+        preserve_codex_config_before_takeover(&paths, &prior)?;
+        prepare_activation_catalog(&paths, &provider_id, port, &default_route, &routes, || {
+            restart_service_and_wait_ready()?;
+            ocx_output(&["sync"]).map(|_| ())
+        })?;
+        sync_codex_model_cache()?;
         write_json(
             &paths.state,
             &serde_json::to_value(ManagedState {
@@ -3896,7 +3948,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
                 locked_route: prior.locked_route.clone(),
                 route_health: prior.route_health.clone(),
                 connection: prior.connection.clone(),
-                signed_out: prior.signed_out,
+                signed_out: false,
             })
             .map_err(|error| AppError::Internal(format!("保存 OpenCodex 启用状态失败：{error}")))?,
         )?;
@@ -3917,6 +3969,9 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     match result {
         Ok(status) => Ok(status),
         Err(error) => {
+            let _ = restore_optional_file(&paths.opencodex_config, previous_opencodex_config.as_deref());
+            let _ = restore_optional_file(&paths.catalog, previous_catalog.as_deref());
+            let _ = restore_optional_file(&cache_path, previous_cache.as_deref());
             let _ = restore_optional_file(&paths.codex_config, previous_config.as_deref());
             let _ = restore_optional_file(&paths.state, previous_state.as_deref());
             let _ = restore_optional_file(&takeover_backup, previous_backup.as_deref());
@@ -4031,6 +4086,42 @@ mod tests {
         let mut value = input();
         value.default_route = "osir-gpt/gpt-5.6-terra".to_string();
         assert!(validate_input(&value).is_err());
+    }
+
+    #[test]
+    fn activation_sync_transfers_ownership_before_catalog_generation_and_rolls_back_failure() {
+        use super::{prepare_activation_catalog, IntegrationPaths};
+        let root = std::env::temp_dir().join(format!("opencodex-activation-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let paths = IntegrationPaths {
+            codex_config: root.join("config.toml"), catalog: root.join("catalog.json"),
+            opencodex_config: root.join("ocx.json"), state: root.join("state.json"),
+        };
+        let original = b"model_provider = \"osir\"\nmodel = \"gpt-5.6-sol\"\n";
+        std::fs::write(&paths.codex_config, original).unwrap();
+        let cache = root.join("models_cache.json");
+        std::fs::write(&cache, b"original cache").unwrap();
+        let routes = input().routes;
+        let result = prepare_activation_catalog(&paths, "opencodex", 10100, "osir-gpt/gpt-5.6-sol", &routes, || {
+            let document = std::fs::read_to_string(&paths.codex_config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+            assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
+            assert!(document.get("model_catalog_json").is_none());
+            std::fs::write(&paths.catalog, br#"{"models":[]}"#).unwrap();
+            std::fs::write(&cache, b"partial cache").unwrap();
+            Ok(())
+        });
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&paths.codex_config).unwrap(), original);
+        assert_eq!(std::fs::read(&cache).unwrap(), b"original cache");
+        assert!(!paths.catalog.exists());
+        prepare_activation_catalog(&paths, "opencodex", 10100, "osir-gpt/gpt-5.6-sol", &routes, || {
+            std::fs::write(&paths.catalog, br#"{"models":[{"slug":"osir-gpt/gpt-5.6-sol"}]}"#).unwrap();
+            Ok(())
+        }).unwrap();
+        let document = std::fs::read_to_string(&paths.codex_config).unwrap().parse::<toml_edit::DocumentMut>().unwrap();
+        assert_eq!(document["model_provider"].as_str(), Some("opencodex"));
+        assert_eq!(document["model_catalog_json"].as_str(), paths.catalog.to_str());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -4203,9 +4294,30 @@ mod tests {
     }
 
     #[test]
-    fn refreshes_codex_cache_without_restarting_except_after_manager_updates() {
-        assert_eq!(sync_cache_args(false), ["sync-cache"]);
-        assert_eq!(sync_cache_args(true), ["sync-cache", "--restart-codex"]);
+    fn cache_refresh_never_requests_a_codex_restart() {
+        assert_eq!(sync_cache_args(), ["sync-cache"]);
+    }
+
+    #[test]
+    fn automatic_reconcile_preserves_pending_work_until_codex_exits() {
+        let root = std::env::temp_dir().join(format!("opencodex-update-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let pending = root.join("pending");
+        let config = root.join("config.toml");
+        std::fs::write(&pending, b"pending").unwrap();
+        std::fs::write(&config, b"original").unwrap();
+        let reconcile = || {
+            std::fs::write(&config, b"reconciled").unwrap();
+            std::fs::remove_file(&pending).unwrap();
+            Ok(())
+        };
+        super::reconcile_when_codex_idle(true, reconcile).unwrap();
+        assert_eq!(std::fs::read(&config).unwrap(), b"original");
+        assert!(pending.is_file());
+        super::reconcile_when_codex_idle(false, reconcile).unwrap();
+        assert_eq!(std::fs::read(&config).unwrap(), b"reconciled");
+        assert!(!pending.exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

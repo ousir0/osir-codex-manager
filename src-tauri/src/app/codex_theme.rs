@@ -1770,6 +1770,7 @@ fn launch_codex_with_cdp(
     port: u16,
     disable_self_updates: bool,
 ) -> Result<(), AppError> {
+    crate::app::opencodex::reconcile_after_manager_update()?;
     if disable_self_updates {
         crate::app::codex_self_update::sync_setting(true)?;
     }
@@ -1798,6 +1799,7 @@ fn launch_codex_with_cdp(
 
 #[cfg(target_os = "macos")]
 fn launch_codex_plain() -> Result<(), AppError> {
+    crate::app::opencodex::reconcile_after_manager_update()?;
     crate::app::mac_update::launch_codex()
 }
 
@@ -1843,6 +1845,7 @@ fn launch_codex_with_cdp(
     port: u16,
     disable_self_updates: bool,
 ) -> Result<(), AppError> {
+    crate::app::opencodex::reconcile_after_manager_update()?;
     if disable_self_updates {
         crate::app::codex_self_update::sync_setting(true)?;
     }
@@ -1871,6 +1874,7 @@ fn launch_codex_with_cdp(
 
 #[cfg(target_os = "windows")]
 fn launch_codex_plain() -> Result<(), AppError> {
+    crate::app::opencodex::reconcile_after_manager_update()?;
     crate::app::win_update::launch_codex(&windows_domain_settings())
 }
 
