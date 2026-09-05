@@ -12,7 +12,7 @@ use std::thread;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Map as JsonMap, Value as JsonValue};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use toml_edit::{value, Array, DocumentMut, Item, Table};
 
 use crate::app::{atomic_file, paths};
@@ -26,6 +26,7 @@ const MAX_VALUE_LEN: usize = 8192;
 const MAX_MODELS_BYTES: usize = 2 * 1024 * 1024;
 const MAX_MODEL_COUNT: usize = 2_000;
 const MAX_MODEL_ID_LEN: usize = 256;
+const MODEL_CACHE_REFRESH_INTERVAL: Duration = Duration::from_secs(10 * 60);
 const DEFAULT_GATEWAY_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
 const LEGACY_PROVIDER_ID: &str = "awai"; // ownership-audit: allow-legacy
 const LEGACY_API_BASE_URL: &str = "https://api.awai.cc/v1"; // ownership-audit: allow-legacy
@@ -587,6 +588,11 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
 
 pub fn report(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let path = config_path()?;
+    if let Err(error) = refresh_default_model_cache(codex_running) {
+        // Model discovery is best-effort: a transient upstream outage must
+        // not hide the otherwise readable local configuration report.
+        log::debug!("default model cache refresh skipped: {error}");
+    }
     match crate::app::opencodex::repair_default_session_index() {
         Ok(repaired) if repaired > 0 && codex_running => {
             if let Err(error) = crate::app::opencodex::mark_codex_restart_required() {
@@ -976,6 +982,135 @@ fn parse_models_response(raw: &[u8]) -> Result<Vec<String>, AppError> {
         return Err(AppError::Engine("模型接口没有返回可用模型".to_string()));
     }
     Ok(models)
+}
+
+fn model_cache_path(config_path: &Path) -> PathBuf {
+    config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("models_cache.json")
+}
+
+fn model_display_name(model: &str) -> String {
+    let mut result = model
+        .split(['-', '_'])
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            chars
+                .next()
+                .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+    if result.first().is_some_and(|part| part == "Gpt") {
+        result[0] = "GPT".to_string();
+    }
+    if result.first().is_some_and(|part| part == "GPT") && result.get(1).is_some_and(|part| part.chars().any(|ch| ch.is_ascii_digit())) {
+        let version = result.remove(1);
+        result[0].push('-');
+        result[0].push_str(&version);
+    }
+    result.join(" ")
+}
+
+/// Keep Codex's native picker in sync for the default config path. Codex
+/// reads `models_cache.json` independently of the Manager, so updating only
+/// config.toml or the OpenCodex catalog cannot expose a newly-enabled model.
+pub fn refresh_default_model_cache(codex_running: bool) -> Result<bool, AppError> {
+    let config_path = config_path()?;
+    let raw_config = fs::read_to_string(&config_path).unwrap_or_default();
+    let document = parse_document(&raw_config)?;
+    let provider_id = string_at(document.as_table(), "model_provider");
+    if provider_id.is_empty() || provider_id == "opencodex" {
+        return Ok(false);
+    }
+    let base_url = document
+        .get("model_providers")
+        .and_then(Item::as_table)
+        .and_then(|providers| providers.get(&provider_id))
+        .and_then(Item::as_table)
+        .map(|table| string_at(table, "base_url"))
+        .unwrap_or_default();
+    let auth = load_auth_object(&auth_path_for_config(&config_path))?;
+    let Some(api_key) = auth
+        .get("OPENAI_API_KEY")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+    else {
+        return Ok(false);
+    };
+
+    let cache_path = model_cache_path(&config_path);
+    let mut cache = fs::read(&cache_path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<JsonValue>(&bytes).ok())
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let fresh = fs::metadata(&cache_path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| std::time::SystemTime::now().duration_since(modified).ok())
+        .is_some_and(|age| age < MODEL_CACHE_REFRESH_INTERVAL);
+    if fresh {
+        return Ok(false);
+    }
+
+    let models = fetch_models_with_key(&base_url, api_key)?
+        .into_iter()
+        .filter(|model| {
+            let normalized = model.to_ascii_lowercase();
+            !normalized.contains("image")
+                && !normalized.contains("video")
+                && !normalized.contains("veo")
+                && !normalized.contains("grok-imagine")
+        })
+        .collect::<Vec<_>>();
+    let existing = cache
+        .remove("models")
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default();
+    let template = existing.first().cloned().unwrap_or_else(|| {
+        json!({
+            "visibility": "list",
+            "supported_in_api": true,
+            "input_modalities": ["text", "image"],
+            "supported_reasoning_levels": REASONING_EFFORTS.iter().map(|effort| json!({"effort": effort})).collect::<Vec<_>>()
+        })
+    });
+    let mut by_id = std::collections::BTreeMap::new();
+    for entry in existing {
+        if let Some(id) = entry.get("slug").and_then(JsonValue::as_str) {
+            by_id.insert(id.to_string(), entry);
+        }
+    }
+    let mut merged = Vec::with_capacity(models.len());
+    for id in models {
+        let mut entry = by_id.remove(&id).unwrap_or_else(|| template.clone());
+        let object = entry
+            .as_object_mut()
+            .ok_or_else(|| AppError::Engine("Codex 模型缓存包含无效条目".to_string()))?;
+        object.insert("slug".to_string(), JsonValue::String(id.clone()));
+        object.insert(
+            "display_name".to_string(),
+            JsonValue::String(model_display_name(&id)),
+        );
+        object.insert("visibility".to_string(), JsonValue::String("list".to_string()));
+        object.insert("supported_in_api".to_string(), JsonValue::Bool(true));
+        object.remove("opencodex_capability_provenance");
+        object.remove("opencodex_catalog_kind");
+        merged.push(entry);
+    }
+    cache.insert("models".to_string(), JsonValue::Array(merged));
+    let bytes = serde_json::to_vec_pretty(&JsonValue::Object(cache))
+        .map_err(|error| AppError::Internal(format!("序列化 Codex 模型缓存失败：{error}")))?;
+    atomic_file::write_atomic(&cache_path, &bytes)
+        .map_err(|error| AppError::Internal(format!("保存 Codex 模型缓存失败：{error}")))?;
+    if codex_running {
+        crate::app::opencodex::mark_codex_restart_required()?;
+    }
+    Ok(true)
 }
 
 fn curl_command() -> std::process::Command {
@@ -1916,6 +2051,12 @@ requires_openai_auth = true
                 .as_str(),
             "http://127.0.0.1:11434/v1/models"
         );
+    }
+
+    #[test]
+    fn new_model_ids_get_picker_friendly_names() {
+        assert_eq!(model_display_name("gpt-6-astra"), "GPT-6 Astra");
+        assert_eq!(model_display_name("gpt-5.6-sol"), "GPT-5.6 Sol");
     }
 
     #[test]

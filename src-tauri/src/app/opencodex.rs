@@ -452,6 +452,7 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
         let _ = fs::remove_file(marker);
         return Ok(());
     }
+    let _ = refresh_configured_provider_models(&paths);
     let mut config = load_config(&paths.opencodex_config)?;
     if sanitize_saved_osir_config(&mut config)? {
         write_json(&paths.opencodex_config, &JsonValue::Object(config.clone()))?;
@@ -1119,6 +1120,113 @@ fn load_config(path: &Path) -> Result<JsonMap<String, JsonValue>, AppError> {
         .ok_or_else(|| AppError::Engine("OpenCodex 配置顶层必须是对象".to_string()))
 }
 
+fn discover_provider_models(base_url: &str, api_key: &str) -> Option<Vec<String>> {
+    let mut endpoint = Url::parse(base_url.trim()).ok()?;
+    let path = endpoint.path().trim_end_matches('/');
+    endpoint.set_path(&format!("{path}/models"));
+    let response = reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(20))
+        .build()
+        .ok()?
+        .get(endpoint)
+        .bearer_auth(api_key.trim())
+        .header(reqwest::header::ACCEPT, "application/json")
+        .send()
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body = response.json::<JsonValue>().ok()?;
+    let mut models = body
+        .get("data")
+        .and_then(JsonValue::as_array)?
+        .iter()
+        .filter_map(|entry| entry.get("id").and_then(JsonValue::as_str))
+        .map(str::trim)
+        .filter(|model| !model.is_empty() && model.len() <= MAX_VALUE_LEN)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    models.sort();
+    models.dedup();
+    Some(models)
+}
+
+/// Merge newly published upstream model IDs into OpenCodex's provider config.
+/// OpenCodex intentionally treats configured `models` as an allow-list, so a
+/// stale list otherwise prevents a model that already exists at `/models`
+/// from ever reaching the Codex picker.
+fn refresh_configured_provider_models(paths: &IntegrationPaths) -> Result<bool, AppError> {
+    let mut config = load_config(&paths.opencodex_config)?;
+    let Some(providers) = config.get_mut("providers").and_then(JsonValue::as_object_mut) else {
+        return Ok(false);
+    };
+    let mut changed = false;
+    let mut discovered = Vec::new();
+    for (provider_id, provider) in providers.iter_mut() {
+        let Some(provider_object) = provider.as_object_mut() else { continue };
+        let Some(api_key) = provider_object.get("apiKey").and_then(JsonValue::as_str).filter(|key| !key.trim().is_empty()) else { continue };
+        let Some(base_url) = provider_object.get("baseUrl").and_then(JsonValue::as_str).map(str::to_string) else { continue };
+        let Some(models) = discover_provider_models(&base_url, api_key) else { continue };
+        let models = models
+            .into_iter()
+            .filter(|model| osir_model_supported_in_codex(provider_id, model))
+            .collect::<Vec<_>>();
+        let configured = provider_object
+            .get("models")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut configured_ids = configured
+            .iter()
+            .filter_map(JsonValue::as_str)
+            .map(str::to_string)
+            .collect::<BTreeSet<_>>();
+        let mut added = Vec::new();
+        for model in models {
+            if configured_ids.insert(model.clone()) {
+                added.push(model);
+            }
+        }
+        if added.is_empty() { continue; }
+        let mut all = configured_ids.into_iter().collect::<Vec<_>>();
+        all.sort();
+        provider_object.insert("models".to_string(), json!(all));
+        let label = provider_object.get("label").and_then(JsonValue::as_str).unwrap_or(provider_id).to_string();
+        discovered.push((provider_id.clone(), base_url, label, added));
+        changed = true;
+    }
+    if !changed { return Ok(false); }
+
+    let custom_models = config.entry("customModels").or_insert_with(|| json!([]));
+    let custom_models = custom_models
+        .as_array_mut()
+        .ok_or_else(|| AppError::Engine("OpenCodex customModels 必须是数组".to_string()))?;
+    for (provider_id, base_url, label, models) in discovered {
+        for model_id in models {
+            if custom_models.iter().any(|entry| {
+                entry.get("provider").and_then(JsonValue::as_str) == Some(provider_id.as_str())
+                    && entry.get("modelId").and_then(JsonValue::as_str) == Some(model_id.as_str())
+            }) { continue; }
+            let mut entry = custom_models
+                .iter()
+                .find(|entry| entry.get("provider").and_then(JsonValue::as_str) == Some(provider_id.as_str()))
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let object = entry
+                .as_object_mut()
+                .ok_or_else(|| AppError::Engine("OpenCodex customModels 包含无效条目".to_string()))?;
+            object.insert("id".to_string(), JsonValue::String(Uuid::new_v4().to_string()));
+            object.insert("provider".to_string(), JsonValue::String(provider_id.clone()));
+            object.insert("modelId".to_string(), JsonValue::String(model_id.clone()));
+            object.insert("displayName".to_string(), JsonValue::String(model_display_name_for_route(&provider_id, &base_url, &label, &model_id)));
+            custom_models.push(entry);
+        }
+    }
+    write_json(&paths.opencodex_config, &JsonValue::Object(config))?;
+    Ok(true)
+}
+
 fn component_target_for(os: &str, arch: &str) -> Option<&'static str> {
     match (os, arch) {
         ("macos", "aarch64" | "arm64") => Some("darwin-arm64"),
@@ -1177,13 +1285,21 @@ fn managed_component_invocation() -> Option<(String, Vec<String>)> {
             }
             #[cfg(not(target_os = "windows"))]
             {
-                let bun = root.join("opencodex/node_modules/bun/bin/bun");
-                bun.is_file()
+                bundled_bun_exists(&root)
             }
         };
         (node.is_file() && launcher.is_file() && bun_ready)
             .then(|| (node.display().to_string(), vec![launcher.display().to_string()]))
     })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn bundled_bun_exists(root: &Path) -> bool {
+    // Some published archives retain the `.exe` suffix for Bun even when the
+    // payload is a native Unix executable.
+    ["bun", "bun.exe"]
+        .iter()
+        .any(|name| root.join("opencodex/node_modules/bun/bin").join(name).is_file())
 }
 
 #[cfg(target_os = "windows")]
@@ -3585,6 +3701,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
     let state_json = serde_json::to_value(state)
         .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
     write_json(&paths.state, &state_json)?;
+    let _ = refresh_configured_provider_models(&paths);
     if let Err(error) = restart_service_and_wait_ready() {
         rollback_reloaded_save(
             &paths,
@@ -3690,12 +3807,13 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
     let codex_was_running = crate::app::codex_theme::codex_running();
+    let paths = integration_paths()?;
+    let _ = refresh_configured_provider_models(&paths);
     // A provider may have been added while the daemon was already running.
     // Reload disk config before asking the runtime to regenerate Codex's
     // catalog, otherwise sync can faithfully reproduce a stale provider set.
     restart_service_and_wait_ready()?;
     ocx_output(&["sync"])?;
-    let paths = integration_paths()?;
     if !catalog_has_models(&paths.catalog) {
         return Err(AppError::Engine("OpenCodex 同步完成但没有生成可用模型目录".to_string()));
     }
@@ -3715,6 +3833,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     }
     let paths = integration_paths()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
+    let _ = refresh_configured_provider_models(&paths);
     let prior = load_state(&paths.state);
     let config = load_config(&paths.opencodex_config)?;
     let models = config
@@ -3912,6 +4031,18 @@ mod tests {
         let mut value = input();
         value.default_route = "osir-gpt/gpt-5.6-terra".to_string();
         assert!(validate_input(&value).is_err());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn recognizes_unix_bun_payload_with_exe_suffix() {
+        use super::bundled_bun_exists;
+        let root = std::env::temp_dir().join(format!("opencodex-bun-name-{}", Uuid::new_v4()));
+        let bin = root.join("opencodex/node_modules/bun/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("bun.exe"), b"native executable").unwrap();
+        assert!(bundled_bun_exists(&root));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
