@@ -249,6 +249,17 @@ describe("Codex configuration workbench", () => {
     expect(screen.queryByRole("button", { name: "安装多模型组件" })).not.toBeInTheDocument();
   });
 
+  it("returns signed-out users to the OSIRAPI login flow", async () => {
+    const signedOut = { ...(await api.openCodexStatus()), installed: true, enabled: false, serviceState: "ready" as const, connectionStatus: "signedOut" as const, routes: [{ id: "osirapi-openai", label: "GPT", adapter: "openai-responses", baseUrl: "https://api.osirclaw.com/v1", defaultModel: "gpt-5.6-sol", models: ["gpt-5.6-sol"], enabled: true, apiKeyConfigured: true, availability: "configured" as const, locked: false }] };
+    api.openCodexStatus.mockResolvedValue(signedOut);
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+
+    await screen.findByText("已退出连接");
+    await user.click(screen.getByRole("button", { name: "重新登录" }));
+    expect(await screen.findByRole("heading", { name: "连接 OSIRAPI" })).toBeInTheDocument();
+  });
+
   it("shows the detected platform and automatic install strategy", async () => {
     api.openCodexStatus.mockResolvedValue({ enabled: false, installed: false, version: null, port: 10100, serviceState: "missing", codexProviderId: "opencodex", configPath: "~/.opencodex/config.json", catalogPath: "~/.codex/opencodex-catalog.json", modelCount: 0, routes: [], backupAvailable: false, error: null, connectionStatus: "notConnected", account: null, environment: { platform: "windows", architecture: "x86_64", supported: true, runtimeState: "missing", installStrategy: "managedComponent", nodeVersion: null, npmAvailable: false, detail: "可自动准备私有运行时" } });
     const user = userEvent.setup();
