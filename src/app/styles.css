@@ -6228,6 +6228,7 @@ button.config-resource-row:hover {
 }
 .multi-model-route-topline {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 7px;
 }
@@ -6241,7 +6242,7 @@ button.config-resource-row:hover {
   font-style: normal;
 }
 .multi-model-route-state {
-  display: none;
+  display: inline-flex;
   padding: 2px 5px;
   border-radius: var(--r-pill);
   background: var(--surface-3);

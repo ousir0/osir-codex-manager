@@ -34,6 +34,33 @@ function SheetHarness({ dismissable = true }: { dismissable?: boolean }) {
 }
 
 describe("Sheet", () => {
+  it("keeps typing focus across rerenders and uses the latest dismissal callback", async () => {
+    function Editor() {
+      const [open, setOpen] = useState(false);
+      const [value, setValue] = useState("");
+      const [saved, setSaved] = useState("");
+      return <>
+        <button onClick={() => setOpen(true)}>Edit</button>
+        <output>{saved}</output>
+        <Sheet open={open} initialFocus="first" onDismiss={() => { setSaved(value); setOpen(false); }}>
+          <input aria-label="First field" />
+          <input aria-label="Model" value={value} onChange={(event) => setValue(event.target.value)} />
+        </Sheet>
+      </>;
+    }
+    const user = userEvent.setup();
+    render(<Editor />);
+    const opener = screen.getByRole("button", { name: "Edit" });
+    await user.click(opener);
+    const model = screen.getByRole("textbox", { name: "Model" });
+    await user.type(model, "new-model");
+    expect(model).toHaveValue("new-model");
+    expect(model).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("status")).toHaveTextContent("new-model");
+    expect(opener).toHaveFocus();
+  });
+
   it("keeps dialog actions reachable when content overflows (text scaling)", async () => {
     const user = userEvent.setup();
     render(

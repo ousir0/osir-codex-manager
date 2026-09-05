@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 // tabindex="-1" is excluded everywhere so a roving-tabindex radio group (the
 // language grid) counts as ONE Tab stop — otherwise the trap's first/last
@@ -55,6 +55,8 @@ export function useFocusTrap(
   // primitives / callbacks) rather than the freshly-spread `opts` object, which
   // would re-arm the trap every render.
   const { onEsc, initialFocus } = opts;
+  const onEscRef = useRef(onEsc);
+  useEffect(() => { onEscRef.current = onEsc; }, [onEsc]);
   const active = opts.active ?? true;
   useEffect(() => {
     const node = ref.current;
@@ -83,7 +85,7 @@ export function useFocusTrap(
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onEsc?.();
+        onEscRef.current?.();
         return;
       }
       if (event.key !== "Tab") {
@@ -103,5 +105,5 @@ export function useFocusTrap(
         opener.focus();
       }
     };
-  }, [ref, onEsc, initialFocus, active]);
+  }, [ref, initialFocus, active]);
 }

@@ -41,6 +41,9 @@ vi.mock("../../services/managerApi", async (importOriginal) => {
       openCodexStatus: vi.fn(),
       openCodexInstall: vi.fn(),
       openCodexStart: vi.fn(),
+      openCodexSave: vi.fn(),
+      openCodexSync: vi.fn(),
+      openCodexDisconnectOsir: vi.fn(),
       openCodexActivateSaved: vi.fn(),
       openCodexConnectOsirOAuth: vi.fn(),
       openCodexCheckRoute: vi.fn(),
@@ -270,6 +273,77 @@ describe("Codex configuration workbench", () => {
     expect(await screen.findByText("尚未配置模型路由")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "0 个模型" })).toBeInTheDocument();
     expect(screen.queryByText("已准备 18 个模型")).not.toBeInTheDocument();
+  });
+
+  it("submits only the new provider without resending OAuth routes or syncing twice", async () => {
+    const current = { ...(await api.openCodexStatus()), installed: true, serviceState: "ready" as const,
+      routes: [{ id: "oauth", label: "OAuth", adapter: "anthropic", baseUrl: "https://example.test", defaultModel: "opus", models: ["opus"], enabled: true, apiKeyConfigured: true, locked: true, availability: "configured" as const }] };
+    api.openCodexStatus.mockResolvedValue(current);
+    api.openCodexSave.mockResolvedValue({ ...current, enabled: true });
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await screen.findByText("OAuth · 1 个模型");
+    await user.click(screen.getByRole("button", { name: "手动添加供应商" }));
+    const dialog = within(screen.getByRole("dialog"));
+    await user.type(dialog.getByLabelText("Base URL"), "https://new.test/v1");
+    await user.type(dialog.getByLabelText("模型 ID"), "new-model");
+    await user.type(dialog.getByLabelText("API Key"), "new-key");
+    await user.click(dialog.getByRole("button", { name: "保存并同步" }));
+    await waitFor(() => expect(api.openCodexSave).toHaveBeenCalledOnce());
+    expect(api.openCodexSave.mock.calls[0][0]).toMatchObject({ defaultRoute: "custom-provider/new-model", routes: [{ id: "custom-provider", models: ["new-model"] }] });
+    expect(api.openCodexSave.mock.calls[0][0].routes).toHaveLength(1);
+    expect(api.openCodexSync).not.toHaveBeenCalled();
+  });
+
+  it("saves a single OSIR key on a clean configuration with a valid default", async () => {
+    const current = { ...(await api.openCodexStatus()), installed: true, serviceState: "ready" as const };
+    api.openCodexStatus.mockResolvedValue(current);
+    api.openCodexSave.mockResolvedValue(current);
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await screen.findByRole("button", { name: "连接 OSIRAPI" });
+    await user.click(screen.getByRole("button", { name: "高级设置" }));
+    await user.type(screen.getByLabelText("Claude API Key"), "claude-key");
+    await user.click(screen.getByRole("button", { name: "保存并同步模型" }));
+    await waitFor(() => expect(api.openCodexSave).toHaveBeenCalledWith(expect.objectContaining({ defaultRoute: "osir-claude/claude-opus-5", routes: [expect.objectContaining({ id: "osir-claude", enabled: true })] })));
+  });
+
+  it("does not let a pending focus read overwrite successful OAuth", async () => {
+    const current = { ...(await api.openCodexStatus()), installed: true, serviceState: "ready" as const };
+    api.openCodexStatus.mockResolvedValue(current);
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await user.click(await screen.findByRole("button", { name: "连接 OSIRAPI" }));
+    let finishRead!: (value: typeof current) => void;
+    api.openCodexStatus.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2000);
+    fireEvent.focus(window);
+    clock.mockRestore();
+    await waitFor(() => expect(finishRead).toBeDefined());
+    api.openCodexConnectOsirOAuth.mockResolvedValue({ ...current, enabled: true, connectionStatus: "connected", account: {userId: 1, balance: 0, subscriptions: []} });
+    await user.click(screen.getByRole("button", { name: "浏览器登录并连接" }));
+    await screen.findByRole("heading", { name: "OSIRAPI 已授权并同步" });
+    await act(async () => finishRead(current));
+    expect(screen.getByText("已连接，可使用订阅模型")).toBeInTheDocument();
+  });
+
+  it("keeps the sign-out result when an older refresh arrives late", async () => {
+    const current = { ...(await api.openCodexStatus()), installed: true, serviceState: "ready" as const, connectionStatus: "connected" as const, account: { userId: 1, balance: 0, subscriptions: [] } };
+    api.openCodexStatus.mockResolvedValue(current);
+    api.openCodexDisconnectOsir.mockResolvedValue({ ...current, connectionStatus: "signedOut", enabled: false });
+    const user = userEvent.setup();
+    render(<OpenCodexPrototype />);
+    await screen.findByText("已连接，可使用订阅模型");
+    let finishRead!: (value: typeof current) => void;
+    api.openCodexStatus.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 2000);
+    fireEvent.focus(window);
+    clock.mockRestore();
+    await waitFor(() => expect(finishRead).toBeDefined());
+    await user.click(screen.getByRole("button", { name: "退出 OSIRAPI 连接" }));
+    await screen.findByText("已退出连接");
+    await act(async () => finishRead(current));
+    expect(screen.getByRole("button", { name: "重新登录" })).toBeInTheDocument();
   });
 
   it("shows the detected platform and automatic install strategy", async () => {

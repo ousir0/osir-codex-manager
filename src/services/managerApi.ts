@@ -1564,10 +1564,10 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_status");
   },
-  openCodexInstall(): Promise<OpenCodexStatus> {
+  async openCodexInstall(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
       const status: OpenCodexStatus = {
-        ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus),
+        ...await managerApi.openCodexStatus(),
         installed: true,
         version: "2.22.0",
         serviceState: "stopped",
@@ -1577,15 +1577,23 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_install");
   },
-  openCodexStart(): Promise<OpenCodexStatus> {
+  async openCodexStart(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+      const current = await managerApi.openCodexStatus();
+      if (!current.installed) throw new Error("请先安装 OpenCodex");
+      const status = { ...current, serviceState: "ready" as const };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return status;
     }
     return invoke<OpenCodexStatus>("opencodex_start");
   },
-  openCodexSelectRoute(routeId: string, model: string): Promise<OpenCodexStatus> {
+  async openCodexSelectRoute(routeId: string, model: string): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+      const current = await managerApi.openCodexStatus();
+      if (!current.enabled || !current.routes.some((route) => route.id === routeId && route.enabled && route.models.includes(model))) throw new Error("模型不存在或多模型尚未启用");
+      const status = { ...current, routes: current.routes.map((route) => ({ ...route, locked: route.id === routeId, defaultModel: route.id === routeId ? model : route.defaultModel })) };
+      BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
+      return status;
     }
     return invoke<OpenCodexStatus>("opencodex_select_route", { routeId, model });
   },
@@ -1613,22 +1621,28 @@ export const managerApi = {
     }
     return invoke<OpenCodexStatus>("opencodex_connect_osir_oauth");
   },
-  openCodexDisconnectOsir(): Promise<OpenCodexStatus> {
+  async openCodexDisconnectOsir(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), connectionStatus: "signedOut" as const, account: null, enabled: false };
+      const status = { ...await managerApi.openCodexStatus(), connectionStatus: "signedOut" as const, account: null, enabled: false };
       BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
       return Promise.resolve(status);
     }
     return invoke<OpenCodexStatus>("opencodex_disconnect_osir");
   },
-  openCodexSave(input: OpenCodexConfigInput): Promise<OpenCodexStatus> {
+  async openCodexSave(input: OpenCodexConfigInput): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      const routes = input.routes.map(({ apiKey: _apiKey, ...route }) => ({
+      const current = await managerApi.openCodexStatus();
+      const routes = current.routes.filter((route) => !input.routes.some((updated) => updated.id === route.id));
+      routes.push(...input.routes.map(({ apiKey: _apiKey, ...route }) => ({
         ...route,
-        apiKeyConfigured: Boolean(_apiKey?.trim()),
+        apiKeyConfigured: Boolean(_apiKey?.trim()) || Boolean(current.routes.find((item) => item.id === route.id)?.apiKeyConfigured),
         availability: "configured" as const,
-        locked: false,
-      }));
+        locked: current.routes.some((item) => item.id === route.id && item.locked),
+      })));
+      if (!routes.some((route) => route.locked)) {
+        const preferred = routes.find((route) => route.enabled && route.id + "/" + route.defaultModel === input.defaultRoute);
+        if (preferred) preferred.locked = true;
+      }
       const status: OpenCodexStatus = {
         enabled: true,
         installed: true,
@@ -1642,31 +1656,33 @@ export const managerApi = {
         routes,
         backupAvailable: true,
         error: null,
-        connectionStatus: "notConnected",
-        account: null,
+        connectionStatus: current.connectionStatus,
+        account: current.account,
       };
       BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
       return Promise.resolve(status);
     }
     return invoke<OpenCodexStatus>("opencodex_save", { input });
   },
-  openCodexSync(): Promise<OpenCodexStatus> {
+  async openCodexSync(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      return Promise.resolve(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus);
+      return managerApi.openCodexStatus();
     }
     return invoke<OpenCodexStatus>("opencodex_sync");
   },
-  openCodexActivateSaved(): Promise<OpenCodexStatus> {
+  async openCodexActivateSaved(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), enabled: true, serviceState: "ready" as const };
+      const current = await managerApi.openCodexStatus();
+      if (!current.installed || !current.routes.some((route) => route.enabled)) throw new Error("请先安装并配置模型路由");
+      const status = { ...await managerApi.openCodexStatus(), enabled: true, serviceState: "ready" as const };
       BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
       return Promise.resolve(status);
     }
     return invoke<OpenCodexStatus>("opencodex_activate_saved");
   },
-  openCodexRestore(): Promise<OpenCodexStatus> {
+  async openCodexRestore(): Promise<OpenCodexStatus> {
     if (!hasTauriRuntime()) {
-      const status = { ...(BROWSER_FALLBACK_CODEX_CONFIG.openCodex as OpenCodexStatus), enabled: false };
+      const status = { ...await managerApi.openCodexStatus(), enabled: false };
       BROWSER_FALLBACK_CODEX_CONFIG = { ...BROWSER_FALLBACK_CODEX_CONFIG, openCodex: status };
       return Promise.resolve(status);
     }
