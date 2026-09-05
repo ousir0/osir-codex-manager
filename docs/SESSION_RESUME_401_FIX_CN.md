@@ -39,3 +39,7 @@
 仅修改 session_meta 仍不足：真实克隆中的 thread_settings_applied 会在第二次冷启动重新覆盖供应商。最终实现同步这两类元数据，保留权限、工作目录及所有消息/工具行。
 
 本地质量门：Rust 239 项通过、1 项隔离专用测试默认忽略（已单独运行）；发布测试 64 项、TypeScript、应用源码 lint 通过。前端 369 项和生产构建通过。本包 Clippy 通过；macOS 上 Windows 依赖有既有警告，跨平台严格门以 CI 为准。全量 lint 仅被本地未跟踪的压缩课件 motion.min.js 阻断，没有改动课件。六次恢复均确认 HTTP Authorization 使用当次模拟登录凭据；未替代真实 OAuth 浏览器授权验收。
+
+## 发布结果
+
+v0.5.46 已发布；四平台 CI 与 Release 成功，线上镜像切换完成，公开下载哈希及 updater 签名校验通过。本机旧版已发现新版本，未重启当前 Codex。详见 [发布验收报告](release-reports/v0.5.46.md)。
