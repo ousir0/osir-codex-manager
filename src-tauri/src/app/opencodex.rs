@@ -1955,6 +1955,9 @@ fn extract_component(zip_path: &Path, destination: &Path) -> Result<(), AppError
             )?;
         }
     }
+    disable_policy_model_hopping(
+        &temp.join("opencodex/node_modules/@bitkyc08/opencodex"),
+    )?;
     if destination.exists() {
         fs::remove_dir_all(destination)
             .map_err(|error| AppError::Internal(format!("替换 OpenCodex 组件失败：{error}")))?;
@@ -2182,6 +2185,44 @@ fn install_component_from_manifest() -> Result<(), AppError> {
         .join("current")
         .join(component_target);
     extract_component(&archive, &destination)
+}
+
+const SELECTED_ROUTE_POLICY: &str = include_str!("../../resources/opencodex/policy-fallback.ts");
+const ORIGINAL_ROUTE_POLICY_SHA256: &str =
+    "319513ffa8a69abe9d5e812391b2fe24ee49cc6fb75ce829532063d86d1ff40f";
+
+fn disable_policy_model_hopping(package: &Path) -> Result<bool, AppError> {
+    let path = package.join("src/server/responses/policy-fallback.ts");
+    let raw = fs::read(&path)
+        .map_err(|error| AppError::Internal(format!("读取 OpenCodex 路由策略失败：{error}")))?;
+    if raw == SELECTED_ROUTE_POLICY.as_bytes() {
+        return Ok(false);
+    }
+    // Only replace the audited upstream module. Unknown versions remain intact.
+    let digest: String = Sha256::digest(&raw)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    if digest != ORIGINAL_ROUTE_POLICY_SHA256 {
+        return Err(AppError::Engine(
+            "OpenCodex 路由策略版本不兼容，未修改组件；请更新 Manager 支持的多模型组件".into(),
+        ));
+    }
+    atomic_file::write_atomic(&path.with_extension("ts.manager-original"), &raw)
+        .map_err(|error| AppError::Internal(format!("备份 OpenCodex 路由策略失败：{error}")))?;
+    atomic_file::write_atomic(&path, SELECTED_ROUTE_POLICY.as_bytes())
+        .map_err(|error| AppError::Internal(format!("写入 OpenCodex 路由策略失败：{error}")))?;
+    Ok(true)
+}
+
+fn apply_installed_route_policy() -> Result<bool, AppError> {
+    // Use the same invocation selection as the launcher, including private npm.
+    // An unrelated system installation is outside Manager's ownership.
+    let invocation = managed_component_invocation().or_else(private_npm_invocation);
+    let Some((_, args)) = invocation else { return Ok(false) };
+    let package = args.first().map(Path::new).and_then(Path::parent).and_then(Path::parent)
+        .ok_or_else(|| AppError::Engine("无法定位 Manager 管理的 OpenCodex 组件".into()))?;
+    disable_policy_model_hopping(package)
 }
 
 fn managed_runtime_dir() -> Result<PathBuf, AppError> {
@@ -3293,7 +3334,8 @@ pub fn install() -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn start() -> Result<OpenCodexStatus, AppError> {
-    ocx_output(&["service"])?;
+    let changed = apply_installed_route_policy()?;
+    ocx_output(&[if changed { "restart" } else { "service" }])?;
     let paths = integration_paths()?;
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     loop {
@@ -3311,6 +3353,7 @@ pub fn start() -> Result<OpenCodexStatus, AppError> {
 }
 
 fn restart_service_and_wait_ready() -> Result<(), AppError> {
+    apply_installed_route_policy()?;
     ocx_output(&["restart"])?;
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     loop {
@@ -5189,6 +5232,22 @@ mod tests {
         assert!(!is_transient_route_check_error(&AppError::Engine(
             "unexpected status 401 Unauthorized".to_string()
         )));
+    }
+
+    #[test]
+    fn disables_policy_model_hopping_in_installed_component() {
+        use std::fs;
+        use super::{disable_policy_model_hopping, SELECTED_ROUTE_POLICY};
+        let root = std::env::temp_dir().join(format!("opencodex-route-policy-{}", Uuid::new_v4()));
+        let path = root.join("src/server/responses/policy-fallback.ts");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "unknown upstream version").unwrap();
+        assert!(disable_policy_model_hopping(&root).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "unknown upstream version");
+        fs::write(&path, SELECTED_ROUTE_POLICY).unwrap();
+        assert!(!disable_policy_model_hopping(&root).unwrap());
+        assert_eq!(fs::read_to_string(&path).unwrap(), SELECTED_ROUTE_POLICY);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
