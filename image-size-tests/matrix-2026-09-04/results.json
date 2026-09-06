@@ -1,0 +1,66 @@
+[
+  {
+    "requested": "1792x1024",
+    "http_status": 200,
+    "elapsed_s": 59.4,
+    "actual": "1659x948",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_1792x1024.png"
+  },
+  {
+    "requested": "1024x1792",
+    "http_status": 200,
+    "elapsed_s": 45.4,
+    "actual": "948x1659",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_1024x1792.png"
+  },
+  {
+    "requested": "2048x1024",
+    "http_status": 200,
+    "elapsed_s": 34.5,
+    "actual": "1774x887",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_2048x1024.png"
+  },
+  {
+    "requested": "1024x2048",
+    "http_status": 200,
+    "elapsed_s": 30.9,
+    "actual": "887x1774",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_1024x2048.png"
+  },
+  {
+    "requested": "2048x1536",
+    "http_status": 200,
+    "elapsed_s": 32.7,
+    "actual": "1448x1086",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_2048x1536.png"
+  },
+  {
+    "requested": "1536x2048",
+    "http_status": 200,
+    "elapsed_s": 43.3,
+    "actual": "1086x1448",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_1536x2048.png"
+  },
+  {
+    "requested": "2560x1440",
+    "http_status": 200,
+    "elapsed_s": 48.9,
+    "actual": "1672x941",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_2560x1440.png"
+  },
+  {
+    "requested": "1440x2560",
+    "http_status": 200,
+    "elapsed_s": 35.5,
+    "actual": "941x1672",
+    "format": "PNG",
+    "file": "/Users/ouwei/codex-app-manager/image-size-tests/matrix-2026-09-04/image_1440x2560.png"
+  }
+]

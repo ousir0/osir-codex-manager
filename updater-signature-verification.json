@@ -1,0 +1,32 @@
+{
+  "artifactCount": 4,
+  "artifacts": [
+    {
+      "name": "CodexManager_aarch64.app.tar.gz",
+      "platform": "darwin-aarch64",
+      "sha256": "cb53d746ccf02a17d49da1c8dbe695435cc811bd42cd791c878df399e1bc4c05",
+      "size": 15154642
+    },
+    {
+      "name": "CodexManager_x86_64.app.tar.gz",
+      "platform": "darwin-x86_64",
+      "sha256": "7ead4086da9bd254a39caeb85865caa3cc8c9cfc56790d867f212f695543b1f9",
+      "size": 16006925
+    },
+    {
+      "name": "CodexManager_0.5.37_arm64-setup.exe",
+      "platform": "windows-aarch64",
+      "sha256": "06ed4a5c2cf042fb4c0df357425bf7f82978d5c9118a1f726ad18b540f41beac",
+      "size": 6343102
+    },
+    {
+      "name": "CodexManager_0.5.37_x64-setup.exe",
+      "platform": "windows-x86_64",
+      "sha256": "3371d965e50e276be3970ac1407fcf8a739c572b16df4cd4851f8088691aaf0a",
+      "size": 7112851
+    }
+  ],
+  "verified": true,
+  "manifestVersion": "0.5.37",
+  "verifiedAt": "2026-08-30T03:31:13.925Z"
+}

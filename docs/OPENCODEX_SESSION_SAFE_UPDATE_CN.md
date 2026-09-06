@@ -23,6 +23,10 @@
 - Rust 工作区测试 225 项通过；覆盖接管顺序、目录生成失败回滚，以及 Codex 运行时保留待处理状态。
 - 发布流程测试 64 项通过，版本声明检查与差异空白检查通过。
 - macOS ARM64 安装包构建完成；本地开发签名严格校验通过。正式签名和公证使用发布流水线。
-- 待记录：源码提交、四平台发布结果和更新入口版本。
+- 源码提交：76fd5712b620c799858266d77953837c9d33843f（已推送 main，标签 v0.5.41）。
+- GitHub CI 33942150526 全部通过，包含 Windows/macOS 后端检查、前端检查和 Worker 测试。
+- Release 33942181612 正在运行，四平台正式产物与更新入口待最终回读。
+- 发布前线上版本与回退目录：0.5.40，`/var/www/osir-codex-manager/releases/0.5.40`。
+- 原有未跟踪文件保留：`image-size-tests/`、`src-tauri/examples/opencodex_activation_smoke.rs`、`updater-signature-verification.json`；未纳入发布。
 
 本机旧客户端真实安装验收需安排到当前会话结束后，避免旧版本更新路径仍有副作用；本次不将其标记为已验证。
