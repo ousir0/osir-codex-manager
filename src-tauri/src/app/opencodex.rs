@@ -484,7 +484,7 @@ pub(crate) fn reconcile_after_manager_update() -> Result<(), AppError> {
             mark_codex_restart_required_at(&paths)?;
         }
     }
-    reconcile_when_codex_idle(running, || reconcile_after_manager_update_when_idle())
+    reconcile_when_codex_idle(running, reconcile_after_manager_update_when_idle)
 }
 
 fn reconcile_when_codex_idle(
