@@ -416,7 +416,7 @@ pub(super) fn repair_with_progress(
     } else if columns.contains("created_at") {
         "CASE WHEN created_at > 0 THEN created_at * 1000 ELSE 0 END"
     } else {
-        "0"
+        "CAST(0 AS INTEGER)"
     };
     let query = format!("SELECT id,model_provider,model,rollout_path FROM threads ORDER BY {time_expr} DESC, id DESC LIMIT 100");
     let rows = connection

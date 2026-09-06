@@ -312,7 +312,8 @@ fn recent_threads_query(connection: &Connection, fields: &str) -> Result<String,
             format!("CASE WHEN {name} > 0 THEN {name} * 1000 ELSE 0 END")
         }
     })
-    .unwrap_or_else(|| "0".into());
+    // A bare integer in ORDER BY is a column index in SQLite, and zero is invalid.
+    .unwrap_or_else(|| "CAST(0 AS INTEGER)".into());
     Ok(format!(
         "SELECT {fields} FROM threads ORDER BY {time_expr} DESC, id DESC LIMIT 100"
     ))
