@@ -54,14 +54,16 @@ const MAX_ID_LEN: usize = 96;
 const MAX_VALUE_LEN: usize = 4096;
 const ROUTE_CHECK_RETRY_DELAYS_MS: [u64; 3] = [400, 1_200, 2_500];
 const OCX_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+// OpenCodex 2.22 allows 60s to drain, 70s for replacement, and 15s for discovery.
+const OCX_RESTART_TIMEOUT: Duration = Duration::from_secs(165);
 static MANAGER_UPDATE_RECONCILE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static CONFIG_SWITCH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn config_switch_lock() -> Result<std::sync::MutexGuard<'static, ()>, AppError> {
     CONFIG_SWITCH_LOCK
         .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|_| AppError::Internal("配置切换锁状态损坏".to_string()))
+        .try_lock()
+        .map_err(|_| AppError::Busy("配置正在切换，请等待当前操作完成后重试".to_string()))
 }
 
 #[cfg(target_os = "windows")]
@@ -81,6 +83,9 @@ fn configure_opencodex_environment(command: &mut Command) {
     if let Ok(paths) = integration_paths() {
         if let Some(home) = paths.opencodex_config.parent() {
             command.env("OPENCODEX_HOME", home);
+        }
+        if let Some(home) = paths.codex_config.parent() {
+            command.env("CODEX_HOME", home);
         }
     }
 }
@@ -902,8 +907,7 @@ fn codex_takeover_backup_path(paths: &IntegrationPaths) -> PathBuf {
 }
 
 fn default_codex_config_bytes(paths: &IntegrationPaths) -> Result<Vec<u8>, AppError> {
-    let current = fs::read(&paths.codex_config)
-        .map_err(|error| AppError::Internal(format!("读取 Codex config.toml 失败：{error}")))?;
+    let current = read_optional_snapshot(&paths.codex_config)?.unwrap_or_default();
     if !codex_proxy_provider_is_loopback(&paths.codex_config) {
         return Ok(current);
     }
@@ -1177,7 +1181,7 @@ fn preserve_codex_config_before_takeover(
     state: &ManagedState,
 ) -> Result<(), AppError> {
     let backup = codex_takeover_backup_path(paths);
-    if backup.is_file() || state.enabled || !paths.codex_config.is_file() {
+    if backup.is_file() || state.enabled {
         return Ok(());
     }
     if codex_proxy_provider_is_loopback(&paths.codex_config) {
@@ -1189,8 +1193,7 @@ fn preserve_codex_config_before_takeover(
         }
         return Ok(());
     }
-    let raw = fs::read(&paths.codex_config)
-        .map_err(|error| AppError::Internal(format!("读取接管前 config.toml 失败：{error}")))?;
+    let raw = read_optional_snapshot(&paths.codex_config)?.unwrap_or_default();
     atomic_file::write_atomic(&backup, &raw)
         .map_err(|error| AppError::Internal(format!("保存接管前 config.toml 备份失败：{error}")))
 }
@@ -1249,6 +1252,9 @@ pub fn disable_for_single_provider() -> Result<(), AppError> {
             },
             &routes,
         )?;
+        if crate::app::codex_theme::codex_running() {
+            mark_codex_restart_required_at(&paths)?;
+        }
         Ok(())
     })();
     if let Err(error) = result {
@@ -2592,9 +2598,10 @@ fn wait_for_oauth_callback(
                         AppError::Engine(format!("设置 OAuth 回调读取超时失败：{error}"))
                     })?;
                 let mut buffer = [0u8; 8192];
-                let size = stream
-                    .read(&mut buffer)
-                    .map_err(|error| AppError::Engine(format!("读取 OAuth 回调失败：{error}")))?;
+                let size = match stream.read(&mut buffer) {
+                    Ok(0) | Err(_) => continue,
+                    Ok(size) => size,
+                };
                 let request = String::from_utf8_lossy(&buffer[..size]);
                 let Some(target) = request
                     .lines()
@@ -2662,6 +2669,7 @@ fn wait_for_oauth_callback(
 }
 
 pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
     if !state.enabled {
@@ -2814,6 +2822,7 @@ fn config_without_model(
 }
 
 pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     let paths = integration_paths()?;
     let state = effective_state(&paths)?;
     if !state.enabled {
@@ -3371,7 +3380,32 @@ fn restart_service_and_wait_ready() -> Result<(), AppError> {
 }
 
 fn ocx_output(args: &[&str]) -> Result<Vec<u8>, AppError> {
-    ocx_output_with_timeout(args, OCX_COMMAND_TIMEOUT)
+    ocx_output_with_timeout(args, ocx_command_timeout(args))
+}
+
+fn ocx_command_timeout(args: &[&str]) -> Duration {
+    match args.first().copied() {
+        Some("restart" | "service" | "ensure") => OCX_RESTART_TIMEOUT,
+        Some("health" | "--version") => Duration::from_secs(8),
+        _ => OCX_COMMAND_TIMEOUT,
+    }
+}
+
+fn terminate_ocx_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // Only this invocation's process group, never the running detached service.
+        unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
+    }
+    #[cfg(windows)]
+    {
+        let mut command = Command::new("taskkill");
+        configure_background_command(&mut command);
+        let _ = command.args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn read_child_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
@@ -3387,6 +3421,15 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
     let mut command = Command::new(program);
     configure_background_command(&mut command);
     configure_opencodex_environment(&mut command);
+    run_ocx_command(&mut command, &prefix, args, timeout)
+}
+
+fn run_ocx_command(command: &mut Command, prefix: &[String], args: &[&str], timeout: Duration) -> Result<Vec<u8>, AppError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .args(prefix)
         .args(args)
@@ -3398,36 +3441,36 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
     // Drain both pipes concurrently while the process runs. Waiting for the
     // child before reading them can deadlock when a sync/validate command
     // emits more than the OS pipe buffer.
-    let stdout_reader = child
-        .stdout
-        .take()
-        .map(|pipe| thread::spawn(move || read_child_pipe(pipe)));
-    let stderr_reader = child
-        .stderr
-        .take()
-        .map(|pipe| thread::spawn(move || read_child_pipe(pipe)));
+    let (output_tx, output_rx) = std::sync::mpsc::channel();
+    for (is_stdout, pipe) in [
+        (true, Box::new(child.stdout.take().unwrap()) as Box<dyn Read + Send>),
+        (false, Box::new(child.stderr.take().unwrap()) as Box<dyn Read + Send>),
+    ] {
+        let tx = output_tx.clone();
+        thread::spawn(move || { let _ = tx.send((is_stdout, read_child_pipe(pipe))); });
+    }
+    drop(output_tx);
     let deadline = std::time::Instant::now() + timeout;
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let stdout = stdout_reader
-                    .and_then(|reader| reader.join().ok())
-                    .transpose()
-                    .map_err(|error| AppError::Engine(format!("读取 OpenCodex 输出失败：{error}")))?
-                    .unwrap_or_default();
-                let stderr = stderr_reader
-                    .and_then(|reader| reader.join().ok())
-                    .transpose()
-                    .map_err(|error| {
-                        AppError::Engine(format!("读取 OpenCodex 错误输出失败：{error}"))
-                    })?
-                    .unwrap_or_default();
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                for _ in 0..2 {
+                    let result = output_rx.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()));
+                    let Ok((is_stdout, bytes)) = result else {
+                        terminate_ocx_tree(&mut child);
+                        return Err(AppError::Engine(format!("OpenCodex {} 输出超时（{} 秒）", args.first().unwrap_or(&"command"), timeout.as_secs())));
+                    };
+                    let bytes = bytes.map_err(|error| AppError::Engine(format!("读取 OpenCodex 输出失败：{error}")))?;
+                    if is_stdout { stdout = bytes; } else { stderr = bytes; }
+                }
                 if !status.success() {
                     let detail = String::from_utf8_lossy(&stderr).trim().to_string();
                     return Err(AppError::Engine(if detail.is_empty() {
-                        format!("OpenCodex 命令失败：{status}")
+                        format!("OpenCodex {} 失败：{status}", args.first().unwrap_or(&"command"))
                     } else {
-                        format!("OpenCodex 命令失败：{detail}")
+                        format!("OpenCodex {} 失败：{detail}", args.first().unwrap_or(&"command"))
                     }));
                 }
                 return Ok(stdout);
@@ -3436,16 +3479,15 @@ fn ocx_output_with_timeout(args: &[&str], timeout: Duration) -> Result<Vec<u8>, 
                 thread::sleep(Duration::from_millis(50));
             }
             Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_ocx_tree(&mut child);
                 return Err(AppError::Engine(format!(
-                    "OpenCodex 命令超时（{} 秒），请检查服务或上游网络后重试",
+                    "OpenCodex {} 超时（{} 秒），请检查本地服务状态后重试",
+                    args.first().unwrap_or(&"command"),
                     timeout.as_secs()
                 )));
             }
             Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                terminate_ocx_tree(&mut child);
                 return Err(AppError::Engine(format!(
                     "等待 OpenCodex 命令失败：{error}"
                 )));
@@ -3750,14 +3792,8 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
 }
 
 fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
-    let state = effective_state(paths)?;
+    let state = load_state(&paths.state);
     let codex_is_loopback = codex_proxy_provider_is_loopback(&paths.codex_config);
-    if should_reconcile_codex_ownership(state.enabled, codex_is_loopback) {
-        // Reconcile stale ownership left by an older Manager version or an
-        // external edit to config.toml before exposing status to the UI.
-        disable_for_single_provider()?;
-        return status_at(paths);
-    }
     let config = load_config(&paths.opencodex_config).unwrap_or_default();
     let installed = ocx_program().is_some();
     let (service_state, error) = service_state(installed);
@@ -3866,7 +3902,7 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
     let current_revision = codex_configuration_revision(paths);
     let applied_revision = fs::read_to_string(restart_applied_path(paths)).ok();
     Ok(OpenCodexStatus {
-        enabled: state.enabled,
+        enabled: state.enabled && !should_reconcile_codex_ownership(state.enabled, codex_is_loopback),
         installed,
         version: version(),
         port,
@@ -3911,10 +3947,13 @@ fn status_at(paths: &IntegrationPaths) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn status() -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     let paths = integration_paths()?;
     // Status is read frequently by the UI. Keep it observational: catalog
     // repair and cache synchronization belong to explicit save/sync flows,
     // otherwise every focus event can launch a blocking OpenCodex command.
+    // Adoption may write state, so it shares the transition gate.
+    effective_state(&paths)?;
     status_at(&paths)
 }
 
@@ -4664,6 +4703,7 @@ fn restore_save_snapshot(
 }
 
 pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     if !input.enabled {
         return Err(AppError::Engine(
             "停用多模型请使用恢复按钮，避免丢失当前配置".to_string(),
@@ -4753,15 +4793,10 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
         let state_json = serde_json::to_value(state)
             .map_err(|error| AppError::Internal(format!("序列化多模型状态失败：{error}")))?;
         write_json(&paths.state, &state_json)?;
-        let _ = refresh_configured_provider_models(&paths);
-        restart_service_and_wait_ready()?;
-        ocx_output(&["sync"])?;
-        normalize_synced_catalog(&paths.catalog, &routes)?;
-        if !catalog_contains_enabled_routes(&paths.catalog, &routes) {
-            return Err(AppError::Engine(
-                "OpenCodex 运行时未加载全部供应商模型；已恢复原配置".to_string(),
-            ));
-        }
+        prepare_activation_catalog(&paths, &provider_id, input.port, &default_route, &routes, || {
+            restart_service_and_wait_ready()?;
+            ocx_output(&["sync"]).map(|_| ())
+        })?;
         // Codex observes config.toml, not the generated catalog file. The first
         // config write above can therefore race ahead of `ocx sync` and make the
         // picker cache only the default model. Rewrite the same binding after the
@@ -4816,6 +4851,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
 }
 
 pub fn sync() -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     let codex_was_running = crate::app::codex_theme::codex_running();
     let paths = integration_paths()?;
     let _ = refresh_configured_provider_models(&paths);
@@ -4908,7 +4944,7 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
         .transpose()?
         .unwrap_or_else(|| "openai".to_string());
     let result: Result<OpenCodexStatus, AppError> = (|| {
-        refresh_configured_provider_models(&paths)?;
+        // Use saved routes while switching; discovery belongs to explicit sync.
         let config = load_config(&paths.opencodex_config)?;
         let models = config
             .get("customModels")
@@ -4977,24 +5013,32 @@ pub fn activate_saved() -> Result<OpenCodexStatus, AppError> {
     match result {
         Ok(status) => Ok(status),
         Err(error) => {
-            let _ = restore_optional_file(
-                &paths.opencodex_config,
-                previous_opencodex_config.as_deref(),
-            );
-            let _ = restore_optional_file(&paths.catalog, previous_catalog.as_deref());
-            let _ = restore_optional_file(&cache_path, previous_cache.as_deref());
-            let _ = restore_optional_file(&paths.codex_config, previous_config.as_deref());
-            let _ = restore_optional_file(&paths.state, previous_state.as_deref());
-            let _ = restore_optional_file(&takeover_backup, previous_backup.as_deref());
-            let _ = restore_optional_file(&restart_marker, previous_restart_marker.as_deref());
+            let mut failures = Vec::new();
+            for (path, bytes) in [
+                (&paths.opencodex_config, previous_opencodex_config.as_deref()),
+                (&paths.catalog, previous_catalog.as_deref()),
+                (&cache_path, previous_cache.as_deref()),
+                (&paths.codex_config, previous_config.as_deref()),
+                (&paths.state, previous_state.as_deref()),
+                (&takeover_backup, previous_backup.as_deref()),
+                (&restart_marker, previous_restart_marker.as_deref()),
+            ] {
+                if let Err(restore_error) = restore_optional_file(path, bytes) {
+                    failures.push(restore_error.to_string());
+                }
+            }
+            if !failures.is_empty() {
+                return Err(AppError::Engine(format!("启用 OpenCodex 失败：{error}；配置恢复不完整：{}", failures.join("；"))));
+            }
             Err(AppError::Engine(format!(
-                "启用 OpenCodex 失败，已恢复原配置：{error}"
+                "启用 OpenCodex 失败，已恢复配置文件；本地服务状态需重新检查：{error}"
             )))
         }
     }
 }
 
 pub fn restore() -> Result<OpenCodexStatus, AppError> {
+    let _switch_lock = config_switch_lock()?;
     let paths = integration_paths()?;
     let takeover_backup = codex_takeover_backup_path(&paths);
     let restored = [
@@ -5093,6 +5137,58 @@ mod tests {
                 enabled: true,
             }],
         }
+    }
+
+    #[test]
+    fn restart_budget_covers_component_drain_and_replacement() {
+        assert!(super::ocx_command_timeout(&["restart"]) > Duration::from_secs(145));
+        assert!(super::ocx_command_timeout(&["health", "--json"]) < Duration::from_secs(30));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn timeout_stops_descendant_writes_and_inherited_pipes() {
+        use std::process::Command;
+        let root = std::env::temp_dir().join(format!("ocx-timeout-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        for script in [
+            "(sleep 0.5; touch late-write) & wait",
+            "(sleep 0.5; touch late-write) & exit 0",
+        ] {
+            let mut command = Command::new("/bin/sh");
+            command.current_dir(&root);
+            let before = std::time::Instant::now();
+            assert!(super::run_ocx_command(&mut command, &[], &["-c", script], Duration::from_millis(100)).is_err());
+            assert!(before.elapsed() < Duration::from_secs(2));
+            thread::sleep(Duration::from_millis(600));
+            assert!(!root.join("late-write").exists());
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_drains_large_stdout_and_stderr_without_deadlock() {
+        let mut command = std::process::Command::new("/bin/sh");
+        let bytes = super::run_ocx_command(&mut command, &[], &["-c", "head -c 262144 /dev/zero; head -c 262144 /dev/zero >&2"], Duration::from_secs(5)).unwrap();
+        assert_eq!(bytes.len(), 262144);
+    }
+
+    #[test]
+    fn fresh_codex_install_preserves_implicit_default_configuration() {
+        let root = std::env::temp_dir().join(format!("ocx-fresh-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let paths = super::IntegrationPaths {
+            codex_config: root.join("config.toml"),
+            catalog: root.join("catalog.json"),
+            opencodex_config: root.join("ocx.json"),
+            state: root.join("state.json"),
+        };
+        assert!(super::default_codex_config_bytes(&paths).unwrap().is_empty());
+        super::preserve_codex_config_before_takeover(&paths, &super::ManagedState::default()).unwrap();
+        write_codex_proxy_config(&paths.codex_config, &paths.catalog, "opencodex", 10100, "osir-gpt/gpt-5.6-sol").unwrap();
+        assert!(super::default_codex_config_bytes(&paths).unwrap().is_empty());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
