@@ -1811,7 +1811,7 @@ fn launch_codex_with_cdp(
 
 #[cfg(target_os = "macos")]
 fn launch_codex_plain() -> Result<(), AppError> {
-    crate::app::opencodex::with_codex_launch(|| crate::app::mac_update::launch_codex())
+    crate::app::opencodex::with_codex_launch(crate::app::mac_update::launch_codex)
 }
 
 #[cfg(target_os = "windows")]
