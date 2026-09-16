@@ -4333,6 +4333,30 @@ fn configured_routes_from_config(
         .collect()
 }
 
+/// Codex Desktop currently reads only the first model/list page (100 rows).
+/// Put parameterized GPT aliases after primary models so a large alias family
+/// cannot crowd every manually added provider out of that page. Keep all rows
+/// and route defaults; this is ordering compatibility, not a model allow-list.
+fn is_picker_parameter_variant(slug: &str, routes: &[OpenCodexRouteInput]) -> bool {
+    let Some((provider, model)) = slug.split_once('/') else {
+        return false;
+    };
+    if provider != "osirapi-openai"
+        || routes
+            .iter()
+            .any(|route| route.id == provider && route.default_model == model)
+    {
+        return false;
+    }
+    let model = model.to_ascii_lowercase();
+    model.starts_with("gpt-")
+        && [
+            "-none", "-minimal", "-low", "-medium", "-high", "-xhigh", "-max", "-ultra", "-fast",
+        ]
+        .iter()
+        .any(|suffix| model.ends_with(suffix))
+}
+
 /// Normalize metadata only for models that the running OpenCodex service
 /// actually exposed. Never inject configured-but-unroutable models into the
 /// Codex catalog: doing so creates a selectable model that falls through to the
@@ -4488,7 +4512,12 @@ fn normalize_synced_catalog(path: &Path, routes: &[OpenCodexRouteInput]) -> Resu
                 "osirapi-grok" => 3,
                 _ => 4,
             };
-            (hidden, group, slug.to_ascii_lowercase())
+            (
+                hidden,
+                is_picker_parameter_variant(slug, routes),
+                group,
+                slug.to_ascii_lowercase(),
+            )
         };
         key(left).cmp(&key(right))
     });
@@ -5093,14 +5122,15 @@ mod tests {
         build_opencodex_config, catalog_contains_enabled_routes, component_target_for,
         configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids,
-        is_transient_route_check_error, manager_runtime_needs_reconcile, model_display_name,
-        node_distribution_target_for, node_supported, normalize_synced_catalog, pkce_challenge,
-        route_check_with_retry, route_from_config, sanitize_saved_osir_config,
-        should_reconcile_codex_ownership, stripped_archive_path, sync_cache_args,
-        validate_codex_install_payload, validate_exchange_provider_summary, validate_input,
-        wait_for_oauth_callback, write_codex_proxy_config, CodexInstallPayload,
-        CodexInstallProvider, CodexInstallProviderSummary, EncryptedBundle, OpenCodexConfigInput,
-        OpenCodexRouteInput, RedemptionState,
+        is_picker_parameter_variant, is_transient_route_check_error,
+        manager_runtime_needs_reconcile, model_display_name, node_distribution_target_for,
+        node_supported, normalize_synced_catalog, pkce_challenge, route_check_with_retry,
+        route_from_config, sanitize_saved_osir_config, should_reconcile_codex_ownership,
+        stripped_archive_path, sync_cache_args, validate_codex_install_payload,
+        validate_exchange_provider_summary, validate_input, wait_for_oauth_callback,
+        write_codex_proxy_config, CodexInstallPayload, CodexInstallProvider,
+        CodexInstallProviderSummary, EncryptedBundle, OpenCodexConfigInput, OpenCodexRouteInput,
+        RedemptionState,
     };
     use aes_gcm::aead::{Aead, KeyInit};
     use aes_gcm::{Aes256Gcm, Nonce};
@@ -6036,6 +6066,71 @@ mod tests {
             .find(|m| m["slug"] == "osirapi-openai/gpt-5.5")
             .unwrap();
         assert_eq!(routed["display_name"], json!("GPT-5.5 · osir"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn keeps_custom_models_on_the_first_desktop_page_without_dropping_variants() {
+        let root = std::env::temp_dir().join(format!("opencodex-picker-page-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let catalog = root.join("catalog.json");
+        let mut gpt = input().routes[0].clone();
+        gpt.id = "osirapi-openai".into();
+        gpt.default_model = "gpt-5.6-sol".into();
+        gpt.models = vec![gpt.default_model.clone()];
+        gpt.models
+            .extend((0..114).map(|i| format!("gpt-test-{i}-high-fast")));
+        let mut custom = gpt.clone();
+        custom.id = "osir-domestic".into();
+        custom.label = "Custom".into();
+        custom.models = (0..23).map(|i| format!("custom-model-{i}")).collect();
+        custom.default_model = custom.models[0].clone();
+        let routes = [gpt, custom];
+        let entries = routes
+            .iter()
+            .flat_map(|route| {
+                route
+                    .models
+                    .iter()
+                    .map(|model| json!({"slug":format!("{}/{model}", route.id),"priority":5}))
+            })
+            .collect::<Vec<_>>();
+        std::fs::write(
+            &catalog,
+            serde_json::to_vec(&json!({"models":entries})).unwrap(),
+        )
+        .unwrap();
+        assert!(normalize_synced_catalog(&catalog, &routes).unwrap());
+        let value: JsonValue = serde_json::from_slice(&std::fs::read(&catalog).unwrap()).unwrap();
+        let models = value["models"].as_array().unwrap();
+        assert_eq!(models.len(), 138);
+        assert_eq!(models[0]["slug"], "osirapi-openai/gpt-5.6-sol");
+        assert_eq!(
+            models
+                .iter()
+                .take(100)
+                .filter(|model| model["slug"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("osir-domestic/"))
+                .count(),
+            23
+        );
+        assert!(!normalize_synced_catalog(&catalog, &routes).unwrap());
+        assert!(!is_picker_parameter_variant(
+            "osir-domestic/custom-high",
+            &routes
+        ));
+        assert!(!is_picker_parameter_variant(
+            "osirapi-openai/gpt-5.6-sol",
+            &routes
+        ));
+        let mut variant_default = routes[0].clone();
+        variant_default.default_model = "gpt-test-0-high-fast".into();
+        assert!(!is_picker_parameter_variant(
+            "osirapi-openai/gpt-test-0-high-fast",
+            &[variant_default]
+        ));
         std::fs::remove_dir_all(root).unwrap();
     }
 
