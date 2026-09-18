@@ -39,6 +39,9 @@ use std::os::unix::fs::PermissionsExt;
 use crate::app::{atomic_file, codex_sessions, paths};
 use crate::errors::AppError;
 
+#[path = "opencodex_native_images.rs"]
+mod native_images;
+
 const DEFAULT_PORT: u16 = 10100;
 const DEFAULT_PROVIDER_ID: &str = "opencodex";
 const DEFAULT_VERSION: &str = "2.22.0";
@@ -530,11 +533,12 @@ fn reconcile_after_manager_update_locked() -> Result<(), AppError> {
     let marker = manager_update_reconcile_path(&paths);
     let recorded_version = fs::read_to_string(manager_runtime_version_path(&paths)).ok();
     disable_opencodex_history_migration(&paths)?;
+    let native_images_changed = migrate_native_images(&paths)?;
     if !manager_runtime_needs_reconcile(
         env!("CARGO_PKG_VERSION"),
         recorded_version.as_deref(),
         marker.is_file(),
-    ) {
+    ) && !native_images_changed {
         return repair_current_session_routes(&paths);
     }
     // There may be no OpenCodex installation yet. The marker is harmless in
@@ -583,6 +587,8 @@ fn reconcile_after_manager_update_locked() -> Result<(), AppError> {
     }
     repair_current_session_routes(&paths)?;
     clear_codex_restart_required()?;
+    atomic_file::write_atomic(&paths.state.with_extension("native-images-v1"), b"1\n")
+        .map_err(|error| AppError::Internal(format!("保存原生生图迁移状态失败：{error}")))?;
     record_current_manager_runtime(&paths)?;
     if marker.exists() {
         fs::remove_file(marker).map_err(|error| {
@@ -590,6 +596,38 @@ fn reconcile_after_manager_update_locked() -> Result<(), AppError> {
         })?;
     }
     Ok(())
+}
+
+fn migrate_native_images(paths: &IntegrationPaths) -> Result<bool, AppError> {
+    if paths.state.with_extension("native-images-v1").exists() || !effective_state(paths)?.enabled {
+        return Ok(false);
+    }
+    let snapshots = [&paths.opencodex_config, &paths.codex_config]
+        .map(|p| read_optional_snapshot(p)).into_iter().collect::<Result<Vec<_>, _>>()?;
+    let result = (|| {
+        let mut config = load_config(&paths.opencodex_config)?;
+        native_images::configure(&mut config)?;
+        if !native_images::enabled(&config) { return Ok(false); }
+        let raw = fs::read_to_string(&paths.codex_config)
+            .map_err(|e| AppError::Internal(format!("读取 Codex 配置失败：{e}")))?;
+        let mut document = raw.parse::<DocumentMut>()
+            .map_err(|e| AppError::Engine(format!("Codex 配置格式错误：{e}")))?;
+        let provider = document.get("model_provider").and_then(Item::as_str).unwrap_or("").to_string();
+        if provider.is_empty() { return Ok(false); }
+        native_images::configure_codex(&mut document, &provider)?;
+        let candidate = JsonValue::Object(config);
+        validate_candidate(&paths.opencodex_config, &candidate)?;
+        write_json(&paths.opencodex_config, &candidate)?;
+        atomic_file::write_atomic(&paths.codex_config, document.to_string().as_bytes())
+            .map_err(|e| AppError::Internal(format!("保存原生生图配置失败：{e}")))?;
+        Ok(true)
+    })();
+    if result.is_err() {
+        for (path, snapshot) in [&paths.opencodex_config, &paths.codex_config].into_iter().zip(snapshots.iter()) {
+            restore_optional_file(path, snapshot.as_deref())?;
+        }
+    }
+    result
 }
 
 fn codex_configuration_revision(paths: &IntegrationPaths) -> Option<String> {
@@ -2731,6 +2769,7 @@ pub fn select_route(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
             &codex_provider_id,
             port,
             &format!("{route_id}/{model}"),
+            native_images::enabled(&load_config(&paths.opencodex_config)?),
         )?;
         let next_state = ManagedState {
             enabled: true,
@@ -2878,6 +2917,7 @@ pub fn remove_model(route_id: &str, model: &str) -> Result<OpenCodexStatus, AppE
             &state.codex_provider_id,
             state.port.max(1),
             &default_route,
+            native_images::enabled(&load_config(&paths.opencodex_config)?),
         )?;
         restart_service_and_wait_ready()?;
         ocx_output(&["sync"])?;
@@ -3779,6 +3819,7 @@ fn effective_state(paths: &IntegrationPaths) -> Result<ManagedState, AppError> {
                 &adopted.codex_provider_id,
                 adopted.port,
                 &default_route,
+                native_images::enabled(&load_config(&paths.opencodex_config)?),
             )?;
         }
         write_json(
@@ -4188,6 +4229,7 @@ fn build_opencodex_config(
     config.insert("codexShimAutoRestore".to_string(), JsonValue::Bool(false));
     config.insert("syncResumeHistory".to_string(), JsonValue::Bool(false));
     config.insert("emptyCompletionRetry".to_string(), JsonValue::Bool(false));
+    native_images::configure(&mut config)?;
     Ok(JsonValue::Object(config))
 }
 
@@ -4197,6 +4239,7 @@ fn write_codex_proxy_config(
     provider_id: &str,
     port: u16,
     default_route: &str,
+    native_images_enabled: bool,
 ) -> Result<(), AppError> {
     if path.is_symlink() {
         return Err(AppError::Engine(
@@ -4251,6 +4294,9 @@ fn write_codex_proxy_config(
     provider["base_url"] = value(format!("http://127.0.0.1:{port}/v1"));
     provider["wire_api"] = value("responses");
     provider["requires_openai_auth"] = value(false);
+    if native_images_enabled {
+        native_images::configure_codex(&mut document, provider_id)?;
+    }
     let rendered = document.to_string();
     atomic_file::write_atomic(path, rendered.as_bytes())
         .map_err(|error| AppError::Internal(format!("原子保存 config.toml 失败：{error}")))?;
@@ -4672,6 +4718,7 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
         provider_id,
         port,
         &default_route,
+        native_images::enabled(&load_config(&paths.opencodex_config)?),
     )?;
     // OpenCodex refreshes its catalog before Manager normalizes routed entries.
     // Refresh the Codex-owned cache after that final write, or removed rows
@@ -4836,6 +4883,7 @@ pub fn save(input: OpenCodexConfigInput) -> Result<OpenCodexStatus, AppError> {
             &provider_id,
             input.port,
             &default_route,
+            native_images::enabled(&load_config(&paths.opencodex_config)?),
         )?;
         sync_codex_model_cache()?;
         normalize_saved_model_capabilities(&paths)?;
@@ -4923,6 +4971,7 @@ fn prepare_activation_catalog(
             provider_id,
             port,
             default_route,
+            native_images::enabled(&load_config(&paths.opencodex_config)?),
         )?;
         synchronize()?;
         normalize_synced_catalog(&paths.catalog, routes)?;
@@ -4937,6 +4986,7 @@ fn prepare_activation_catalog(
             provider_id,
             port,
             default_route,
+            native_images::enabled(&load_config(&paths.opencodex_config)?),
         )
     })();
     if result.is_err() {
@@ -5216,7 +5266,7 @@ mod tests {
         };
         assert!(super::default_codex_config_bytes(&paths).unwrap().is_empty());
         super::preserve_codex_config_before_takeover(&paths, &super::ManagedState::default()).unwrap();
-        write_codex_proxy_config(&paths.codex_config, &paths.catalog, "opencodex", 10100, "osir-gpt/gpt-5.6-sol").unwrap();
+        write_codex_proxy_config(&paths.codex_config, &paths.catalog, "opencodex", 10100, "osir-gpt/gpt-5.6-sol", false).unwrap();
         assert!(super::default_codex_config_bytes(&paths).unwrap().is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -6180,6 +6230,7 @@ mod tests {
             "opencodex",
             10100,
             "osirapi-openai/gpt-5.6-sol",
+            false,
         )
         .unwrap();
         let document = std::fs::read_to_string(&config)
