@@ -770,14 +770,60 @@ fn delete_api_key_at(path: &Path) -> Result<(), AppError> {
     write_auth_verified(path, &auth)
 }
 
+fn osir_native_provider(document: &DocumentMut) -> bool {
+    let id = string_at(document.as_table(), "model_provider");
+    let Some(table) = document.get("model_providers").and_then(Item::as_table)
+        .and_then(|providers| providers.get(&id)).and_then(Item::as_table) else { return false; };
+    string_at(table, "wire_api") == "responses" && url::Url::parse(&string_at(table, "base_url")).ok()
+        .is_some_and(|url| url.scheme() == "https" && matches!(url.host_str(), Some("api.osirclaw.com" | "osirclaw.com")))
+}
+
+fn apply_provider_key(document: &mut DocumentMut, api_key: Option<&str>) -> Result<(), AppError> {
+    let id = string_at(document.as_table(), "model_provider");
+    let osir = osir_native_provider(document);
+    let Some(provider) = document.get_mut("model_providers").and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(&id)).and_then(Item::as_table_mut) else { return Ok(()); };
+    if let Some(key) = api_key {
+        if osir || provider.contains_key("experimental_bearer_token") {
+            provider["experimental_bearer_token"] = value(key.trim());
+        }
+        if osir {
+            provider["requires_openai_auth"] = value(false);
+            if !provider.contains_key("http_headers") {
+                provider["http_headers"] = value(toml_edit::InlineTable::new());
+            }
+            let headers = provider["http_headers"].as_table_like_mut()
+                .ok_or_else(|| AppError::Engine("http_headers 必须是 TOML 表".into()))?;
+            headers.insert("x-openai-actor-authorization", value("local-image-extension"));
+            if !headers.iter().any(|(key, _)| key.eq_ignore_ascii_case("X-Osir-Codex-Image-Model")) {
+                headers.insert("X-Osir-Codex-Image-Model", value("gpt-image-2.5-flare"));
+            }
+            if !document.contains_key("features") { document["features"] = toml_edit::table(); }
+            // Preserve an explicit compatibility-mode choice.
+            if document["features"].get("image_generation").is_none() {
+                document["features"]["image_generation"] = value(true);
+            }
+        }
+    } else {
+        provider.remove("experimental_bearer_token");
+    }
+    Ok(())
+}
+
 pub fn set_api_key(api_key: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
+    let mut document = load_document(&config_path)?;
+    apply_provider_key(&mut document, Some(api_key))?;
     set_api_key_at(&auth_path_for_config(&config_path), api_key)?;
+    write_verified(&config_path, &document.to_string())?;
     report_for_path(&config_path, codex_running)
 }
 
 pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
+    let mut document = load_document(&config_path)?;
+    apply_provider_key(&mut document, None)?;
+    write_verified(&config_path, &document.to_string())?;
     delete_api_key_at(&auth_path_for_config(&config_path))?;
     report_for_path(&config_path, codex_running)
 }
@@ -1535,6 +1581,16 @@ pub fn save_basic(
     let path = config_path()?;
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
+    if osir_native_provider(&document) {
+        let id = string_at(document.as_table(), "model_provider");
+        let embedded = document["model_providers"][&id].get("experimental_bearer_token")
+            .and_then(Item::as_str).unwrap_or_default().to_string();
+        let auth = load_auth_object(&auth_path_for_config(&path))?;
+        let key = if embedded.trim().is_empty() {
+            auth.get("OPENAI_API_KEY").and_then(JsonValue::as_str).unwrap_or_default()
+        } else { &embedded };
+        if !key.trim().is_empty() { apply_provider_key(&mut document, Some(key))?; }
+    }
     write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
@@ -1855,6 +1911,28 @@ requires_openai_auth = true
             document["features"]["image_generation"].as_bool(),
             Some(true)
         );
+    }
+
+    #[test]
+    fn osir_key_setup_rotation_and_removal_update_native_credentials() {
+        let mut doc = r#"model_provider = "osir"
+[model_providers.osir]
+base_url = "https://api.osirclaw.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#.parse::<DocumentMut>().unwrap();
+        for key in ["first-key", "rotated-key"] {
+            apply_provider_key(&mut doc, Some(key)).unwrap();
+            assert_eq!(doc["model_providers"]["osir"]["experimental_bearer_token"].as_str(), Some(key));
+            assert_eq!(doc["model_providers"]["osir"]["requires_openai_auth"].as_bool(), Some(false));
+            assert_eq!(doc["features"]["image_generation"].as_bool(), Some(true));
+            assert_eq!(doc["model_providers"]["osir"]["http_headers"]["X-Osir-Codex-Image-Model"].as_str(), Some("gpt-image-2.5-flare"));
+        }
+        apply_provider_key(&mut doc, None).unwrap();
+        assert!(doc["model_providers"]["osir"].get("experimental_bearer_token").is_none());
+        doc["model_providers"]["osir"]["base_url"] = value("https://example.com/v1");
+        apply_provider_key(&mut doc, Some("other-key")).unwrap();
+        assert!(doc["model_providers"]["osir"].get("experimental_bearer_token").is_none());
     }
 
     #[test]
