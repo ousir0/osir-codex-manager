@@ -458,7 +458,7 @@ fn separate_image_generation_base_url(config_path: &Path) -> String {
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     migrate_legacy_provider_config(path)?;
     let auth_path = auth_path_for_config(path);
-    let (api_key_configured, auth_error) = auth_status(&auth_path);
+    let (mut api_key_configured, auth_error) = auth_status(&auth_path);
     let exists = path.is_file();
     let raw = if exists {
         fs::read_to_string(path)
@@ -495,6 +495,12 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 .and_then(Item::as_table)
                 .map(|table| string_at(table, "base_url"))
                 .unwrap_or_default();
+            api_key_configured |= document
+                .get("model_providers")
+                .and_then(Item::as_table)
+                .and_then(|providers| providers.get(&provider))
+                .and_then(Item::as_table)
+                .is_some_and(|table| !string_at(table, "experimental_bearer_token").trim().is_empty());
             let image_compatibility = image_generation_compatibility(&document);
             let image_api_key_configured = separate_image_generation_api_key_configured(path);
             (
@@ -1515,16 +1521,8 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         } else {
             selected["base_url"] = value(&base_url);
         }
-        // The relay skill authenticates independently. Keep the main provider
-        // on the normal chat auth path and remove legacy relay-only markers.
-        selected["requires_openai_auth"] = value(true);
-        if let Some(headers) = selected
-            .get_mut("http_headers")
-            .and_then(Item::as_value_mut)
-            .and_then(toml_edit::Value::as_inline_table_mut)
-        {
-            headers.remove("x-openai-actor-authorization");
-        }
+        // Provider authentication and extension headers belong to the imported
+        // connection. Saving basic options must not rewrite those credentials.
     }
     Ok(())
 }
@@ -1860,6 +1858,40 @@ requires_openai_auth = true
     }
 
     #[test]
+    fn basic_save_preserves_native_image_provider_config() {
+        for headers in [
+            r#"http_headers = { "x-openai-actor-authorization" = "local-image-extension", "X-Osir-Codex-Image-Model" = "gpt-image-2.5-flare" }"#,
+            "[model_providers.OpenAI.http_headers]\nx-openai-actor-authorization = \"local-image-extension\"\nX-Osir-Codex-Image-Model = \"gpt-image-2.5-flare\"",
+        ] {
+            let raw = format!(r#"model_provider = "other"
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "https://api.osirclaw.com/v1"
+wire_api = "responses"
+requires_openai_auth = false
+experimental_bearer_token = "test-only-bearer"
+{headers}
+"#);
+            let mut document = raw.parse::<DocumentMut>().unwrap();
+            let original = document["model_providers"]["OpenAI"].to_string();
+            for compatibility in [false, true, false] {
+                apply_basic(&mut document, CodexBasicConfigInput {
+                    model: "gpt-5.6-sol".into(), provider: "OpenAI".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    reasoning_effort: String::new(), personality: String::new(),
+                    approval_policy: String::new(), sandbox_mode: String::new(),
+                    disable_response_storage: true, goal_mode: true,
+                    image_generation_compatibility: compatibility,
+                }).unwrap();
+                document = document.to_string().parse::<DocumentMut>().unwrap();
+                assert_eq!(document["model_providers"]["OpenAI"].to_string(), original);
+                assert_eq!(document["model"].as_str(), Some("gpt-5.6-sol"));
+                assert_eq!(document["features"]["image_generation"].as_bool(), Some(!compatibility));
+            }
+        }
+    }
+
+    #[test]
     fn basic_config_rejects_opencodex_loopback_provider() {
         let mut document = DocumentMut::new();
         let result = apply_basic(
@@ -2027,6 +2059,19 @@ API_KEY = "keep-secret"
         assert!(rendered.contains("startup_timeout_sec = 25"));
         assert!(rendered.contains("API_KEY = \"keep-secret\""));
         assert!(rendered.contains("enabled = true"));
+    }
+
+    #[test]
+    fn embedded_provider_bearer_is_recognized_and_redacted() {
+        let path = test_path("embedded-bearer");
+        fs::write(&path, r#"model_provider = "OpenAI"
+[model_providers.OpenAI]
+requires_openai_auth = false
+experimental_bearer_token = "test-embedded-secret"
+"#).unwrap();
+        let report = report_for_path(&path, false).unwrap();
+        assert!(report.api_key_configured);
+        assert!(!report.redacted_raw.contains("test-embedded-secret"));
     }
 
     #[test]
