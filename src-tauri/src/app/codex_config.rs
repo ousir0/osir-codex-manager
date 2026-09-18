@@ -458,7 +458,7 @@ fn separate_image_generation_base_url(config_path: &Path) -> String {
 fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     migrate_legacy_provider_config(path)?;
     let auth_path = auth_path_for_config(path);
-    let (api_key_configured, auth_error) = auth_status(&auth_path);
+    let (mut api_key_configured, auth_error) = auth_status(&auth_path);
     let exists = path.is_file();
     let raw = if exists {
         fs::read_to_string(path)
@@ -495,6 +495,12 @@ fn report_for_path(path: &Path, codex_running: bool) -> Result<CodexConfigReport
                 .and_then(Item::as_table)
                 .map(|table| string_at(table, "base_url"))
                 .unwrap_or_default();
+            api_key_configured |= document
+                .get("model_providers")
+                .and_then(Item::as_table)
+                .and_then(|providers| providers.get(&provider))
+                .and_then(Item::as_table)
+                .is_some_and(|table| !string_at(table, "experimental_bearer_token").trim().is_empty());
             let image_compatibility = image_generation_compatibility(&document);
             let image_api_key_configured = separate_image_generation_api_key_configured(path);
             (
@@ -764,14 +770,60 @@ fn delete_api_key_at(path: &Path) -> Result<(), AppError> {
     write_auth_verified(path, &auth)
 }
 
+fn osir_native_provider(document: &DocumentMut) -> bool {
+    let id = string_at(document.as_table(), "model_provider");
+    let Some(table) = document.get("model_providers").and_then(Item::as_table)
+        .and_then(|providers| providers.get(&id)).and_then(Item::as_table) else { return false; };
+    string_at(table, "wire_api") == "responses" && url::Url::parse(&string_at(table, "base_url")).ok()
+        .is_some_and(|url| url.scheme() == "https" && matches!(url.host_str(), Some("api.osirclaw.com" | "osirclaw.com")))
+}
+
+fn apply_provider_key(document: &mut DocumentMut, api_key: Option<&str>) -> Result<(), AppError> {
+    let id = string_at(document.as_table(), "model_provider");
+    let osir = osir_native_provider(document);
+    let Some(provider) = document.get_mut("model_providers").and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(&id)).and_then(Item::as_table_mut) else { return Ok(()); };
+    if let Some(key) = api_key {
+        if osir || provider.contains_key("experimental_bearer_token") {
+            provider["experimental_bearer_token"] = value(key.trim());
+        }
+        if osir {
+            provider["requires_openai_auth"] = value(false);
+            if !provider.contains_key("http_headers") {
+                provider["http_headers"] = value(toml_edit::InlineTable::new());
+            }
+            let headers = provider["http_headers"].as_table_like_mut()
+                .ok_or_else(|| AppError::Engine("http_headers 必须是 TOML 表".into()))?;
+            headers.insert("x-openai-actor-authorization", value("local-image-extension"));
+            if !headers.iter().any(|(key, _)| key.eq_ignore_ascii_case("X-Osir-Codex-Image-Model")) {
+                headers.insert("X-Osir-Codex-Image-Model", value("gpt-image-2.5-flare"));
+            }
+            if !document.contains_key("features") { document["features"] = toml_edit::table(); }
+            // Preserve an explicit compatibility-mode choice.
+            if document["features"].get("image_generation").is_none() {
+                document["features"]["image_generation"] = value(true);
+            }
+        }
+    } else {
+        provider.remove("experimental_bearer_token");
+    }
+    Ok(())
+}
+
 pub fn set_api_key(api_key: &str, codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
+    let mut document = load_document(&config_path)?;
+    apply_provider_key(&mut document, Some(api_key))?;
     set_api_key_at(&auth_path_for_config(&config_path), api_key)?;
+    write_verified(&config_path, &document.to_string())?;
     report_for_path(&config_path, codex_running)
 }
 
 pub fn delete_api_key(codex_running: bool) -> Result<CodexConfigReport, AppError> {
     let config_path = config_path()?;
+    let mut document = load_document(&config_path)?;
+    apply_provider_key(&mut document, None)?;
+    write_verified(&config_path, &document.to_string())?;
     delete_api_key_at(&auth_path_for_config(&config_path))?;
     report_for_path(&config_path, codex_running)
 }
@@ -1515,16 +1567,8 @@ fn apply_basic(document: &mut DocumentMut, input: CodexBasicConfigInput) -> Resu
         } else {
             selected["base_url"] = value(&base_url);
         }
-        // The relay skill authenticates independently. Keep the main provider
-        // on the normal chat auth path and remove legacy relay-only markers.
-        selected["requires_openai_auth"] = value(true);
-        if let Some(headers) = selected
-            .get_mut("http_headers")
-            .and_then(Item::as_value_mut)
-            .and_then(toml_edit::Value::as_inline_table_mut)
-        {
-            headers.remove("x-openai-actor-authorization");
-        }
+        // Provider authentication and extension headers belong to the imported
+        // connection. Saving basic options must not rewrite those credentials.
     }
     Ok(())
 }
@@ -1537,6 +1581,16 @@ pub fn save_basic(
     let path = config_path()?;
     let mut document = load_document(&path)?;
     apply_basic(&mut document, input)?;
+    if osir_native_provider(&document) {
+        let id = string_at(document.as_table(), "model_provider");
+        let embedded = document["model_providers"][&id].get("experimental_bearer_token")
+            .and_then(Item::as_str).unwrap_or_default().to_string();
+        let auth = load_auth_object(&auth_path_for_config(&path))?;
+        let key = if embedded.trim().is_empty() {
+            auth.get("OPENAI_API_KEY").and_then(JsonValue::as_str).unwrap_or_default()
+        } else { &embedded };
+        if !key.trim().is_empty() { apply_provider_key(&mut document, Some(key))?; }
+    }
     write_verified(&path, &document.to_string())?;
     report_for_path(&path, codex_running)
 }
@@ -1860,6 +1914,62 @@ requires_openai_auth = true
     }
 
     #[test]
+    fn osir_key_setup_rotation_and_removal_update_native_credentials() {
+        let mut doc = r#"model_provider = "osir"
+[model_providers.osir]
+base_url = "https://api.osirclaw.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#.parse::<DocumentMut>().unwrap();
+        for key in ["first-key", "rotated-key"] {
+            apply_provider_key(&mut doc, Some(key)).unwrap();
+            assert_eq!(doc["model_providers"]["osir"]["experimental_bearer_token"].as_str(), Some(key));
+            assert_eq!(doc["model_providers"]["osir"]["requires_openai_auth"].as_bool(), Some(false));
+            assert_eq!(doc["features"]["image_generation"].as_bool(), Some(true));
+            assert_eq!(doc["model_providers"]["osir"]["http_headers"]["X-Osir-Codex-Image-Model"].as_str(), Some("gpt-image-2.5-flare"));
+        }
+        apply_provider_key(&mut doc, None).unwrap();
+        assert!(doc["model_providers"]["osir"].get("experimental_bearer_token").is_none());
+        doc["model_providers"]["osir"]["base_url"] = value("https://example.com/v1");
+        apply_provider_key(&mut doc, Some("other-key")).unwrap();
+        assert!(doc["model_providers"]["osir"].get("experimental_bearer_token").is_none());
+    }
+
+    #[test]
+    fn basic_save_preserves_native_image_provider_config() {
+        for headers in [
+            r#"http_headers = { "x-openai-actor-authorization" = "local-image-extension", "X-Osir-Codex-Image-Model" = "gpt-image-2.5-flare" }"#,
+            "[model_providers.OpenAI.http_headers]\nx-openai-actor-authorization = \"local-image-extension\"\nX-Osir-Codex-Image-Model = \"gpt-image-2.5-flare\"",
+        ] {
+            let raw = format!(r#"model_provider = "other"
+[model_providers.OpenAI]
+name = "OpenAI"
+base_url = "https://api.osirclaw.com/v1"
+wire_api = "responses"
+requires_openai_auth = false
+experimental_bearer_token = "test-only-bearer"
+{headers}
+"#);
+            let mut document = raw.parse::<DocumentMut>().unwrap();
+            let original = document["model_providers"]["OpenAI"].to_string();
+            for compatibility in [false, true, false] {
+                apply_basic(&mut document, CodexBasicConfigInput {
+                    model: "gpt-5.6-sol".into(), provider: "OpenAI".into(),
+                    base_url: "https://api.osirclaw.com/v1".into(),
+                    reasoning_effort: String::new(), personality: String::new(),
+                    approval_policy: String::new(), sandbox_mode: String::new(),
+                    disable_response_storage: true, goal_mode: true,
+                    image_generation_compatibility: compatibility,
+                }).unwrap();
+                document = document.to_string().parse::<DocumentMut>().unwrap();
+                assert_eq!(document["model_providers"]["OpenAI"].to_string(), original);
+                assert_eq!(document["model"].as_str(), Some("gpt-5.6-sol"));
+                assert_eq!(document["features"]["image_generation"].as_bool(), Some(!compatibility));
+            }
+        }
+    }
+
+    #[test]
     fn basic_config_rejects_opencodex_loopback_provider() {
         let mut document = DocumentMut::new();
         let result = apply_basic(
@@ -2027,6 +2137,19 @@ API_KEY = "keep-secret"
         assert!(rendered.contains("startup_timeout_sec = 25"));
         assert!(rendered.contains("API_KEY = \"keep-secret\""));
         assert!(rendered.contains("enabled = true"));
+    }
+
+    #[test]
+    fn embedded_provider_bearer_is_recognized_and_redacted() {
+        let path = test_path("embedded-bearer");
+        fs::write(&path, r#"model_provider = "OpenAI"
+[model_providers.OpenAI]
+requires_openai_auth = false
+experimental_bearer_token = "test-embedded-secret"
+"#).unwrap();
+        let report = report_for_path(&path, false).unwrap();
+        assert!(report.api_key_configured);
+        assert!(!report.redacted_raw.contains("test-embedded-secret"));
     }
 
     #[test]
