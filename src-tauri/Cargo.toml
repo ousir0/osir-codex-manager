@@ -22,7 +22,7 @@ tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
 base64 = "0.23"
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 codex-mac-engine = { path = "../crates/codex-mac-engine" }
 codex-theme-engine = { path = "../crates/codex-theme-engine" }
 codex-win-engine = { path = "../crates/codex-win-engine" }
