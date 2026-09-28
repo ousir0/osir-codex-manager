@@ -4331,19 +4331,43 @@ fn catalog_model_slugs(path: &Path) -> Option<BTreeSet<String>> {
 }
 
 fn catalog_contains_enabled_routes(path: &Path, routes: &[OpenCodexRouteInput]) -> bool {
-    let Some(actual) = catalog_model_slugs(path) else {
-        return false;
-    };
-    routes
-        .iter()
-        .filter(|route| route.enabled)
-        .flat_map(|route| {
-            route
-                .models
-                .iter()
-                .map(move |model| format!("{}/{}", route.id, model))
-        })
-        .all(|slug| actual.contains(&slug))
+    catalog_missing_enabled_routes(path, routes).is_some_and(|missing| missing.is_empty())
+}
+
+fn catalog_missing_enabled_routes(
+    path: &Path,
+    routes: &[OpenCodexRouteInput],
+) -> Option<Vec<String>> {
+    let actual = catalog_model_slugs(path)?;
+    Some(
+        routes
+            .iter()
+            .filter(|route| route.enabled)
+            .flat_map(|route| {
+                route
+                    .models
+                    .iter()
+                    .map(move |model| format!("{}/{}", route.id, model))
+            })
+            .filter(|slug| !actual.contains(slug))
+            .collect(),
+    )
+}
+
+fn ensure_catalog_contains_enabled_routes(
+    path: &Path,
+    routes: &[OpenCodexRouteInput],
+) -> Result<(), AppError> {
+    match catalog_missing_enabled_routes(path, routes) {
+        Some(missing) if missing.is_empty() => Ok(()),
+        Some(missing) => Err(AppError::Engine(format!(
+            "OpenCodex 模型目录不完整，未启用多模型接管。目录缺少：{}。请在管理器中移除不可用模型后重试同步",
+            missing.join("、")
+        ))),
+        None => Err(AppError::Engine(
+            "OpenCodex 模型目录无法读取，未启用多模型接管；请重试同步".to_string(),
+        )),
+    }
 }
 
 fn configured_routes_from_config(
@@ -4700,6 +4724,7 @@ fn refresh_codex_catalog_binding(paths: &IntegrationPaths) -> Result<(), AppErro
     let configured_routes = configured_routes_from_config(&config, &managed_provider_ids);
     if !configured_routes.is_empty() {
         normalize_synced_catalog(&paths.catalog, &configured_routes)?;
+        ensure_catalog_contains_enabled_routes(&paths.catalog, &configured_routes)?;
     }
     let provider_id = if state.codex_provider_id.is_empty() {
         DEFAULT_PROVIDER_ID
@@ -4975,11 +5000,7 @@ fn prepare_activation_catalog(
         )?;
         synchronize()?;
         normalize_synced_catalog(&paths.catalog, routes)?;
-        if !catalog_contains_enabled_routes(&paths.catalog, routes) {
-            return Err(AppError::Engine(
-                "OpenCodex 模型目录不完整，未启用多模型接管".to_string(),
-            ));
-        }
+        ensure_catalog_contains_enabled_routes(&paths.catalog, routes)?;
         write_codex_proxy_config(
             &paths.codex_config,
             &paths.catalog,
@@ -5169,7 +5190,8 @@ pub fn disconnect_osir() -> Result<OpenCodexStatus, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_opencodex_config, catalog_contains_enabled_routes, component_target_for,
+        build_opencodex_config, catalog_contains_enabled_routes, catalog_missing_enabled_routes,
+        component_target_for,
         configuration_requires_restart, configured_routes_from_config, decrypt_bundle,
         extract_osir_ticket, inferred_default_route, inferred_managed_provider_ids,
         is_picker_parameter_variant, is_transient_route_check_error,
@@ -5313,6 +5335,10 @@ mod tests {
             },
         );
         assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("osir-gpt/gpt-5.6-sol"));
         assert_eq!(std::fs::read(&paths.codex_config).unwrap(), original);
         assert_eq!(std::fs::read(&cache).unwrap(), b"original cache");
         assert!(!paths.catalog.exists());
@@ -5936,6 +5962,10 @@ mod tests {
         )
         .unwrap();
         assert!(!catalog_contains_enabled_routes(&catalog, &routes));
+        assert_eq!(
+            catalog_missing_enabled_routes(&catalog, &routes).unwrap(),
+            vec!["osirapi-openai/gpt-5.6"]
+        );
         std::fs::write(
             &catalog,
             serde_json::to_vec(&json!({"models":[
